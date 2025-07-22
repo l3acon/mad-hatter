@@ -16,3 +16,20 @@ AAP_MANIFEST_PATH=~/Downloads/some-manifest.zip
 ## We're all mad here
 This project aims to do better, execution should flow quickly and seamlessly. Troubleshooting should also be as seamelss and easy as possible.
 
+Relevant metrics:
+```
+# vanilla deployment
+time ansible-playbook playbooks/rosa.yml
+...<play output>
+13:16.97 total
+
+```
+
+
+```
+# post-deploment, ideally ansible is doing nothing
+time ansible-playbook playbooks/rosa.yml
+...<play output>
+42.597 total
+
+```
