@@ -18,60 +18,71 @@
         ansible_password: "{{ lookup('ansible.builtin.env', 'ROSA_BASTION_PASSWORD') }}"
         ansible_user: "rosa"
 
-- name: Set ROSA admin password
-  hosts: rosa
-  tasks:
-    - name: Get the list of ROSA clusters
-      ansible.builtin.shell: "rosa list cluster"
-      register: rosa_cluster_list
-      changed_when: false
-      failed_when: rosa_cluster_list.rc != 0
-      check_mode: no
-
-    - name: Set cluster_name fact from the output
-      ansible.builtin.set_fact:
-        cluster_name: "{{ rosa_cluster_list.stdout_lines[1].split()[1] }}"
-
-    - name: Display the extracted cluster name (for debugging)
+    - name: Display
       ansible.builtin.debug:
-        msg: "Found cluster name: {{ cluster_name }}"
+        msg: "{{ groups['rosa'] | first }}"
       when: 
         - "ansible_debug is defined"
         - "ansible_debug"
 
-    - name: Delete the admin user on the specified cluster
-      ansible.builtin.command: "rosa delete admin -c {{ cluster_name }} --yes"
-      register: rosa_admin_creation
-      changed_when: "'Admin user created' in rosa_admin_creation.stdout"
+    - name: get login status
+      ansible.builtin.command: "oc whoami"
+      register: oc_whoami
       ignore_errors: true
 
-    - name: Create the admin user on the specified cluster
-      ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD') }}"
-      register: rosa_admin_creation
-      changed_when: "'Admin user created' in rosa_admin_creation.stdout"
+    - name: Reset ROSA cluster-admin
+      when: oc_whoami is failed
+      delegate_to: "{{ groups['rosa'] | first }}"
+      block:
+        - name: Get the list of ROSA clusters
+          ansible.builtin.shell: "rosa list cluster"
+          register: rosa_cluster_list
+          changed_when: false
+          failed_when: rosa_cluster_list.rc != 0
+          check_mode: no
 
-    - name: Extract the 'oc login' command line from the output
-      ansible.builtin.set_fact:
-        login_command_line: "{{ rosa_admin_creation.stdout_lines | select('match', '.*oc login.*') | first | trim }}"
-      when: "'oc login' in rosa_admin_creation.stdout"
+        - name: Set cluster_name fact from the output
+          ansible.builtin.set_fact:
+            cluster_name: "{{ rosa_cluster_list.stdout_lines[1].split()[1] }}"
 
-    - name: Set credential facts from the login command
-      ansible.builtin.set_fact:
-        rosa_url: "{{ login_command_line.split()[2] }}"
-        rosa_username: "{{ login_command_line.split()[4] }}"
-        rosa_password: "{{ login_command_line.split()[6] }}"
-      when: login_command_line is defined and login_command_line != ""
+        - name: Display the extracted cluster name (for debugging)
+          ansible.builtin.debug:
+            msg: "Found cluster name: {{ cluster_name }}"
+          when: 
+            - "ansible_debug is defined"
+            - "ansible_debug"
 
-- name: Provision AAP on cluster, setup APD
-  hosts: localhost
-  tasks:
+        - name: Delete the admin user on the specified cluster
+          ansible.builtin.command: "rosa delete admin -c {{ cluster_name }} --yes"
+          register: rosa_admin_creation
+          changed_when: "'Admin user created' in rosa_admin_creation.stdout"
+          ignore_errors: true
+
+        - name: Create the admin user on the specified cluster
+          ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD') }}"
+          register: rosa_admin_creation
+          changed_when: "'Admin user created' in rosa_admin_creation.stdout"
+
+        - name: Extract the 'oc login' command line from the output
+          ansible.builtin.set_fact:
+            login_command_line: "{{ rosa_admin_creation.stdout_lines | select('match', '.*oc login.*') | first | trim }}"
+          when: "'oc login' in rosa_admin_creation.stdout"
+
+        - name: Set credential facts from the login command
+          ansible.builtin.set_fact:
+            rosa_url: "{{ login_command_line.split()[2] }}"
+            rosa_username: "{{ login_command_line.split()[4] }}"
+            rosa_password: "{{ login_command_line.split()[6] }}"
+          when: login_command_line is defined and login_command_line != ""
+
     - name: Login to the cluster
-      ansible.builtin.command: "{{ hostvars[hostvars | list | first]['login_command_line'] }}"
+      when: oc_whoami is failed
+      ansible.builtin.command: "{{ login_command_line }}"
       register: oc_login
       changed_when: "'Login successful' in oc_login.stdout"
       retries: 30
       delay: 5
-
+ 
     - name: Include AAP 2.5 role
       ansible.builtin.include_role:
         name: 'ocp4_workload_ansible_automation_platform_25'
