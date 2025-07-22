@@ -8,6 +8,7 @@ Set vars:
 ```
 ROSA_BASTION_HOST=bastion.something.com
 ROSA_BASTION_PASSWORD=<some-pass>
+OCP_CLUSTER_ADMIN_PASSWORD=<some-pass>
 AAP_ADMIN_PASSWORD=<some-pass> 
 AAP_MANIFEST_PATH=~/Downloads/some-manifest.zip
 ```
