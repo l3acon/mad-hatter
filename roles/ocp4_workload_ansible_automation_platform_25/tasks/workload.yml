@@ -114,8 +114,19 @@
 
 - name: Inject AAP Manifest
   when: ocp4_workload_ansible_automation_platform_inject_manifest | bool
-  ansible.builtin.include_tasks:
-    file: inject_manifest.yml
+  block:
+    - name: Do inject
+      ansible.controller.license:
+        manifest: "{{ ocp4_workload_ansible_automation_platform_inject_manifest_path }}"
+        controller_host: "https://{{ automation_controller_hostname }}"
+        controller_username: admin
+        controller_password: "{{ ocp4_workload_ansible_automation_platform_admin_password }}"
+        validate_certs: true
+      register: r_aap_license
+
+#  until: not r_aap_license.failed
+#  retries: 30
+#  delay: 30
 
 # Make sure to inject the manifest before creating the rolebinding;
 # otherwise, Ansible Automation Platform will fail during the manifest
@@ -141,9 +152,9 @@
 
 - name: Set facts for CasC
   ansible.builtin.set_fact:
-    controller_hostname: "https://{{ automation_controller_hostname }}"
-    controller_username: "{{ ocp4_workload_ansible_automation_platform_admin_username | default('admin') }}"
-    controller_password: "{{ ocp4_workload_ansible_automation_platform_admin_password }}"
+    aap_hostname: "https://{{ automation_controller_hostname }}"
+    aap_username: "{{ ocp4_workload_ansible_automation_platform_admin_username | default('admin') }}"
+    aap_password: "{{ ocp4_workload_ansible_automation_platform_admin_password }}"
 
 - name: Display Version and credentials
   when: not silent | bool

@@ -1,12 +1,20 @@
 ---
+#- name: Build variables
+#  hosts: localhost
+#  - name: Look for credentials
+#      ansible.builtin.set_fact:
+
+
 - name: Set ROSA admin password
   hosts: rosa
   tasks:
     - name: assert
       ansible.builtin.assert:
         that: 
-          - "lookup('ansible.builtin.env', 'ROSA_ADMIN_PASSWORD') is defined"
+          - "lookup('ansible.builtin.env', 'ROSA_BASTION_HOST') is defined"
+          - "lookup('ansible.builtin.env', 'ROSA_BASION_PASSWORD') is defined"
           - "lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') is defined"
+          - "lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH') is defined"
 
     - name: Get the list of ROSA clusters
       ansible.builtin.shell: "rosa list cluster"
@@ -22,6 +30,9 @@
     - name: Display the extracted cluster name (for debugging)
       ansible.builtin.debug:
         msg: "Found cluster name: {{ cluster_name }}"
+      when: 
+        - "ansible_debug is defined"
+        - "ansible_debug"
 
     - name: Delete the admin user on the specified cluster
       ansible.builtin.command: "rosa delete admin -c {{ cluster_name }} --yes"
@@ -33,6 +44,7 @@
       ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ lookup('ansible.builtin.env', 'ROSA_ADMIN_PASSWORD') }}"
       register: rosa_admin_creation
       changed_when: "'Admin user created' in rosa_admin_creation.stdout"
+
     - name: Extract the 'oc login' command line from the output
       ansible.builtin.set_fact:
         login_command_line: "{{ rosa_admin_creation.stdout_lines | select('match', '.*oc login.*') | first | trim }}"
@@ -47,12 +59,6 @@
 
 - name: Provision AAP on cluster, setup APD
   hosts: localhost
-  vars:
-    controller_postinstall_repo_url: https://github.com/ansible/product-demos-postinstall.git
-    controller_postinstall_repo_ref: main
-    controller_postinstall_dir: '{{ playbook_dir }}/product-demos-postinstall'
-    controller_postinstall_ignore_files: []
-
   tasks:
     - name: Login to the cluster
       ansible.builtin.command: "{{ hostvars[hostvars | list | first]['login_command_line'] }}"
@@ -67,5 +73,14 @@
         tasks_from: workload
       vars: 
         aap_controller_admin_password: "{{ lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') }}"
+        ocp4_workload_ansible_automation_platform_inject_manifest: true
+        ocp4_workload_ansible_automation_platform_inject_manifest_path: "/home/matt/Downloads/manifest_matt2.zip"
+        #ocp4_workload_ansible_automation_platform_validate_certs: false
 
-
+    - name: Boostrap 
+      ansible.builtin.include_role:
+        name: 'apd'
+      vars: 
+        apd_git_repo: https://github.com/ansible/product-demos
+        apd_git_repo_branch: main
+...
