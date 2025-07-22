@@ -9,7 +9,7 @@
           - "lookup('ansible.builtin.env', 'ROSA_BASTION_PASSWORD') is defined"
           - "lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') is defined"
           - "lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH') is defined"
-          - "lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD=') is defined"
+          - "lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD') is defined"
 
     - name: Build inventory
       ansible.builtin.add_host:
@@ -46,7 +46,7 @@
       ignore_errors: true
 
     - name: Create the admin user on the specified cluster
-      ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD=') }}"
+      ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD') }}"
       register: rosa_admin_creation
       changed_when: "'Admin user created' in rosa_admin_creation.stdout"
 
@@ -90,4 +90,13 @@
       vars: 
         apd_git_repo: https://github.com/ansible/product-demos
         apd_git_repo_branch: main
+
+#    - name: Configure credentials
+#      ansible.builtin.include_role:
+#        name: infra.aap_configuration.controller_credentials
+#
+#    - name: Lauch Multi-setup
+#      ansible.controller.include_role:
+#        name: infra.aap_configuration.job_launch
+#      vars:
 ...
