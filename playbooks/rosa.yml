@@ -1,5 +1,5 @@
 ---
-- name: Build variables
+- name: Configure 'AWS with ROSA Open Environment' for Ansible Product-Demos
   hosts: localhost
   tasks:
     - name: Assertion for required variables
@@ -11,21 +11,14 @@
           - "lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH') is defined"
           - "lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD') is defined"
 
-    - name: Build inventory
+    - name: Add ROSA bastion to inventory
       ansible.builtin.add_host:
         name: "{{ lookup('ansible.builtin.env', 'ROSA_BASTION_HOST') }}"
         groups: "rosa"
         ansible_password: "{{ lookup('ansible.builtin.env', 'ROSA_BASTION_PASSWORD') }}"
         ansible_user: "rosa"
 
-    - name: Display
-      ansible.builtin.debug:
-        msg: "{{ groups['rosa'] | first }}"
-      when: 
-        - "ansible_debug is defined"
-        - "ansible_debug"
-
-    - name: get login status
+    - name: Get OC login status
       ansible.builtin.command: "oc whoami"
       register: oc_whoami
       ignore_errors: true
@@ -75,7 +68,7 @@
             rosa_password: "{{ login_command_line.split()[6] }}"
           when: login_command_line is defined and login_command_line != ""
 
-    - name: Login to the cluster
+    - name: Login to OCP Cluster with new credentials
       when: oc_whoami is failed
       ansible.builtin.command: "{{ login_command_line }}"
       register: oc_login
@@ -83,7 +76,7 @@
       retries: 30
       delay: 5
  
-    - name: Include AAP 2.5 role
+    - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
         name: 'ocp4_workload_ansible_automation_platform_25'
         tasks_from: workload
@@ -91,11 +84,11 @@
         aap_controller_admin_password: "{{ lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') }}"
         ocp4_workload_ansible_automation_platform_inject_manifest: true
         ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH') }}"
-        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.16_2024_11_18"
+        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
         aap_controller_admin_password: "{{ lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') }}"
         #ocp4_workload_ansible_automation_platform_validate_certs: false
 
-    - name: Boostrap 
+    - name: Ansible Product-Demos Boostrap 
       ansible.builtin.include_role:
         name: 'apd'
       vars: 

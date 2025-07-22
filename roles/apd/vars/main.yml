@@ -13,10 +13,10 @@ controller_credentials:
       update_secrets: false
       state: exists
       inputs:
-        host: https://{{ groups.automationcontroller[0] | default('REPLACEME') }}
-        username: admin
-        password: '{{ controller_admin_password | default("REPLACEME") }}'
-        verify_ssl: '{{ apd_verify_ssl }}'
+        host: "{{ aap_hostname }}"
+        username: "{{ aap_username }}"
+        password: "{{ aap_password }}"
+        verify_ssl: "{{ apd_verify_ssl }}"
   
 controller_execution_environments:
   - name: Product Demos EE
