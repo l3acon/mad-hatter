@@ -2,15 +2,19 @@
 First it works. Then it documents.
 
 ## Beware the Bandersnatch
-Ideally we have a RHDP.creds file that is just copy/pasta of credentials...
+This is a work in progress.
 
-Currently set these vars:
+### Begin at the Beginning
+1. Create a file called `rhdp.creds` in the root of this project, paste the credentials from RHDP.
+1. Set these additional variables either as BASH environment variables or within the same `rhdp.creds` file:
 ```
-ROSA_BASTION_HOST=bastion.something.com
-ROSA_BASTION_PASSWORD=<some-pass>
-OCP_CLUSTER_ADMIN_PASSWORD=<some-pass>
+OPENSHIFT_ADMIN_PASS=<some-pass>
 AAP_ADMIN_PASSWORD=<some-pass> 
 AAP_MANIFEST_PATH=~/Downloads/some-manifest.zip
+```
+1. Run a play
+```
+ansible-playbook playbooks/rosa.yml
 ```
 
 ## We're all mad here

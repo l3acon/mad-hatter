@@ -1,0 +1,22 @@
+---
+- name: Slurp the entire contents of creds file
+  ansible.builtin.slurp:
+    src: "{{ creds_file_path }}"
+  register: slurp_result
+
+- name: Decode the file content and set as a fact
+  ansible.builtin.set_fact:
+    file_content: "{{ slurp_result.content | b64decode }}"
+
+- name: Extract key variables using regular expressions
+  ansible.builtin.set_fact:
+    creds_openshift_api_url: "{{ file_content | regex_search('ROSA OpenShift API:\\s*(https://[^\\s]+)', '\\1') | first }}"
+    creds_aws_access_key: "{{ file_content | regex_search('AWS Access Key ID:\\s*(\\S+)', '\\1') | first }}"
+    creds_aws_secret_key: "{{ file_content | regex_search('AWS Secret Access Key:\\s*(\\S+)', '\\1') | first }}"
+    creds_rosa_bastion_user: "{{ file_content | regex_search('SSH Username:\\s*(\\S+)', '\\1') | first }}"
+    creds_rosa_bastion_host: "{{ file_content | regex_search('SSH Command:\\s*ssh\\s+\\S+@(\\S+)', '\\1') | first }}"
+    creds_rosa_bastion_password: "{{ file_content | regex_search('SSH Password:\\s*(\\S+)', '\\1') | first }}"
+    creds_openshift_admin_password: "{{ file_content | regex_search('OPENSHIFT_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
+    creds_aap_admin_password: "{{ file_content | regex_search('AAP_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
+    creds_aap_manifest_path: "{{ file_content | regex_search('AAP_MANIFEST_PATH:\\s*(\\S+)', '\\1') | first }}"
+  when: file_content is defined

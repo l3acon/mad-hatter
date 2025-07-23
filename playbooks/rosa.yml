@@ -2,20 +2,42 @@
 - name: Configure 'AWS with ROSA Open Environment' for Ansible Product-Demos
   hosts: localhost
   tasks:
+    - name: Slurp credentials
+      ansible.builtin.include_role:
+        name: slurp_creds
+      vars:
+        creds_file_path: "{{ playbook_dir }}/../rhdp.creds"
+
+    - name: Set facts
+      ansible.builtin.set_fact:
+        rosa_bastion_host: "{{ creds_rosa_bastion_host | default(lookup('ansible.builtin.env', 'ROSA_BASTION_HOST')) }}"
+        rosa_bastion_password: "{{ creds_rosa_bastion_password | default(lookup('ansible.builtin.env', 'ROSA_BASTION_PASSWORD')) }}"
+        rosa_bastion_user: "{{ creds_rosa_bastion_user | default(lookup('ansible.builtin.env', 'ROSA_BASTION_USER')) }}"
+        aws_access_key: "{{ creds_aws_access_key | default(lookup('ansible.builtin.env', 'AWS_ACCESS_KEY')) }}"
+        aws_secret_key: "{{ creds_aws_secret_key | default(lookup('ansible.builtin.env', 'AWS_SECRET_KEY')) }}"
+        openshift_api_url: "{{ creds_openshift_api_url | default(lookup('ansible.builtin.env', 'OPENSHIFT_API_URL')) }}"
+        openshift_admin_password: "{{ creds_openshift_admin_password | default(lookup('ansible.builtin.env', 'OPENSHIFT_ADMIN_PASSWORD')) }}"
+        aap_admin_password: "{{ creds_aap_admin_password | default(lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD')) }}"
+        aap_manifest_path: "{{ creds_aap_manifest_path | default(lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH')) }}"
+
     - name: Assertion for required variables
       ansible.builtin.assert:
         that: 
-          - "lookup('ansible.builtin.env', 'ROSA_BASTION_HOST') is defined"
-          - "lookup('ansible.builtin.env', 'ROSA_BASTION_PASSWORD') is defined"
-          - "lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') is defined"
-          - "lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH') is defined"
-          - "lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD') is defined"
+          - rosa_bastion_host|length > 0
+          - rosa_bastion_password|length > 0
+          - rosa_bastion_user|length > 0
+          - aws_access_key|length > 0
+          - aws_secret_key|length > 0
+          - openshift_api_url|length > 0
+          - openshift_admin_password|length > 0
+          - aap_admin_password|length > 0
+          - aap_manifest_path|length > 0
 
     - name: Add ROSA bastion to inventory
       ansible.builtin.add_host:
-        name: "{{ lookup('ansible.builtin.env', 'ROSA_BASTION_HOST') }}"
+        name: "{{ rosa_bastion_host }}"
         groups: "rosa"
-        ansible_password: "{{ lookup('ansible.builtin.env', 'ROSA_BASTION_PASSWORD') }}"
+        ansible_password: "{{ rosa_bastion_password }}"
         ansible_user: "rosa"
 
     - name: Get OC login status
@@ -52,7 +74,7 @@
           ignore_errors: true
 
         - name: Create the admin user on the specified cluster
-          ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ lookup('ansible.builtin.env', 'OCP_CLUSTER_ADMIN_PASSWORD') }}"
+          ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ openshift_admin_password }}"
           register: rosa_admin_creation
           changed_when: "'Admin user created' in rosa_admin_creation.stdout"
 
@@ -81,11 +103,10 @@
         name: 'ocp4_workload_ansible_automation_platform_25'
         tasks_from: workload
       vars: 
-        aap_controller_admin_password: "{{ lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') }}"
+        aap_controller_admin_password: "{{ aap_admin_password }}"
         ocp4_workload_ansible_automation_platform_inject_manifest: true
-        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH') }}"
+        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{aap_manifest_path}}"
         ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
-        aap_controller_admin_password: "{{ lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD') }}"
         #ocp4_workload_ansible_automation_platform_validate_certs: false
 
     - name: Ansible Product-Demos Boostrap 
