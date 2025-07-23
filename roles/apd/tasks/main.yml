@@ -1,14 +1,10 @@
 ---
-- name: Assert credentials
+- name: Assert required variables & credentials
   ansible.builtin.assert:
     that:
       - "aap_hostname is defined"
       - "aap_username is defined"
       - "aap_password is defined"
-
-- name: debug
-  ansible.builtin.debug:
-    msg: "{{ controller_projects }}"
 
 - name: Execute automation controller resource configuration
   ansible.builtin.include_role:

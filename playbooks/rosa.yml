@@ -8,18 +8,6 @@
       vars:
         creds_file_path: "{{ playbook_dir }}/../rhdp.creds"
 
-    - name: Set facts
-      ansible.builtin.set_fact:
-        rosa_bastion_host: "{{ creds_rosa_bastion_host | default(lookup('ansible.builtin.env', 'ROSA_BASTION_HOST')) }}"
-        rosa_bastion_password: "{{ creds_rosa_bastion_password | default(lookup('ansible.builtin.env', 'ROSA_BASTION_PASSWORD')) }}"
-        rosa_bastion_user: "{{ creds_rosa_bastion_user | default(lookup('ansible.builtin.env', 'ROSA_BASTION_USER')) }}"
-        aws_access_key: "{{ creds_aws_access_key | default(lookup('ansible.builtin.env', 'AWS_ACCESS_KEY')) }}"
-        aws_secret_key: "{{ creds_aws_secret_key | default(lookup('ansible.builtin.env', 'AWS_SECRET_KEY')) }}"
-        openshift_api_url: "{{ creds_openshift_api_url | default(lookup('ansible.builtin.env', 'OPENSHIFT_API_URL')) }}"
-        openshift_admin_password: "{{ creds_openshift_admin_password | default(lookup('ansible.builtin.env', 'OPENSHIFT_ADMIN_PASSWORD')) }}"
-        aap_admin_password: "{{ creds_aap_admin_password | default(lookup('ansible.builtin.env', 'AAP_ADMIN_PASSWORD')) }}"
-        aap_manifest_path: "{{ creds_aap_manifest_path | default(lookup('ansible.builtin.env', 'AAP_MANIFEST_PATH')) }}"
-
     - name: Check that manifest exists
       ansible.builtin.stat:
         path: "{{ aap_manifest_path }}"
@@ -37,7 +25,17 @@
           - openshift_admin_password|length > 0
           - aap_admin_password|length > 0
           - aap_manifest_path|length > 0
+          - aap_machine_cred_priv_key|length > 0
           - stat_result.stat.exists
+          # ensure RSA key
+          - aap_machine_cred_priv_key is regex('^-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----\n(.+\n)+-----END (?:RSA|OPENSSH) PRIVATE KEY-----\s*$')
+          # enforce Windows password requirements
+          - aap_machine_cred_password|length >= 8
+          - ( (aap_machine_cred_password | regex_search('[A-Z]') | ternary(1, 0)) +
+              (aap_machine_cred_password | regex_search('[a-z]') | ternary(1, 0)) +
+              (aap_machine_cred_password | regex_search('[0-9]') | ternary(1, 0)) +
+              (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
+            ) >= 3
 
     - name: Add ROSA bastion to inventory
       ansible.builtin.add_host:
@@ -47,9 +45,14 @@
         ansible_user: "rosa"
 
     - name: Get OC login status
-      ansible.builtin.command: "oc whoami"
+      ansible.builtin.command: "oc whoami --show-token"
       register: oc_whoami
       ignore_errors: true
+
+    - name: Set OCP bearer token
+      when: oc_whoami is success
+      ansible.builtin.set_fact:
+        openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
     - name: Reset ROSA cluster-admin
       when: oc_whoami is failed
@@ -96,14 +99,24 @@
             rosa_password: "{{ login_command_line.split()[6] }}"
           when: login_command_line is defined and login_command_line != ""
 
-    - name: Login to OCP Cluster with new credentials
+    - name: Do local tasks if login required
       when: oc_whoami is failed
-      ansible.builtin.command: "{{ login_command_line }}"
-      register: oc_login
-      changed_when: "'Login successful' in oc_login.stdout"
-      retries: 30
-      delay: 5
- 
+      block:
+        - name: Get OC login status
+          ansible.builtin.command: "oc whoami --show-token"
+          register: oc_whoami
+    
+        - name: Set OCP bearer token
+          ansible.builtin.set_fact:
+            openshift_bearer_token: "{{ oc_whoami.stdout }}"
+    
+        - name: Login to OCP Cluster with new credentials
+          ansible.builtin.command: "{{ login_command_line }}"
+          register: oc_login
+          changed_when: "'Login successful' in oc_login.stdout"
+          retries: 30
+          delay: 5
+    
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
         name: 'ocp4_workload_ansible_automation_platform_25'
@@ -111,21 +124,42 @@
       vars: 
         aap_controller_admin_password: "{{ aap_admin_password }}"
         ocp4_workload_ansible_automation_platform_inject_manifest: true
-        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{aap_manifest_path}}"
+        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}"
         ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
         #ocp4_workload_ansible_automation_platform_validate_certs: false
 
     - name: Ansible Product-Demos Boostrap 
       ansible.builtin.include_role:
         name: 'apd'
-      vars: 
-        apd_git_repo: https://github.com/ansible/product-demos
-        apd_git_repo_branch: main
 
-#    - name: Configure credentials
-#      ansible.builtin.include_role:
-#        name: infra.aap_configuration.controller_credentials
-#
+    - name: Configure credentials we are aware of
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        controller_credentials:
+          - name: Demo Credential
+            credential_type: Machine
+            update_secrets: true
+            organization: Default
+            inputs:
+              username: "admin"
+              password: "{{ aap_machine_cred_password }}"
+              ssh_key_data: "{{ aap_machine_cred_priv_key }}"
+
+          - name: AWS
+            credential_type: Amazon Web Services
+            organization: Default
+            inputs:
+              username: "{{ aws_access_key }}"
+              password: "{{ aws_secret_key }}"
+
+          - name: OpenShift Credential
+            credential_type: "OpenShift or Kubernetes API Bearer Token"
+            organization: Default
+            inputs:
+              host: "{{ openshift_api_url }}"
+              bearer_token: "{{ openshift_bearer_token }}"
+
 #    - name: Lauch Multi-setup
 #      ansible.controller.include_role:
 #        name: infra.aap_configuration.job_launch

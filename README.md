@@ -5,13 +5,8 @@ First it works. Then it documents.
 This is a work in progress.
 
 ### Begin at the Beginning
-1. Create a file called `rhdp.creds` in the root of this project, paste the credentials from RHDP.
-1. Set these additional variables either as BASH environment variables or within the same `rhdp.creds` file:
-```
-OPENSHIFT_ADMIN_PASS=<some-pass>
-AAP_ADMIN_PASSWORD=<some-pass> 
-AAP_MANIFEST_PATH=~/Downloads/some-manifest.zip
-```
+1. Create a file called `rhdp.creds` in the root of this project, paste raw "info" text from demo platform.
+1. Add additional variables in the same `rhdp.creds` file (see playbooks for all available/required vars). 
 1. Run a play
 ```
 ansible-playbook playbooks/rosa.yml
