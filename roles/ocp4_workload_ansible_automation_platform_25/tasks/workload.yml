@@ -1,13 +1,13 @@
 ---
 - name: Setup environment vars
   block:
-    - name: Extend OCP Bearer Token life for AAP cred use
-      kubernetes.core.k8s:
-        state: present
-        definition: "{{ lookup('template', 'ocp_bearer_token_lifecycle.j2') }}"
-      register: r_extend_token_lifecycle
-      until: r_extend_token_lifecycle is succeeded
-      retries: 5
+    #- name: Extend OCP Bearer Token life for AAP cred use
+    #  kubernetes.core.k8s:
+    #    state: present
+    #    definition: "{{ lookup('template', 'ocp_bearer_token_lifecycle.j2') }}"
+    #  register: r_extend_token_lifecycle
+    #  until: r_extend_token_lifecycle is succeeded
+    #  retries: 5
 
     - name: Install Red Hat Ansible Automation Platform
       ansible.builtin.include_role:

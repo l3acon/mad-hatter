@@ -12,6 +12,21 @@ This is a work in progress.
 ansible-playbook playbooks/rosa.yml
 ```
 
+### User provided variables
+Add the following to the RHDP provided credentials, replacing the nonsense. 
+```
+OPENSHIFT_ADMIN_PASSWORD: Curiouser&Curiouser
+AAP_ADMIN_PASSWORD: Curiouser&Curiouser
+AAP_MANIFEST_PATH: /Curiouser/Curiouser/manifest.zip
+AAP_MACHINE_CRED_PASSWORD: Curiouser&Curiouser
+-----BEGIN OPENSSH PRIVATE KEY-----
+SWYgSSBoYWQgYSB3b3JsZCBvZiBteSBvd24sIGV2ZXJ5dGhpbmcgd291bGQgYmUgbm9uc2Vuc2Uu
+IE5vdGhpbmcgd291bGQgYmUgd2hhdCBpdCBpcywgYmVjYXVzZSBldmVyeXRoaW5nIHdvdWxkIGJl
+IHdoYXQgaXQgaXNuJ3QuIEFuZCBjb250cmFyaXdpc2UsIHdoYXQgaXQgaXMsIGl0IHdvdWxkbid0
+IGJlLiBBbmQgd2hhdCBpdCB3b3VsZG4ndCBiZSwgaXQgd291bGQuIFlvdSBzZWU/Cg==
+-----END OPENSSH PRIVATE KEY-----
+```
+
 ## We're all mad here
 This project aims to do better, execution should flow quickly and seamlessly. Troubleshooting should also be as seamelss and easy as possible.
 

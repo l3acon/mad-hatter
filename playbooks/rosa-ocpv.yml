@@ -49,14 +49,9 @@
         ansible_user: "rosa"
 
     - name: Get OC login status
-      ansible.builtin.command: "oc whoami --show-token"
+      ansible.builtin.command: "oc whoami"
       register: oc_whoami
       ignore_errors: true
-
-    - name: Set OCP bearer token
-      when: oc_whoami is success
-      ansible.builtin.set_fact:
-        openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
     - name: Reset ROSA cluster-admin
       when: oc_whoami is failed
@@ -71,8 +66,8 @@
 
         - name: Set cluster_name fact from the output
           ansible.builtin.set_fact:
-            cluster_name: "{{ (rosa_cluster_list | from_json)[0].name }}"
-            rosa_availability_zone: "{{ (raw_cluster_output | from_json)[0].nodes.availability_zones[0] }}"
+            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name'] }}"
+            rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
 
         - name: Display the extracted cluster name (for debugging)
           ansible.builtin.debug:
@@ -107,14 +102,6 @@
     - name: Do local tasks if login required
       when: oc_whoami is failed
       block:
-        - name: Get OC login status
-          ansible.builtin.command: "oc whoami --show-token"
-          register: oc_whoami
-    
-        - name: Set OCP bearer token
-          ansible.builtin.set_fact:
-            openshift_bearer_token: "{{ oc_whoami.stdout }}"
-    
         - name: Login to OCP Cluster with new credentials
           ansible.builtin.command: "{{ login_command_line }}"
           register: oc_login
@@ -132,40 +119,21 @@
           failed_when: rosa_cluster_list.rc != 0
           check_mode: no
 
-        - name: Debug
-          ansible.builtin.debug:
-            msg: "{{ (rosa_cluster_list.stdout|from_json)[0]['name'] }}"
-
         - name: Set cluster_name fact from the output
           ansible.builtin.set_fact:
             cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name']}}"
             rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
 
+        - name: Get machinepools
+          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json"
+          register: machinepools
+
         - name: Add virt machinepool
           ansible.builtin.command: "rosa create machinepool --cluster={{ cluster_name }} --replicas 1 --availability-zone={{ rosa_availability_zone }} --instance-type m5zn.metal  --name rosa-virt"
-
-        - name: Wait until virt hosts comes up
-          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json"
-          register: machinepools
-
-        - name: Debug
-          ansible.builtin.debug:
-            msg: "{{ machinepools.stdout }}"
-
-        - name: Debug
-          ansible.builtin.debug:
-            msg: "{{ (machinepools.stdout | from_json | selectattr('id', 'equalto', 'rosa-virt') | list)[0].status.current_replicas == 1 }}"
-
-        - name: Wait until virt hosts comes up
-          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json"
-          register: machinepools
-          changed_when: false
-          until: >
+          when: >
             (machinepools.stdout | from_json
             | selectattr('id', 'equalto', 'rosa-virt')
-            | list)[0].status.current_replicas == 1
-          retries: 75
-          delay: 20
+            | list)[0].status.current_replicas < 1
 
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
@@ -181,6 +149,15 @@
     - name: Ansible Product-Demos Boostrap 
       ansible.builtin.include_role:
         name: 'apd'
+
+    - name: Show bearer token
+      ansible.builtin.command: "oc whoami --show-token"
+      register: oc_whoami
+      ignore_errors: true
+
+    - name: Set OCP bearer token
+      ansible.builtin.set_fact:
+        openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
     - name: Configure credentials we are aware of
       ansible.builtin.include_role:
@@ -210,8 +187,26 @@
               host: "{{ openshift_api_url }}"
               bearer_token: "{{ openshift_bearer_token }}"
 
-#    - name: Lauch Multi-setup
-#      ansible.controller.include_role:
-#        name: infra.aap_configuration.job_launch
-#      vars:
+        controller_launch_jobs:
+          - name: "Product Demos | Single demo setup"
+            wait: true
+            extra_vars:
+              demo: "openshift"
+
+          - name: "OpenShift / CNV / Install Operator"
+            wait: true
+
+    - name: Wait if metal node is still coming up
+      delegate_to: "{{ groups['rosa'] | first }}"
+      block:
+        - name: Wait until virt hosts comes up
+          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json"
+          register: machinepools
+          changed_when: false
+          until: >
+            (machinepools.stdout | from_json
+            | selectattr('id', 'equalto', 'rosa-virt')
+            | list)[0].status.current_replicas == 1
+          retries: 75
+          delay: 20
 ...

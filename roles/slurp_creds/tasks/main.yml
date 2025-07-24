@@ -26,6 +26,6 @@
     aap_machine_cred_priv_key: "{{ file_content |  regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}"
     
     # Other optional things
-    apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
-    apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"
+    #apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
+    #apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"
   when: file_content is defined

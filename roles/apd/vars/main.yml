@@ -32,8 +32,8 @@ controller_projects:
   - name: Ansible Product Demos
     organization: Default
     scm_type: git
-    scm_url: '{{ apd_git_repo }}'
-    scm_branch: '{{ apd_git_repo_branch }}'
+    scm_url: 'https://github.com/ansible/product-demos'
+    scm_branch: 'main'
     default_environment: Product Demos EE
     wait: true
 
