@@ -5,11 +5,11 @@ First it works. Then it documents.
 This is a work in progress.
 
 ### Begin at the Beginning
-1. Create a file called `rhdp.creds` in the root of this project, paste raw "info" text from demo platform.
-1. Add additional variables in the same `rhdp.creds` file (see playbooks for all available/required vars). 
+1. Create a file called `rosa.creds` in the root of this project, paste raw "info" text from demo platform.
+1. Add additional variables in the same `rosa.creds` file (see playbooks for all available/required vars). 
 1. Run a play
 ```
-ansible-playbook aro/apd.yml
+ansible-playbook rosa/apd.yml
 ```
 
 ### User provided variables
