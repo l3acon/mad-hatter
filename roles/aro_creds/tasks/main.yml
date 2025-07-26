@@ -11,6 +11,7 @@
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
     # These are provided from RHPD
+    # ROSA
     openshift_api_url: "{{ file_content | regex_search('ROSA OpenShift API:\\s*(https://[^\\s]+)', '\\1') | first }}"
     aws_access_key: "{{ file_content | regex_search('AWS Access Key ID:\\s*(\\S+)', '\\1') | first }}"
     aws_secret_key: "{{ file_content | regex_search('AWS Secret Access Key:\\s*(\\S+)', '\\1') | first }}"

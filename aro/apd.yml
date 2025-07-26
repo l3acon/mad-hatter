@@ -1,12 +1,12 @@
 ---
-- name: Configure 'AWS with ROSA Open Environment' for Ansible Product-Demos
+- name: Configure 'Azure with ARO Open Environment (Subscription Based)' with Ansible Product-Demos
   hosts: localhost
   tasks:
     - name: Slurp credentials
       ansible.builtin.include_role:
         name: slurp_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/../rhdp.creds"
+        creds_file_path: "{{ playbook_dir }}{{ creds_file | default('/../aro.creds')"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -16,11 +16,6 @@
     - name: Assertion for required variables
       ansible.builtin.assert:
         that: 
-          - rosa_bastion_host|length > 0
-          - rosa_bastion_password|length > 0
-          - rosa_bastion_user|length > 0
-          - aws_access_key|length > 0
-          - aws_secret_key|length > 0
           - openshift_api_url|length > 0
           - openshift_admin_password|length > 0
           - aap_admin_password|length > 0
@@ -36,68 +31,6 @@
               (aap_machine_cred_password | regex_search('[0-9]') | ternary(1, 0)) +
               (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
             ) >= 3
-
-    - name: Add ROSA bastion to inventory
-      ansible.builtin.add_host:
-        name: "{{ rosa_bastion_host }}"
-        groups: "rosa"
-        ansible_password: "{{ rosa_bastion_password }}"
-        ansible_user: "rosa"
-
-    - name: Get OC login status
-      ansible.builtin.command: "oc whoami"
-      register: oc_whoami
-      ignore_errors: true
-
-    - name: Set OCP bearer token
-      when: oc_whoami is success
-      ansible.builtin.set_fact:
-        openshift_bearer_token: "{{ oc_whoami.stdout }}"
-
-    - name: Reset ROSA cluster-admin
-      when: oc_whoami is failed
-      delegate_to: "{{ groups['rosa'] | first }}"
-      block:
-        - name: Get the list of ROSA clusters
-          ansible.builtin.shell: "rosa list cluster"
-          register: rosa_cluster_list
-          changed_when: false
-          failed_when: rosa_cluster_list.rc != 0
-          check_mode: no
-
-        - name: Set cluster_name fact from the output
-          ansible.builtin.set_fact:
-            cluster_name: "{{ rosa_cluster_list.stdout_lines[1].split()[1] }}"
-
-        - name: Display the extracted cluster name (for debugging)
-          ansible.builtin.debug:
-            msg: "Found cluster name: {{ cluster_name }}"
-          when: 
-            - "ansible_debug is defined"
-            - "ansible_debug"
-
-        - name: Delete the admin user on the specified cluster
-          ansible.builtin.command: "rosa delete admin -c {{ cluster_name }} --yes"
-          register: rosa_admin_creation
-          changed_when: "'Admin user created' in rosa_admin_creation.stdout"
-          ignore_errors: true
-
-        - name: Create the admin user on the specified cluster
-          ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ openshift_admin_password }}"
-          register: rosa_admin_creation
-          changed_when: "'Admin user created' in rosa_admin_creation.stdout"
-
-        - name: Extract the 'oc login' command line from the output
-          ansible.builtin.set_fact:
-            login_command_line: "{{ rosa_admin_creation.stdout_lines | select('match', '.*oc login.*') | first | trim }}"
-          when: "'oc login' in rosa_admin_creation.stdout"
-
-        - name: Set credential facts from the login command
-          ansible.builtin.set_fact:
-            rosa_url: "{{ login_command_line.split()[2] }}"
-            rosa_username: "{{ login_command_line.split()[4] }}"
-            rosa_password: "{{ login_command_line.split()[6] }}"
-          when: login_command_line is defined and login_command_line != ""
 
     - name: Do local tasks if login required
       when: oc_whoami is failed
@@ -118,7 +51,6 @@
         ocp4_workload_ansible_automation_platform_inject_manifest: true
         ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}"
         ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
-        #ocp4_workload_ansible_automation_platform_validate_certs: false
 
     - name: Ansible Product-Demos Boostrap 
       ansible.builtin.include_role:

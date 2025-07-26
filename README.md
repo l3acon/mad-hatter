@@ -9,7 +9,7 @@ This is a work in progress.
 1. Add additional variables in the same `rhdp.creds` file (see playbooks for all available/required vars). 
 1. Run a play
 ```
-ansible-playbook playbooks/rosa.yml
+ansible-playbook aro/apd.yml
 ```
 
 ### User provided variables
@@ -28,12 +28,12 @@ IGJlLiBBbmQgd2hhdCBpdCB3b3VsZG4ndCBiZSwgaXQgd291bGQuIFlvdSBzZWU/Cg==
 ```
 
 ## We're all mad here
-This project aims to do better, execution should flow quickly and seamlessly. Troubleshooting should also be as seamelss and easy as possible.
+This project aims to do better, execution should flow quickly and seamlessly. Troubleshooting should also be as seamless and easy as possible.
 
 Relevant metrics:
 ```
 # vanilla deployment
-time ansible-playbook playbooks/rosa.yml
+time ansible-playbook rosa/apd.yml
 ...<play output>
 13:16.97 total
 
@@ -42,7 +42,7 @@ time ansible-playbook playbooks/rosa.yml
 
 ```
 # post-deploment, ideally ansible is doing nothing
-time ansible-playbook playbooks/rosa.yml
+time ansible-playbook rosa/apd.yml
 ...<play output>
 42.597 total
 

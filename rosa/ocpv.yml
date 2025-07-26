@@ -8,7 +8,7 @@
 
     - name: Slurp credentials
       ansible.builtin.include_role:
-        name: slurp_creds
+        name: rosa_creds
       vars:
         creds_file_path: "{{ playbook_dir }}/../rhdp.creds"
 
