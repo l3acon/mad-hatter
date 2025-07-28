@@ -8,15 +8,22 @@
   ansible.builtin.set_fact:
     file_content: "{{ slurp_result.content | b64decode }}"
 
+- name: Decode the file content and set as a fact
+  debug:
+    msg: "{{ file_content | regex_search('Resource Group\\n\\n([^\\s]+)', '\\1') | first }}"
+
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
     # These are provided from RHPD
-    openshift_api_url: "{{ file_content | regex_search('ROSA OpenShift API:\\s*(https://[^\\s]+)', '\\1') | first }}"
-    aws_access_key: "{{ file_content | regex_search('AWS Access Key ID:\\s*(\\S+)', '\\1') | first }}"
-    aws_secret_key: "{{ file_content | regex_search('AWS Secret Access Key:\\s*(\\S+)', '\\1') | first }}"
-    rosa_bastion_user: "{{ file_content | regex_search('SSH Username:\\s*(\\S+)', '\\1') | first }}"
-    rosa_bastion_host: "{{ file_content | regex_search('SSH Command:\\s*ssh\\s+\\S+@(\\S+)', '\\1') | first }}"
-    rosa_bastion_password: "{{ file_content | regex_search('SSH Password:\\s*(\\S+)', '\\1') | first }}"
+    openshift_console_url: "{{ file_content | regex_search('Your ARO Console\\n+(https://[^/]+)', '\\1') | first }}"  
+    openshift_kubeadmin_password: "{{ file_content | regex_search('Username\\s+kubeadmin\\s+Password\\s+([^\\s]+)', '\\1') | first }}"
+
+    # ARO
+    azure_resourcegroup: "{{ file_content | regex_search('Resource Group\\n\\n([^\\s]+)', '\\1') | first }}"
+    azure_client_id: "{{ file_content | regex_search('Application/Client/Service Principal ID\\n+([^\\s]+)', '\\1') | first }}"
+    azure_password: "{{ file_content | regex_search('2 - Your Azure Environment Details(?:.|\\n)*?Password\\n\\n([^\\s]+)', '\\1') | first }}"
+    azure_tenant: "{{ file_content | regex_search('Tenant ID\\n\\n([^\\s]+)', '\\1') | first }}"
+    azure_subscription: "{{ file_content | regex_search('Subscription ID\\n\\n([^\\s]+)', '\\1') | first }}"
 
     # These are user-provided
     openshift_admin_password: "{{ file_content | regex_search('OPENSHIFT_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
@@ -28,4 +35,10 @@
     # Other optional things
     #apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
     #apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"
+  when: file_content is defined
+
+
+- name: Derive OpenShift API URL from Console URL
+  ansible.builtin.set_fact:
+    openshift_api_url: "{{ openshift_console_url | regex_replace('^https://console-openshift-console.apps', 'https://api') }}:6443"
   when: file_content is defined
