@@ -4,9 +4,9 @@
   tasks:
     - name: Slurp credentials
       ansible.builtin.include_role:
-        name: slurp_creds
+        name: rosa_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/../rhdp.creds"
+        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds')"
 
     - name: Check that manifest exists
       ansible.builtin.stat:

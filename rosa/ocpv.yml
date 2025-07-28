@@ -8,9 +8,9 @@
 
     - name: Slurp credentials
       ansible.builtin.include_role:
-        name: slurp_creds
+        name: rosa_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/../rhdp.creds"
+        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds')"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -130,10 +130,7 @@
 
         - name: Add virt machinepool
           ansible.builtin.command: "rosa create machinepool --cluster={{ cluster_name }} --replicas 1 --availability-zone={{ rosa_availability_zone }} --instance-type m5zn.metal  --name rosa-virt"
-          when: >
-            (machinepools.stdout | from_json
-            | selectattr('id', 'equalto', 'rosa-virt')
-            | list)[0].status.current_replicas < 1
+          when: machinepools.stdout | from_json | length < 2
 
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
@@ -144,8 +141,7 @@
         ocp4_workload_ansible_automation_platform_inject_manifest: true
         ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}"
         ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
-        #ocp4_workload_ansible_automation_platform_validate_certs: false
-        #
+
     - name: Ansible Product-Demos Boostrap 
       ansible.builtin.include_role:
         name: 'apd'
