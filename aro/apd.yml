@@ -4,9 +4,9 @@
   tasks:
     - name: Slurp credentials
       ansible.builtin.include_role:
-        name: slurp_creds
+        name: aro_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}{{ creds_file | default('/../aro.creds')"
+        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -16,8 +16,13 @@
     - name: Assertion for required variables
       ansible.builtin.assert:
         that: 
-          - openshift_api_url|length > 0
-          - openshift_admin_password|length > 0
+          - openshift_console_url|length > 0
+          - openshift_kubeadmin_password|length > 0
+          - azure_resourcegroup|length > 0 
+          - azure_client_id|length > 0
+          - azure_password|length > 0
+          - azure_tenant|length > 0
+          - azure_subscription|length > 0
           - aap_admin_password|length > 0
           - aap_manifest_path|length > 0
           - aap_machine_cred_priv_key|length > 0
@@ -32,15 +37,19 @@
               (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
             ) >= 3
 
+    - name: Get OC login status
+      ansible.builtin.command: "oc whoami --show-server=true"
+      register: oc_whoami
+      ignore_errors: true
+
     - name: Do local tasks if login required
-      when: oc_whoami is failed
+      when: 
+        - (oc_whoami is failed) or (openshift_console_url not in oc_whoami.stdout)
       block:
-        - name: Login to OCP Cluster with new credentials
-          ansible.builtin.command: "{{ login_command_line }}"
+        - name: Login to OCP Cluster with credentials
+          ansible.builtin.command: "oc login --username=kubeadmin --password={{ openshift_kubeadmin_password }} {{ openshift_api_url }}"
           register: oc_login
           changed_when: "'Login successful' in oc_login.stdout"
-          retries: 30
-          delay: 5
     
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
