@@ -8,6 +8,10 @@
   ansible.builtin.set_fact:
     file_content: "{{ slurp_result.content | b64decode }}"
 
+- name: Decode the file content and set as a fact
+  debug:
+    msg: "{{ file_content | regex_search('Resource Group\\n\\n([^\\s]+)', '\\1') | first }}"
+
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
     # These are provided from RHPD
@@ -15,7 +19,7 @@
     openshift_kubeadmin_password: "{{ file_content | regex_search('Username\\s+kubeadmin\\s+Password\\s+([^\\s]+)', '\\1') | first }}"
 
     # ARO
-    azure_resourcegroup: "{{ file_content | regex_search('Resource Group\\n([^\\s]+)', '\\1') | first }}"
+    azure_resourcegroup: "{{ file_content | regex_search('Resource Group\\n\\n([^\\s]+)', '\\1') | first }}"
     azure_client_id: "{{ file_content | regex_search('Application/Client/Service Principal ID\\n+([^\\s]+)', '\\1') | first }}"
     azure_password: "{{ file_content | regex_search('2 - Your Azure Environment Details(?:.|\\n)*?Password\\n\\n([^\\s]+)', '\\1') | first }}"
     azure_tenant: "{{ file_content | regex_search('Tenant ID\\n\\n([^\\s]+)', '\\1') | first }}"
