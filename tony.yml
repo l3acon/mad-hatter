@@ -1,0 +1,13 @@
+---
+- name: do tony things
+  hosts: localhost
+  tasks:
+    - name: slurp creds
+      ansible.builtin.include_role:
+        name: aro_creds
+      vars:
+        creds_file_path: "{{ playbook_dir }}/aro.creds"
+
+    - name: include it
+      ansible.builtin.include_role:
+        name: clab
