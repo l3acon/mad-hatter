@@ -1,0 +1,120 @@
+---
+- name: Configure 'Azure with ARO Open Environment (Subscription Based)' with Ansible Product-Demos and ContainerLab
+  hosts: localhost
+  tasks:
+    - name: Slurp credentials
+      ansible.builtin.include_role:
+        name: aro_creds
+      vars:
+        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
+
+    - name: Check that manifest exists
+      ansible.builtin.stat:
+        path: "{{ aap_manifest_path }}"
+      register: stat_result
+
+    - name: Assertion for required variables
+      ansible.builtin.assert:
+        that:
+          - openshift_console_url|length > 0
+          - openshift_kubeadmin_password|length > 0
+          - azure_resourcegroup|length > 0
+          - azure_client_id|length > 0
+          - azure_password|length > 0
+          - azure_tenant|length > 0
+          - azure_subscription|length > 0
+          - aap_admin_password|length > 0
+          - aap_manifest_path|length > 0
+          - aap_machine_cred_priv_key|length > 0
+          - stat_result.stat.exists
+          # ensure RSA key
+          - aap_machine_cred_priv_key is regex('^-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----\n(.+\n)+-----END (?:RSA|OPENSSH) PRIVATE KEY-----\s*$')
+          # enforce Windows password requirements
+          - aap_machine_cred_password|length >= 8
+          - ( (aap_machine_cred_password | regex_search('[A-Z]') | ternary(1, 0)) +
+              (aap_machine_cred_password | regex_search('[a-z]') | ternary(1, 0)) +
+              (aap_machine_cred_password | regex_search('[0-9]') | ternary(1, 0)) +
+              (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
+            ) >= 3
+
+    - name: Get OC login status
+      ansible.builtin.command: "oc whoami --show-server=true"
+      register: oc_whoami
+      ignore_errors: true
+
+    - name: Do local tasks if login required
+      when:
+        - (oc_whoami is failed) or (openshift_console_url not in oc_whoami.stdout)
+      block:
+        - name: Login to OCP Cluster with credentials
+          ansible.builtin.command: "oc login --username=kubeadmin --password={{ openshift_kubeadmin_password }} {{ openshift_api_url }}"
+          register: oc_login
+          changed_when: "'Login successful' in oc_login.stdout"
+
+    - name: Deploy AAP 2.5+ Operator
+      ansible.builtin.include_role:
+        name: 'ocp4_workload_ansible_automation_platform_25'
+        tasks_from: workload
+      vars:
+        aap_controller_admin_password: "{{ aap_admin_password }}"
+        ocp4_workload_ansible_automation_platform_inject_manifest: true
+        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}"
+        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
+
+    - name: Ansible Product-Demos Boostrap
+      ansible.builtin.include_role:
+        name: 'apd'
+
+    - name: Show bearer token
+      ansible.builtin.command: "oc whoami --show-token"
+      register: oc_whoami
+      ignore_errors: true
+
+    - name: Set OCP bearer token
+      ansible.builtin.set_fact:
+        openshift_bearer_token: "{{ oc_whoami.stdout }}"
+
+    - name: Configure credentials we are aware of
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        controller_credentials:
+          - name: Demo Credential
+            credential_type: Machine
+            update_secrets: true
+            organization: Default
+            inputs:
+              username: "admin"
+              password: "{{ aap_machine_cred_password }}"
+              ssh_key_data: "{{ aap_machine_cred_priv_key }}"
+
+          - name: Azure
+            credential_type: Microsoft Azure Resource Manager
+            organization: Default
+            inputs:
+              subscription: "{{ azure_subscription }}"
+              username: "{{ azure_resourcegroup }}"
+              password: "{{ azure_password }}"
+              tenant: "{{ azure_tenant }}"
+              client: "{{ azure_client_id }}"
+              #secret: "{{ azure_ }}" # no idea where the "client secret" comes from
+
+          - name: OpenShift Credential
+            credential_type: "OpenShift or Kubernetes API Bearer Token"
+            organization: Default
+            inputs:
+              host: "{{ openshift_api_url }}"
+              bearer_token: "{{ openshift_bearer_token }}"
+
+#    - name: Lauch Multi-setup
+#      ansible.controller.include_role:
+#        name: infra.aap_configuration.job_launch
+#      vars:
+
+    - name: (Re-)Display Access info
+      ansible.builtin.debug:
+        msg:
+          - "Automation Controller URL: {{ aap_controller_web_url }}"
+          - "Automation Controller Admin Login: {{ aap_controller_admin_user }}"
+          - "Automation Controller Admin Password: {{ aap_controller_admin_password }}"
+...

@@ -1,7 +1,7 @@
 ---
 - name: Slurp the entire contents of creds file
   ansible.builtin.slurp:
-    src: "{{ creds_file_path }}"
+    src: "{{ creds_file_path | default('../aro.creds') }}"
   register: slurp_result
 
 - name: Decode the file content and set as a fact
@@ -31,6 +31,7 @@
     aap_manifest_path: "{{ file_content | regex_search('AAP_MANIFEST_PATH:\\s*(\\S+)', '\\1') | first }}"
     aap_machine_cred_password: "{{ file_content | regex_search('AAP_MACHINE_CRED_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
     aap_machine_cred_priv_key: "{{ file_content |  regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}"
+    aap_machine_cred_pub_key: "{{ file_content |  regex_search('^ssh-rsa.*$', multiline=True) }}"
     
     # Other optional things
     #apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
