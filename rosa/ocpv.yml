@@ -202,12 +202,15 @@
           metadata:
             name: virt-gp3-csi
             annotations:
-                  storageclass.kubevirt.io/is-default-virt-class: "true"
+              storageclass.kubevirt.io/is-default-virt-class: 'true'
           provisioner: ebs.csi.aws.com
+          parameters:
+            encrypted: 'true'
+            type: gp3
           reclaimPolicy: Delete
           allowVolumeExpansion: true
           volumeBindingMode: Immediate
-
+          
     - name: Wait if metal node is still coming up
       delegate_to: "{{ groups['rosa'] | first }}"
       block:
