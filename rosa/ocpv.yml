@@ -3,14 +3,14 @@
   hosts: localhost
   tasks:
     - name: Warning this may incur high costs
-      ansible.builtin.debug:
-        msg: "Warning this may incur high costs"
+      ansible.builtin.pause:
+        msg: "This may incur high costs, please acknowledge responsibility"
 
     - name: Slurp credentials
       ansible.builtin.include_role:
         name: rosa_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds')"
+        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -191,6 +191,22 @@
 
           - name: "OpenShift / CNV / Install Operator"
             wait: true
+
+    - name: Build CNV storage class
+      kubernetes.core.k8s:
+        wait: true
+        state: "present"
+        definition:
+          kind: StorageClass
+          apiVersion: storage.k8s.io/v1
+          metadata:
+            name: virt-gp3-csi
+            annotations:
+                  storageclass.kubevirt.io/is-default-virt-class: "true"
+          provisioner: ebs.csi.aws.com
+          reclaimPolicy: Delete
+          allowVolumeExpansion: true
+          volumeBindingMode: Immediate
 
     - name: Wait if metal node is still coming up
       delegate_to: "{{ groups['rosa'] | first }}"
