@@ -111,6 +111,10 @@
 #        name: infra.aap_configuration.job_launch
 #      vars:
 
+    - name: Deploy container lab
+      ansible.builtin.include_role:
+        name: clab
+
     - name: (Re-)Display Access info
       ansible.builtin.debug:
         msg:

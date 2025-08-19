@@ -43,3 +43,23 @@
   ansible.builtin.set_fact:
     openshift_api_url: "{{ openshift_console_url | regex_replace('^https://console-openshift-console.apps', 'https://api') }}:6443"
   when: file_content is defined
+
+- name: Build azure profile data structure
+  ansible.builtin.set_fact:
+    azure_profile:
+      default:
+        subscription_id: "{{ azure_subscription }}"
+        client_id: "{{ azure_client_id }}"
+        secret: "{{ azure_password }}"
+        tenant: "{{ azure_tenant }}"
+
+- name: Create .azure directory
+  ansible.builtin.file:
+    path: "~/.azure"
+    state: directory
+  register: azure_dir
+
+- name: Build special azure file
+  ansible.builtin.copy:
+    content: "{{ azure_profile | community.general.to_ini}}"
+    dest: "{{ azure_dir.path }}/credentials"
