@@ -7,7 +7,7 @@
 1. Run a play
 ```
 # be in the root directory
-ansible-playbook rosa/.yml
+ansible-playbook rosa/ocpv.yml
 ```
 
 ## User provided variables
