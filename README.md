@@ -28,7 +28,7 @@ IGJlLiBBbmQgd2hhdCBpdCB3b3VsZG4ndCBiZSwgaXQgd291bGQuIFlvdSBzZWU/Cg==
 ```
 
 ## We're all mad here
-This project aims to do better, execution should flow quickly and seamlessly. Troubleshooting should also be as seamless and easy as possible.
+This project aims to optimize for user experience. Both execution should troubleshooting should be as seamless and easy as possible. Long runningg tasks should be sarted and polled to allow for reasonalbe time management.
 
 Relevant metrics:
 ```
@@ -38,7 +38,6 @@ time ansible-playbook rosa/apd.yml
 13:16.97 total
 
 ```
-
 
 ```
 # post-deploment, ideally ansible is doing nothing

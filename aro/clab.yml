@@ -95,9 +95,9 @@
               subscription: "{{ azure_subscription }}"
               username: "{{ azure_resourcegroup }}"
               password: "{{ azure_password }}"
+              secret: "{{ azure_password }}" # seems redundant but maybe works?
               tenant: "{{ azure_tenant }}"
               client: "{{ azure_client_id }}"
-              #secret: "{{ azure_ }}" # no idea where the "client secret" comes from
 
           - name: OpenShift Credential
             credential_type: "OpenShift or Kubernetes API Bearer Token"
