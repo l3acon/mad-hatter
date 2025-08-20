@@ -5,6 +5,8 @@
     - name: Warning this may incur high costs
       ansible.builtin.pause:
         prompt: "This may incur high costs, please acknowledge responsibility"
+      when:
+        - ignore_prompt is not defined
 
     - name: Slurp credentials
       ansible.builtin.include_role:
