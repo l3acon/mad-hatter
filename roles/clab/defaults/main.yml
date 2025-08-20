@@ -1,0 +1,19 @@
+---
+use_public_ip: True
+ip_config_name: "ipconfig1"
+resource_group_name: "clab"
+region: "eastus"
+vnet_cidr: "10.0.0.0/16"
+subnet_cidr: "10.0.1.0/24"
+vnet_name: "clab_vnet"
+subnet_name: "clab_subnet"
+network_sec_group_name: "clab_sec_group"
+rhel_admin_user: "azureuser"
+rhel_public_ip_name: "rhel_clab_ip"
+rhel_nic_name: "rhel_clab_nic"
+rhel_vm_name: "clab"
+rhel_vm_size: "Standard_D32s_v3"
+rhel_vm_sku: "9_4"
+rhel_public_key: "{{ aap_machine_cred_pub_key }}"
+rhel_disk_type: "Standard_LRS" # Standard HDD
+rhel_disk_size_gb: "128"
