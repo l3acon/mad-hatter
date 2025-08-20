@@ -4,7 +4,7 @@
   tasks:
     - name: Warning this may incur high costs
       ansible.builtin.pause:
-        msg: "This may incur high costs, please acknowledge responsibility"
+        prompt: "This may incur high costs, please acknowledge responsibility"
 
     - name: Slurp credentials
       ansible.builtin.include_role:
