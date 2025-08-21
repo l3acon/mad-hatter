@@ -157,6 +157,15 @@
       ansible.builtin.set_fact:
         openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
+#    - name: Delete 
+#      ansible.builtin.include_role:
+#        name: infra.aap_configuration.dispatch
+#      vars:
+#        controller_credentials:
+#          - name: Demo Credential
+#            state: absent
+#            credential_type: Machine
+
     - name: Configure credentials we are aware of
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
@@ -165,7 +174,6 @@
           - name: Demo Credential
             credential_type: Machine
             update_secrets: true
-            organization: Default
             inputs:
               username: "admin"
               password: "{{ aap_machine_cred_password }}"

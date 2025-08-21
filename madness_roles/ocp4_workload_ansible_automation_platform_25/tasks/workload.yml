@@ -1,14 +1,6 @@
 ---
 - name: Setup environment vars
   block:
-    #- name: Extend OCP Bearer Token life for AAP cred use
-    #  kubernetes.core.k8s:
-    #    state: present
-    #    definition: "{{ lookup('template', 'ocp_bearer_token_lifecycle.j2') }}"
-    #  register: r_extend_token_lifecycle
-    #  until: r_extend_token_lifecycle is succeeded
-    #  retries: 5
-
     - name: Install Red Hat Ansible Automation Platform
       ansible.builtin.include_role:
         name: install_operator
@@ -124,10 +116,6 @@
         validate_certs: true
       register: r_aap_license
 
-#  until: not r_aap_license.failed
-#  retries: 30
-#  delay: 30
-
 # Make sure to inject the manifest before creating the rolebinding;
 # otherwise, Ansible Automation Platform will fail during the manifest
 # upload process from the console.
@@ -138,11 +126,7 @@
   kubernetes.core.k8s:
     state: present
     definition: "{{ lookup('template', 'eda_cluster_rolebinding.j2') }}"
-
-#- name: Pause to ensure AAP 2.5 up and running
-#  ansible.builtin.pause:
-#    prompt: "Added extra wait time to ensure Ansible Automation Platform 2.5 is fully up and running before proceeding"
-#    minutes: "{{ ocp4_workload_ansible_automation_platform_extra_wait_minutes }}"
+    minutes: "{{ ocp4_workload_ansible_automation_platform_extra_wait_minutes }}"
 
 - name: Set facts for Access information
   ansible.builtin.set_fact:
