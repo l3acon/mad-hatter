@@ -15,8 +15,9 @@ jobs:
       - name: Create credentials file
         run: echo "${{ secrets.ROSA_CREDS }}" > rosa.creds
 
-      - name: Galaxy creds
-        run: echo "${{ secrets.ROSA_CREDS }}" >> ansible.cfg
+      - name: Substitute token for automation hub
+        run: |
+          sed -i "s/my_ah_token/${{ secrets.AH_TOKEN }}/1" ansible.cfg
 
       - name: Set up Python
         uses: actions/setup-python@v5
