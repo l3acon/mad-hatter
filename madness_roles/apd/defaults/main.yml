@@ -4,8 +4,5 @@ apd_ee_image_version: '25'
 apd_ee_image: quay.io/ansible-product-demos/apd-ee-{{ apd_ee_image_version }}:latest
 apd_verify_ssl: false
 
-apd_scm_url: "https://github.com/ansible/product-demos"
-apd_scm_branch: "main"
-
 controller_validate_certs: false
 controller_configuration_async_delay: 3
