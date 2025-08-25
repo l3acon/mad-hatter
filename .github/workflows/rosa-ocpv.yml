@@ -43,5 +43,5 @@ jobs:
           curl --user ${{ secrets.MANIFEST_CREDS }} https://manifest.lab.cheeseburgia.com/${{ secrets.MANIFEST_PATH }} --output $(pwd)/manifest.zip
 
       - name: Run Ansible Playbook
-        run: ansible-playbook rosa/ocpv.yml -e ignore_prompt=true
+        run: ansible-playbook rosa/ocpv.yml -e ignore_prompt=true -e hide_passwords=true
 
