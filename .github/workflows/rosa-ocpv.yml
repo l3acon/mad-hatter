@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-playbook:
+  rosa-ocpv:
     runs-on: ubuntu-latest 
     steps:
       - name: Check out repository
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9' # Specify a Python version
+          python-version: '3.13' # Specify a Python version
       
       - name: Install Ansible
         run: |
