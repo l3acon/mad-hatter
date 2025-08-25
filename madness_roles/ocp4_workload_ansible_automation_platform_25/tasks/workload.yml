@@ -140,29 +140,18 @@
     aap_username: "{{ ocp4_workload_ansible_automation_platform_admin_username | default('admin') }}"
     aap_password: "{{ ocp4_workload_ansible_automation_platform_admin_password }}"
 
-- name: Display Version and credentials
-  when: not silent | bool
-  ansible.builtin.debug:
-    msg:
-      - "{{ r_result.json.version }}"
-      - "Automation Controller URL: https://{{ automation_controller_hostname }}"
-      - "Automation Controller Admin Login: admin"
-      - "Automation Controller Admin Password: {{ ocp4_workload_ansible_automation_platform_admin_password }}"
-
-- name: Print Access information
-  ansible.builtin.debug:
-    msg: "{{ item }}"
-  loop:
-    - "Automation Controller URL: https://{{ automation_controller_hostname }}"
-    - "Automation Controller Admin Login: admin"
-    - "Automation Controller Admin Password: {{ ocp4_workload_ansible_automation_platform_admin_password }}"
-
 - name: Print Access information
   ansible.builtin.debug:
     msg:
       - aap_controller_web_url: "https://{{ automation_controller_hostname }}"
       - aap_controller_admin_user: "{{ ocp4_workload_ansible_automation_platform_admin_username | default('admin') }}"
-      - aap_controller_admin_password: "{{ ocp4_workload_ansible_automation_platform_admin_password }}"
+
+- name: Print Access information
+  ansible.builtin.debug:
+    msg:
+      - aap_controller_admin_password: "{{ ocp4_workload_ansible_automation_platform_admin_password | }}"
+  when:
+    - hide_passwords is not defined
 
 # Leave this as the last task in the playbook.
 - name: workload tasks complete
