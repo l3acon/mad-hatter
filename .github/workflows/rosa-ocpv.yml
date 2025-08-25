@@ -33,6 +33,10 @@ jobs:
         run: |
           ansible-galaxy collection install -r execution_environments/rosa/requirements.yml
 
+      - name: Echo path
+        run: |
+          echo $(pwd)
+
       - name: Pull manifest file
         run: |
           curl --user ${{ secrets.MANIFEST_CREDS }} https://manifest.lab.cheeseburgia.com/${{ secrets.MANIFEST_PATH }} --output $(pwd)/manifest.zip
