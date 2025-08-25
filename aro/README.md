@@ -3,7 +3,7 @@
 ## Begin at the Beginning
 1. Order underlying infrastructure, the code here is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link).
 1. Create a file called `aro.creds` in the root of this project, paste raw "info" text from demo platform.
-1. Add additional variables in the same `aro.creds` file (see playbooks for all available/required vars). 
+1. Add additional variables in the same `aro.creds` file (see playbooks for all available/required vars).
 1. Run a play
 ```
 # be in the root directory
@@ -11,7 +11,7 @@ ansible-playbook aro/apd.yml
 ```
 
 ## User provided variables
-Add the following to the RHDP provided credentials, replacing the nonsense. 
+Add the following to the RHDP provided credentials, replacing the nonsense.
 ```
 OPENSHIFT_ADMIN_PASSWORD: Curiouser&Curiouser
 AAP_ADMIN_PASSWORD: Curiouser&Curiouser

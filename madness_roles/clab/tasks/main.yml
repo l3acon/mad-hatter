@@ -86,7 +86,7 @@
     resource_group: "{{ resource_group_name }}"
     name: "{{ rhel_vm_name | default('demo_rhel_vm') }}"
     vm_size: "{{ rhel_vm_size }}"
-    managed_disk_type: "{{ rhel_disk_type }}" 
+    managed_disk_type: "{{ rhel_disk_type }}"
     os_disk_size_gb: "{{ rhel_disk_size_gb }}"
     admin_username: "{{ rhel_admin_user }}"
     ssh_password_enabled: false

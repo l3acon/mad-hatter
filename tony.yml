@@ -1,5 +1,5 @@
 ---
-- name: do tony things
+- name: Do tony things
   hosts: localhost
   tasks:
     - name: slurp creds
@@ -8,6 +8,6 @@
       vars:
         creds_file_path: "{{ playbook_dir }}/aro.creds"
 
-    - name: include it
+    - name: Include it
       ansible.builtin.include_role:
         name: clab
