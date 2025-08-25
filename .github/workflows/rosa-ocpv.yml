@@ -33,9 +33,10 @@ jobs:
         run: |
           ansible-galaxy collection install -r execution_environments/rosa/requirements.yml
 
-      - name: Echo path
+      - name: Get OC
         run: |
-          echo $(pwd)
+          tar xaf execution_environments/openshift-client-linux-amd64-rhel9-4.19.9.tar.gz
+          mv openshift-client-linux-amd64-rhel9-4.19.9/oc /usr/local/bin/
 
       - name: Pull manifest file
         run: |
