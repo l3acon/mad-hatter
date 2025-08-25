@@ -15,7 +15,7 @@
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
     # These are provided from RHPD
-    openshift_console_url: "{{ file_content | regex_search('Your ARO Console\\n+(https://[^/]+)', '\\1') | first }}"  
+    openshift_console_url: "{{ file_content | regex_search('Your ARO Console\\n+(https://[^/]+)', '\\1') | first }}"
     openshift_kubeadmin_password: "{{ file_content | regex_search('Username\\s+kubeadmin\\s+Password\\s+([^\\s]+)', '\\1') | first }}"
 
     # ARO
@@ -32,7 +32,7 @@
     aap_machine_cred_password: "{{ file_content | regex_search('AAP_MACHINE_CRED_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
     aap_machine_cred_priv_key: "{{ file_content |  regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}"
     aap_machine_cred_pub_key: "{{ file_content |  regex_search('^ssh-rsa.*$', multiline=True) }}"
-    
+
     # Other optional things
     #apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
     #apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"

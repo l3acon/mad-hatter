@@ -6,7 +6,7 @@ controller_credentials:
       inputs:
         url: https://console.redhat.com/api/automation-hub/
         auth_url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
-  
+
     - name: Controller Credential
       organization: Default
       credential_type: Red Hat Ansible Automation Platform
@@ -17,7 +17,7 @@ controller_credentials:
         username: "{{ aap_username }}"
         password: "{{ aap_password }}"
         verify_ssl: "{{ apd_verify_ssl }}"
-  
+
 controller_execution_environments:
   - name: Product Demos EE
     image: '{{ apd_ee_image }}'

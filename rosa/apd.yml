@@ -15,7 +15,7 @@
 
     - name: Assertion for required variables
       ansible.builtin.assert:
-        that: 
+        that:
           - rosa_bastion_host|length > 0
           - rosa_bastion_password|length > 0
           - rosa_bastion_user|length > 0
@@ -72,7 +72,7 @@
         - name: Display the extracted cluster name (for debugging)
           ansible.builtin.debug:
             msg: "Found cluster name: {{ cluster_name }}"
-          when: 
+          when:
             - "ansible_debug is defined"
             - "ansible_debug"
 
@@ -108,19 +108,19 @@
           changed_when: "'Login successful' in oc_login.stdout"
           retries: 30
           delay: 5
-    
+
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
         name: 'ocp4_workload_ansible_automation_platform_25'
         tasks_from: workload
-      vars: 
+      vars:
         aap_controller_admin_password: "{{ aap_admin_password }}"
         ocp4_workload_ansible_automation_platform_inject_manifest: true
         ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}"
         ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
         #ocp4_workload_ansible_automation_platform_validate_certs: false
 
-    - name: Ansible Product-Demos Boostrap 
+    - name: Ansible Product-Demos Boostrap
       ansible.builtin.include_role:
         name: 'apd'
 
