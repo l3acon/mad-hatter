@@ -36,7 +36,7 @@ jobs:
       - name: Get OC
         run: |
           tar xaf execution_environments/openshift-client-linux-amd64-rhel9-4.19.9.tar.gz
-          mv openshift-client-linux-amd64-rhel9-4.19.9/oc /usr/local/bin/
+          mv ./oc /usr/local/bin/
 
       - name: Pull manifest file
         run: |
