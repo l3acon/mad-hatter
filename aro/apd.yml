@@ -116,5 +116,11 @@
         msg:
           - "Automation Controller URL: {{ aap_controller_web_url }}"
           - "Automation Controller Admin Login: {{ aap_controller_admin_user }}"
+    - name: (Re-)Display Access info
+      ansible.builtin.debug:
+        msg:
           - "Automation Controller Admin Password: {{ aap_controller_admin_password }}"
+      when:
+        - hide_passwords is not defined
+
 ...
