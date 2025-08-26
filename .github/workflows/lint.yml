@@ -12,5 +12,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - run: ./.github/workflows/run-pc.sh
+    - run: ./.github/workflows/pc.sh
       shell: bash
