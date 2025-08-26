@@ -149,7 +149,7 @@
 - name: Print Access information
   ansible.builtin.debug:
     msg:
-      - aap_controller_admin_password: "{{ ocp4_workload_ansible_automation_platform_admin_password | }}"
+      - aap_controller_admin_password: "{{ ocp4_workload_ansible_automation_platform_admin_password }}"
   when:
     - hide_passwords is not defined
 
