@@ -204,7 +204,7 @@
             wait: true
 
     - name: Build CNV storage class
-      kubernetes.core.k8s:
+      kubernetes.core.k8s: # noqa: unknown-module
         wait: true
         state: "present"
         definition:
