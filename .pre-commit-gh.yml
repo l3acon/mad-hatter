@@ -7,6 +7,31 @@ repos:
         additional_dependencies:
           - jmespath
 
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        exclude: >
+          (?x)^(
+            .config/dictionary.txt|
+            examples/broken/encoding.j2|
+            test/schemas/negative_test/.*|
+            test/schemas/test/.*|
+            src/ansiblelint/schemas/.*\.json
+          )$
+        additional_dependencies:
+          - tomli
+  - repo: https://github.com/pappasam/toml-sort
+    rev: v0.24.2
+    hooks:
+      - id: toml-sort-fix
+        alias: toml
+
+  - repo: https://github.com/tox-dev/tox-ini-fmt
+    rev: 1.6.0
+    hooks:
+      - id: tox-ini-fmt
+
   - repo: https://github.com/pre-commit/pre-commit-hooks.git
     rev: v6.0.0
     hooks:
@@ -39,28 +64,4 @@ repos:
       - id: check-merge-conflict
       - id: debug-statements
         language_version: python3
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
-    hooks:
-      - id: codespell
-        exclude: >
-          (?x)^(
-            .config/dictionary.txt|
-            examples/broken/encoding.j2|
-            test/schemas/negative_test/.*|
-            test/schemas/test/.*|
-            src/ansiblelint/schemas/.*\.json
-          )$
-        additional_dependencies:
-          - tomli
-  - repo: https://github.com/pappasam/toml-sort
-    rev: v0.24.2
-    hooks:
-      - id: toml-sort-fix
-        alias: toml
-
-  - repo: https://github.com/tox-dev/tox-ini-fmt
-    rev: 1.6.0
-    hooks:
-      - id: tox-ini-fmt
 ...
