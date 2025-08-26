@@ -2,15 +2,11 @@ name: Run rosa/ocpv.yml playbook
 on:
   workflow_dispatch:
     inputs:
-      logLevel:
-        description: 'Log level'
+      olm_tag:
+        description: 'OLM snapshot to use'
         required: true
-        default: 'warning'
-        type: choice
-        options:
-          - info
-          - warning
-          - debug
+        default: 'v4.19_2025_08_25'
+        type: string
 jobs:
   rosa-ocpv:
     runs-on: ubuntu-latest
@@ -50,4 +46,4 @@ jobs:
           curl --user ${{ secrets.MANIFEST_CREDS }} https://manifest.lab.cheeseburgia.com/${{ secrets.MANIFEST_PATH }} --output $(pwd)/manifest.zip
 
       - name: Run Ansible Playbook
-        run: ansible-playbook rosa/ocpv.yml -e ignore_prompt=true -e hide_passwords=true
+        run: ansible-playbook rosa/ocpv.yml -e ignore_prompt=true -e hide_passwords=true -e olm_tag=${{ inputs.olm_tag }}
