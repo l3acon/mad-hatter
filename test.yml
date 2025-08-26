@@ -3,7 +3,7 @@
   hosts: localhost
   tasks:
     - name: Build CNV storage class
-      kubernetes.core.k8s: # noqa: unknown-module
+      kubernetes.core.k8s:
         wait: true
         state: "present"
         definition:
