@@ -1,0 +1,4 @@
+python3.11-devel [platform:rpm]
+systemd-devel [platform:rpm]
+gcc [platform:rpm]
+pkg-config [platform:rpm]

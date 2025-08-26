@@ -1,3 +1,6 @@
 *.swp
 *.creds
 .azure
+ansible-builder.log
+podman-build*
+

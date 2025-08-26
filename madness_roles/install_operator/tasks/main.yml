@@ -1,11 +1,11 @@
 ---
-- name: "{{ install_operator_name }} - Install the operator"
+- name: "Install the operator - {{ install_operator_name }}" # noqa: ignore-errors
   when: install_operator_action == "install"
-  include_tasks:
+  ansible.builtin.include_tasks:
     file: install.yml
   ignore_errors: "{{ install_operator_install_csv_ignore_error }}"
 
-- name: "{{ install_operator_name }} - Remove the operator"
+- name: "Remove the operator {{ install_operator_name }}"
   when: install_operator_action == "remove"
-  include_tasks:
+  ansible.builtin.include_tasks:
     file: remove.yml

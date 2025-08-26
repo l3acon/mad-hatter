@@ -12,7 +12,7 @@
       ansible.builtin.include_role:
         name: rosa_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}"
+        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}" # noqa: var-naming[no-role-prefix]
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -51,7 +51,7 @@
         ansible_user: "rosa"
 
     - name: Get OC login status
-      ansible.builtin.command: "oc whoami"
+      ansible.builtin.command: "oc whoami" # noqa: no-changed-when
       register: oc_whoami
       ignore_errors: true
 
@@ -60,11 +60,11 @@
       delegate_to: "{{ groups['rosa'] | first }}"
       block:
         - name: Get the list of ROSA clusters
-          ansible.builtin.shell: "rosa list cluster -o json"
+          ansible.builtin.command: "rosa list cluster -o json"
           register: rosa_cluster_list
           changed_when: false
           failed_when: rosa_cluster_list.rc != 0
-          check_mode: no
+          check_mode: false
 
         - name: Set cluster_name fact from the output
           ansible.builtin.set_fact:
@@ -115,11 +115,11 @@
       delegate_to: "{{ groups['rosa'] | first }}"
       block:
         - name: Get the list of ROSA clusters
-          ansible.builtin.shell: "rosa list cluster -o json"
+          ansible.builtin.command: "rosa list cluster -o json"
           register: rosa_cluster_list
           changed_when: false
           failed_when: rosa_cluster_list.rc != 0
-          check_mode: no
+          check_mode: false
 
         - name: Set cluster_name fact from the output
           ansible.builtin.set_fact:
@@ -127,11 +127,12 @@
             rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
 
         - name: Get machinepools
-          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json"
+          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json" # noqa: no-changed-when
           register: machinepools
 
         - name: Add virt machinepool
-          ansible.builtin.command: "rosa create machinepool --cluster={{ cluster_name }} --replicas 1 --availability-zone={{ rosa_availability_zone }} --instance-type m5zn.metal  --name rosa-virt"
+          ansible.builtin.command: "rosa create machinepool --cluster={{ cluster_name }} --replicas 1 --availability-zone={{ rosa_availability_zone }}
+          --instance-type m5zn.metal  --name rosa-virt" # noqa: no-changed-when
           when: machinepools.stdout | from_json | length < 2
 
     - name: Deploy AAP 2.5+ Operator
@@ -139,17 +140,17 @@
         name: 'ocp4_workload_ansible_automation_platform_25'
         tasks_from: workload
       vars:
-        aap_controller_admin_password: "{{ aap_admin_password }}"
-        ocp4_workload_ansible_automation_platform_inject_manifest: true
-        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}"
-        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
+        aap_controller_admin_password: "{{ aap_admin_password }}" # noqa: var-naming[no-role-prefix]
+        ocp4_workload_ansible_automation_platform_inject_manifest: true # noqa: var-naming[no-role-prefix]
+        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
+        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21" # noqa: var-naming[no-role-prefix]
 
-    - name: Ansible Product-Demos Boostrap
+    - name: Ansible Product-Demos Bootstrap
       ansible.builtin.include_role:
         name: 'apd'
 
     - name: Show bearer token
-      ansible.builtin.command: "oc whoami --show-token"
+      ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when
       register: oc_whoami
       ignore_errors: true
 

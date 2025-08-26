@@ -6,7 +6,7 @@
       ansible.builtin.include_role:
         name: aro_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
+        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}" # noqa: var-naming[no-role-prefix]
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -38,7 +38,7 @@
             ) >= 3
 
     - name: Get OC login status
-      ansible.builtin.command: "oc whoami --show-server=true"
+      ansible.builtin.command: "oc whoami --show-server=true" # noqa: no-changed-when
       register: oc_whoami
       ignore_errors: true
 
@@ -56,17 +56,18 @@
         name: 'ocp4_workload_ansible_automation_platform_25'
         tasks_from: workload
       vars:
-        aap_controller_admin_password: "{{ aap_admin_password }}"
-        ocp4_workload_ansible_automation_platform_inject_manifest: true
-        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}"
-        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21"
+        aap_controller_admin_password: "{{ aap_admin_password }}" # noqa: var-naming[no-role-prefix]
+        ocp4_workload_ansible_automation_platform_inject_manifest: true # noqa: var-naming[no-role-prefix]
+        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
+        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21" # noqa: var-naming[no-role-prefix]
 
-    - name: Ansible Product-Demos Boostrap
+
+    - name: Ansible Product-Demos Bootstrap
       ansible.builtin.include_role:
         name: 'apd'
 
     - name: Show bearer token
-      ansible.builtin.command: "oc whoami --show-token"
+      ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when
       register: oc_whoami
       ignore_errors: true
 
@@ -97,7 +98,7 @@
               password: "{{ azure_password }}"
               tenant: "{{ azure_tenant }}"
               client: "{{ azure_client_id }}"
-              #secret: "{{ azure_ }}" # no idea where the "client secret" comes from
+              # secret: "{{ azure_ }}" # no idea where the "client secret" comes from
 
           - name: OpenShift Credential
             credential_type: "OpenShift or Kubernetes API Bearer Token"
@@ -106,7 +107,7 @@
               host: "{{ openshift_api_url }}"
               bearer_token: "{{ openshift_bearer_token }}"
 
-#    - name: Lauch Multi-setup
+#    - name: Launch Multi-setup
 #      ansible.controller.include_role:
 #        name: infra.aap_configuration.job_launch
 #      vars:

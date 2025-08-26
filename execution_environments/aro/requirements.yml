@@ -2,4 +2,3 @@
 collections:
   - name: azure.azcollection
     version: 3.7.0
-
