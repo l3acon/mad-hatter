@@ -11,6 +11,6 @@ jobs:
       options: --user root
     runs-on: ubuntu-latest
     steps:
-     - uses: actions/checkout@v4
-     - run: ./.github/workflows/pc.sh
-       shell: bash
+      - uses: actions/checkout@v4
+      - run: ./.github/workflows/pc.sh
+        shell: bash
