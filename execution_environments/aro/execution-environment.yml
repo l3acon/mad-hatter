@@ -6,11 +6,11 @@ images:
 
 dependencies:
   galaxy: requirements.yml
-  #python: requirements.txt
+  # python: requirements.txt
 
 additional_build_files:
-   - src: ../ansible.cfg
-     dest: configs
+  - src: ../ansible.cfg
+    dest: configs
 
 options:
   package_manager_path: /usr/bin/microdnf

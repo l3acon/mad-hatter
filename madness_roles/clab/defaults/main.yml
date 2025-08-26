@@ -1,5 +1,5 @@
 ---
-use_public_ip: True
+use_public_ip: true
 ip_config_name: "ipconfig1"
 resource_group_name: "clab"
 region: "eastus"

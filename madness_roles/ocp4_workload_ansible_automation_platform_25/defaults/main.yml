@@ -34,8 +34,8 @@ ocp4_workload_ansible_automation_platform_extra_wait_minutes: 10
 ## ---------------------------------------------------------------
 ## Pre-workload settings
 ## ---------------------------------------------------------------
-#ocp4_workload_ansible_automation_platform_tmp_dir: /tmp/{{ guid }}
-#ocp4_workload_ansible_automation_platform_tmp_kubeconfig: >-
+# ocp4_workload_ansible_automation_platform_tmp_dir: /tmp/{{ guid }}
+# ocp4_workload_ansible_automation_platform_tmp_kubeconfig: >-
 #  {{ ocp4_workload_ansible_automation_platform_tmp_dir }}/.kube/config
 #
 # ---------------------------------------------------------------

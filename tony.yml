@@ -2,11 +2,11 @@
 - name: Do tony things
   hosts: localhost
   tasks:
-    - name: slurp creds
+    - name: Slurp creds
       ansible.builtin.include_role:
         name: aro_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/aro.creds"
+        creds_file_path: "{{ playbook_dir }}/aro.creds" # noqa: var-naming[no-role-prefix]
 
     - name: Include it
       ansible.builtin.include_role:

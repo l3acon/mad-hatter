@@ -1,5 +1,5 @@
 ---
-- name: test
+- name: Test
   hosts: localhost
   tasks:
     - name: Build CNV storage class
@@ -20,4 +20,3 @@
           reclaimPolicy: Delete
           allowVolumeExpansion: true
           volumeBindingMode: Immediate
-
