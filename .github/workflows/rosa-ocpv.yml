@@ -11,13 +11,6 @@ on:
           - info
           - warning
           - debug
-      environment:
-        description: 'Environment to deploy to'
-        required: true
-        type: environment
-        options:
-          - prod
-
 jobs:
   rosa-ocpv:
     runs-on: ubuntu-latest
