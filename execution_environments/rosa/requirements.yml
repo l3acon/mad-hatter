@@ -7,6 +7,9 @@ collections:
     version: ">=2.5.0"
   - name: infra.aap_configuration
 
+  - name: kubernetes.core
+    version: ">=6.1.0"
+
   # these are likely not needed
   - name: infra.ah_configuration
     version: ">=2.0.6"

@@ -123,7 +123,7 @@
 
         - name: Set cluster_name fact from the output
           ansible.builtin.set_fact:
-            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name']}}"
+            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name'] }}"
             rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
 
         - name: Get machinepools
@@ -204,7 +204,7 @@
             wait: true
 
     - name: Build CNV storage class
-      kubernetes.core.k8s: # noqa: unknown-module
+      kubernetes.core.k8s:
         wait: true
         state: "present"
         definition:

@@ -30,8 +30,8 @@
     aap_admin_password: "{{ file_content | regex_search('AAP_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
     aap_manifest_path: "{{ file_content | regex_search('AAP_MANIFEST_PATH:\\s*(\\S+)', '\\1') | first }}"
     aap_machine_cred_password: "{{ file_content | regex_search('AAP_MACHINE_CRED_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
-    aap_machine_cred_priv_key: "{{ file_content |  regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}" # noqa: yaml[line-length]
-    aap_machine_cred_pub_key: "{{ file_content |  regex_search('^ssh-rsa.*$', multiline=True) }}"
+    aap_machine_cred_priv_key: "{{ file_content | regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}" # noqa: yaml[line-length]
+    aap_machine_cred_pub_key: "{{ file_content | regex_search('^ssh-rsa.*$', multiline=True) }}"
 
     # Other optional things
     # apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
@@ -61,5 +61,5 @@
 
 - name: Build special azure file # noqa: risky-file-permissions
   ansible.builtin.copy:
-    content: "{{ azure_profile | community.general.to_ini}}"
+    content: "{{ azure_profile | community.general.to_ini }}"
     dest: "{{ azure_dir.path }}/credentials"
