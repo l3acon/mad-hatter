@@ -10,7 +10,7 @@ This project builds off the following projects:
 1. [ARO](./aro/README.md)
 
 ## We're all mad here
-This project aims to optimize for user experience. Both execution should troubleshooting should be as seamless and easy as possible. Long runningg tasks should be sarted and polled to allow for reasonalbe time management.
+This project aims to optimize for user experience. Both execution should troubleshooting should be as seamless and easy as possible. Long runningg tasks should be started and polled to allow for reasonalbe time management.
 
 Relevant metrics:
 ```

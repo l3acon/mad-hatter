@@ -28,4 +28,4 @@ IGJlLiBBbmQgd2hhdCBpdCB3b3VsZG4ndCBiZSwgaXQgd291bGQuIFlvdSBzZWU/Cg==
 
 <...COPY PASTA from RHDP CREDS PAGE...>
 ```
-See [rosa_creds](../roles/rosa_creds/tasks/main.yml) for more details credential loading detials.
+See [rosa_creds](../roles/rosa_creds/tasks/main.yml) for more details credential loading details.
