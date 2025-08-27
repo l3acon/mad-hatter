@@ -8,11 +8,12 @@
       when:
         - ignore_prompt is not defined
 
-    - name: Slurp credentials
+    - name: Parse credentials
       ansible.builtin.include_role:
         name: rosa_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}" # noqa: var-naming[no-role-prefix]
+        rosa_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}"
+        rosa_creds_user_file_path: "{{ playbook_dir }}/{{ user_creds_file | default('../user.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
