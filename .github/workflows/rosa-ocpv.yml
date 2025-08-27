@@ -14,8 +14,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Create credentials file
+      - name: Create rosa credentials file
         run: echo "${{ secrets.ROSA_CREDS }}" > rosa.creds
+
+      - name: Create user credentials file
+        run: echo "${{ secrets.USER_CREDS }}" > user.creds
 
       - name: Substitute token for automation hub
         run: |
