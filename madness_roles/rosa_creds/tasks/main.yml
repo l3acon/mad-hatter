@@ -1,12 +1,21 @@
 ---
-- name: Slurp the entire contents of creds file
+- name: Slurp the entire contents of rosa creds file
   ansible.builtin.slurp:
-    src: "{{ creds_file_path }}"
-  register: slurp_result
+    src: "{{ rosa_creds_file_path }}"
+  register: rosa_slurp
+
+- name: Slurp the entire contents of user creds file
+  ansible.builtin.slurp:
+    src: "{{ rosa_creds_user_file_path }}"
+  register: user_slurp
+  when:
+    - rosa_creds_user_file_path is defined
 
 - name: Decode the file content and set as a fact
   ansible.builtin.set_fact:
-    file_content: "{{ slurp_result.content | b64decode }}"
+    file_content: |
+      {{ rosa_slurp.content | b64decode }}
+      {{ user_slurp.content | b64decode }}
 
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
