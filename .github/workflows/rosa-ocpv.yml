@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       olm_tag:
-        description: 'OLM snapshot to use'
+        description: 'OLM snapshot to use, e.g. from https://quay.io/repository/gpte-devops-automation/olm_snapshot_redhat_catalog?tab=tags&tag=latest'
         required: true
-        default: 'v4.19_2025_08_25'
+        default: 'v4.19_2025_08_28'
         type: string
 jobs:
   rosa-ocpv:
@@ -39,17 +39,17 @@ jobs:
         run: |
           ansible-galaxy collection install -r execution_environments/rosa/requirements.yml
 
-      - name: Get OC
+      - name: Get OC utility from bastion host
         run: |
           sudo apt-get update && sudo apt-get install -y sshpass
           OC_PATH="/usr/local/bin/oc"
-          
+
           echo "Parsing credentials..."
           SSH_USER=$(grep 'SSH Username:' rosa.creds | awk '{print $3}')
           SSH_PASS=$(grep 'SSH Password:' rosa.creds | awk '{print $3}')
-          SSH_HOST=$(grep 'SSH Command:' rosa.creds | awk '{print $3}' | cut -d'@' -f2)
+          SSH_HOST=$(grep 'SSH Command:' rosa.creds | awk '{print $4}' | cut -d'@' -f2)
 
-          echo "running sshpass -p <pass> scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER@$SSH_HOST:$OC_PATH" $OC_PATH
+          echo "Login and scp"
           sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER@$SSH_HOST:$OC_PATH" $OC_PATH
           sudo chmod +x $OC_PATH
           oc version --client
