@@ -42,15 +42,15 @@ jobs:
       - name: Get OC
         run: |
           sudo apt-get update && sudo apt-get install -y sshpass
-
           OC_PATH="/usr/local/bin/oc"
+          
+          echo "Parsing credentials..."
           SSH_USER=$(grep 'SSH Username:' rosa.creds | awk '{print $3}')
           SSH_PASS=$(grep 'SSH Password:' rosa.creds | awk '{print $3}')
           SSH_HOST=$(grep 'SSH Command:' rosa.creds | awk '{print $3}' | cut -d'@' -f2)
 
-          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            "$SSH_USER@$SSH_HOST:$OC_PATH" $OC_PATH
-
+          echo "running sshpass -p <pass> scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER@$SSH_HOST:$OC_PATH" $OC_PATH
+          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$SSH_USER@$SSH_HOST:$OC_PATH" $OC_PATH
           sudo chmod +x $OC_PATH
           oc version --client
 
