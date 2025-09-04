@@ -32,7 +32,7 @@
     aap_machine_cred_password: "{{ file_content | regex_search('AAP_MACHINE_CRED_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
     aap_machine_cred_priv_key: "{{ file_content | regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}" # noqa: yaml[line-length]
     aap_machine_cred_pub_key: "{{ file_content | regex_search('^ssh-rsa.*$', multiline=True) }}"
-
+    aap_operator_chatbot_token: "{{ file_content | regex_search('CHATBOT_TOKEN:\\s*(\\S+)', '\\1') | first }}"
     # Other optional things
     # apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
     # apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"

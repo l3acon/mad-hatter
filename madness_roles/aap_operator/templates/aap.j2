@@ -1,0 +1,31 @@
+---
+apiVersion: aap.ansible.com/v1alpha1
+kind: AnsibleAutomationPlatform
+metadata:
+  name: {{ aap_operator_app_name }}
+  namespace: {{ aap_operator_project }}
+spec:
+  image_pull_policy: IfNotPresent
+  controller:
+    disabled: {{ aap_operator_disable_controller }}
+  eda:
+    disabled: {{ aap_operator_disable_eda }}
+  hub:
+{% if not aap_operator_disable_hub %}
+
+    disabled: false
+    gunicorn_content_workers: {{ aap_operator_hub_content_workers }}
+    gunicorn_api_workers: {{ aap_operator_hub_api_workers }}
+    file_storage_size: {{ aap_operator_hub_file_storage_size }}
+    file_storage_access_mode: {{ aap_operator_hub_file_storage_access_mode }}
+{% else %}
+
+    disabled: true
+{%endif%}
+  lightspeed:
+    disabled: {{ aap_operator_disable_lightspeed }}
+    chatbot_config_secret_name: {{ aap_operator_disable_lightspeed_chatbot_config_secret_name }}
+
+  no_log: true
+  redis_mode: standalone
+  route_tls_termination_mechanism: Edge

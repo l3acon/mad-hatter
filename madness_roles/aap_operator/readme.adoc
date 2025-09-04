@@ -1,4 +1,4 @@
-= ocp4_workload_ansible_automation_platform - Ansible Automation Platform Workload Role
+= aap_operator - Ansible Automation Platform Operator Role
 
 == Role overview
 
@@ -17,8 +17,8 @@ This role returns, via agnosticd_user_info (info and data) the following:
 [source,yaml]
 ----
 aap_controller_web_url: "https://{{ automation_controller_hostname }}"
-aap_controller_admin_user: "{{ ocp4_workload_ansible_automation_platform_admin_username | default('admin') }}"
-aap_controller_admin_password: "{{ ocp4_workload_ansible_automation_platform_admin_password }}"
+aap_controller_admin_user: "{{ aap_operator_admin_username | default('admin') }}"
+aap_controller_admin_password: "{{ aap_operator_admin_password }}"
 ----
 
 === Resources and PriorArt
@@ -43,7 +43,7 @@ By default *no* Manifest is injected. To inject a manifest, you need to provide 
 
 [source,yaml]
 ----
-ocp4_workload_ansible_automation_platform_manifest:
+aap_operator_manifest:
   inject: true
   url: https://example.com/manifest <1>
   username: <USER> <2>
@@ -58,25 +58,25 @@ ocp4_workload_ansible_automation_platform_manifest:
 === Deploy a Workload with the `ocp-workload` playbook [Mostly for testing]
 
 . Authenticate to the cluster e.g. `oc login ...`
-. Run a playbook calling the `ocp4_workload_ansible_automation_platform` role
+. Run a playbook calling the `aap_operator` role
 
 .Sample Playbook
 [source,yaml]
 ----
 ---
 
-- name: Test ocp4_workload_ansible_automation_platform role
+- name: Test aap_operator role
   hosts: localhost
   connection: local
   gather_facts: false
   become: false
   vars:
     ACTION: create
-    ocp4_workload_ansible_automation_platform_admin_password: <DESIRED_PASSWORD>
+    aap_operator_admin_password: <DESIRED_PASSWORD>
 
   roles:
 
-    - ocp4_workload_ansible_automation_platform
+    - aap_operator
 ----
 
 === To Delete an environment

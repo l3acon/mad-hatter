@@ -138,13 +138,13 @@
 
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
-        name: 'ocp4_workload_ansible_automation_platform_25'
+        name: 'aap_operator'
         tasks_from: workload
       vars:
         aap_controller_admin_password: "{{ aap_admin_password }}" # noqa: var-naming[no-role-prefix]
-        ocp4_workload_ansible_automation_platform_inject_manifest: true # noqa: var-naming[no-role-prefix]
-        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
-        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "{{ olm_tag | default('v4.19_2025_08_25') }}" # noqa: var-naming[no-role-prefix]
+        aap_operator_inject_manifest: true # noqa: var-naming[no-role-prefix]
+        aap_operator_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
+        aap_operator_catalog_snapshot_image_tag: "{{ olm_tag | default('v4.19_2025_08_25') }}" # noqa: var-naming[no-role-prefix]
 
     - name: Ansible Product-Demos Bootstrap
       ansible.builtin.include_role:
