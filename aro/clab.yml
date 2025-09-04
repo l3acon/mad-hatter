@@ -1,6 +1,8 @@
 ---
 - name: Configure 'Azure with ARO Open Environment (Subscription Based)' with Ansible Product-Demos and ContainerLab
   hosts: localhost
+  vars:
+    aap_operator_disable_lightspeed: false
   tasks:
     - name: Slurp credentials
       ansible.builtin.include_role:
@@ -38,6 +40,12 @@
               (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
             ) >= 3
 
+    - name: Assertion for required variables
+      when: aap_operator_disable_lightspeed is not true
+      ansible.builtin.assert:
+        that:
+          - aap_operator_chatbot_token|length > 0
+
     - name: Get OC login status
       ansible.builtin.command: "oc whoami --show-server=true" # noqa: no-changed-when
       register: oc_whoami
@@ -54,13 +62,13 @@
 
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
-        name: 'ocp4_workload_ansible_automation_platform_25'
+        name: 'aap_operator'
         tasks_from: workload
       vars:
         aap_controller_admin_password: "{{ aap_admin_password }}" # noqa: var-naming[no-role-prefix]
-        ocp4_workload_ansible_automation_platform_inject_manifest: true # noqa: var-naming[no-role-prefix]
-        ocp4_workload_ansible_automation_platform_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
-        ocp4_workload_ansible_automation_platform_catalog_snapshot_image_tag: "v4.19_2025_07_21" # noqa: var-naming[no-role-prefix]
+        aap_operator_inject_manifest: true # noqa: var-naming[no-role-prefix]
+        aap_operator_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
+        aap_operator_catalog_snapshot_image_tag: "v4.19_2025_07_21" # noqa: var-naming[no-role-prefix]
 
     - name: Ansible Product-Demos Bootstrap
       ansible.builtin.include_role:

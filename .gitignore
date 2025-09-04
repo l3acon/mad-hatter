@@ -3,3 +3,4 @@
 .azure
 ansible-builder.log
 podman-build*
+ansible-navigator.log

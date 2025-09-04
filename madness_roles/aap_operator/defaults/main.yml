@@ -1,0 +1,76 @@
+---
+become_override: false
+ocp_username: opentlc-mgr
+silent: false
+
+# ---------------------------------------------------------------
+# Operator settings
+# ---------------------------------------------------------------
+aap_operator_project: "aap"
+aap_operator_app_name: "aap"
+aap_operator_operator_name: ansible-automation-platform-operator
+aap_operator_operator_channel: "stable-2.5"
+aap_operator_operator_csv_nameprefix: aap-operator
+aap_operator_operator_catalog: redhat-operators
+aap_operator_starting_csv: ""
+# aap_operator_starting_csv: aap-operator.v2.5.0-0.1729741547
+aap_operator_automatic_install_plan_approval: true
+aap_operator_use_catalog_snapshot: true
+aap_operator_catalogsource_name: "olm-snapshot-redhat-catalog"
+aap_operator_catalog_snapshot_image: "quay.io/gpte-devops-automation/olm_snapshot_redhat_catalog"
+aap_operator_catalog_snapshot_image_tag: "v4.19_2025_07_21"
+
+# ---------------------------------------------------------------
+# For Ansible Automation Platform 2.5
+# ---------------------------------------------------------------
+aap_operator_admin_password: >-
+  {{ common_password | default(aap_controller_admin_password) }}
+aap_operator_disable_controller: false
+aap_operator_disable_eda: false
+aap_operator_disable_hub: true
+aap_operator_extra_wait_minutes: 10
+
+# ---------------------------------------------------------------
+# Lightspeed
+# ---------------------------------------------------------------
+aap_operator_disable_lightspeed: true
+aap_operator_disable_lightspeed_chatbot_config_secret_name: chatbot-configuration-secret
+aap_operator_chatbot_llm_provider_type: openai
+aap_operator_chatbot_model: gpt-4o-mini
+aap_operator_chatbot_token: REPLACEME
+aap_operator_chatbot_url: https://api.openai.com/v1/
+
+
+# ---------------------------------------------------------------
+# OCP bearer token lifecycle
+# ---------------------------------------------------------------
+# The default lifecycle for an OpenShift Container Platform (OCP) bearer token,
+# when used as a credential in Ansible Automation Platform (AAP), is set to 2 weeks.
+aap_operator_ocp_token_lifecycle: 1209600
+
+# ---------------------------------------------------------------
+# Inject Ansible Automation Platform 2.5 Manifest
+# ---------------------------------------------------------------
+aap_operator_inject_manifest: false
+aap_operator_manifest:
+  url: https://example.com/manifest
+  username: jonsnow
+  password: got2023
+
+# ---------------------------------------------------------------
+# EDA Cluster-admin rolebinding
+# ---------------------------------------------------------------
+aap_operator_create_eda_rolebinding: false
+aap_operator_eda_rolebinding_name: eda_default
+aap_operator_service_account: default
+aap_operator_ocp_cluster_role: cluster-admin
+
+# ---------------------------------------------------------------
+# Private Automation Hub settings
+# ---------------------------------------------------------------
+# This settings only works when following variable is set false
+# aap_operator_disable_hub: false (default is true)
+aap_operator_hub_content_workers: 1
+aap_operator_hub_api_workers: 1
+aap_operator_hub_file_storage_access_mode: ReadWriteOnce
+aap_operator_hub_file_storage_size: 100Gi
