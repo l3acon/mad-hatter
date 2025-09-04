@@ -44,7 +44,7 @@
       when: aap_operator_disable_lightspeed is not true
       ansible.builtin.assert:
         that:
-          -  aap_operator_chatbot_token|length > 0
+          - aap_operator_chatbot_token|length > 0
 
     - name: Get OC login status
       ansible.builtin.command: "oc whoami --show-server=true" # noqa: no-changed-when
