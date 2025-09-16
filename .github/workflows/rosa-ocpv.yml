@@ -5,7 +5,7 @@ on:
       olm_tag:
         description: 'OLM snapshot to use, e.g. from https://quay.io/repository/gpte-devops-automation/olm_snapshot_redhat_catalog?tab=tags&tag=latest'
         required: true
-        default: 'v4.19_2025_08_28'
+        default: 'v4.19_2025_09_01'
         type: string
 jobs:
   rosa-ocpv:
