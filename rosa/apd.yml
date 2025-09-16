@@ -6,7 +6,7 @@
       ansible.builtin.include_role:
         name: rosa_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}" # noqa: var-naming[no-role-prefix]
+        rosa_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -114,7 +114,7 @@
         name: 'aap_operator'
         tasks_from: workload
       vars:
-        aap_controller_admin_password: "{{ aap_admin_password }}" # noqa: var-naming[no-role-prefix]
+        aap_operator_controller_admin_password: "{{ aap_admin_password }}"
         aap_operator_inject_manifest: true
         aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
         aap_operator_catalog_snapshot_image_tag: "v4.19_2025_09_15"

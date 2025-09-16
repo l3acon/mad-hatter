@@ -1,7 +1,7 @@
 ---
 - name: Slurp the entire contents of creds file
   ansible.builtin.slurp:
-    src: "{{ creds_file_path | default('../aro.creds') }}"
+    src: "{{ aro_creds_file_path | default('../aro.creds') }}"
   register: slurp_result
 
 - name: Decode the file content and set as a fact

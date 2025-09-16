@@ -141,10 +141,10 @@
         name: 'aap_operator'
         tasks_from: workload
       vars:
-        aap_controller_admin_password: "{{ aap_admin_password }}" # noqa: var-naming[no-role-prefix]
-        aap_operator_inject_manifest: true # noqa: var-naming[no-role-prefix]
-        aap_operator_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
-        aap_operator_catalog_snapshot_image_tag: "{{ olm_tag | default('v4.19_2025_08_25') }}" # noqa: var-naming[no-role-prefix]
+        aap_operator_controller_admin_password: "{{ aap_admin_password }}"
+        aap_operator_inject_manifest: true
+        aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
+        aap_operator_catalog_snapshot_image_tag: "{{ olm_tag | default('v4.19_2025_08_25') }}"
 
     - name: Ansible Product-Demos Bootstrap
       ansible.builtin.include_role:

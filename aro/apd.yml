@@ -6,7 +6,7 @@
       ansible.builtin.include_role:
         name: aro_creds
       vars:
-        creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}" # noqa: var-naming[no-role-prefix]
+        aro_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -56,10 +56,10 @@
         name: 'aap_operator'
         tasks_from: workload
       vars:
-        aap_controller_admin_password: "{{ aap_admin_password }}" # noqa: var-naming[no-role-prefix]
-        aap_operator_inject_manifest: true # noqa: var-naming[no-role-prefix]
-        aap_operator_inject_manifest_path: "{{ aap_manifest_path }}" # noqa: var-naming[no-role-prefix]
-        aap_operator_catalog_snapshot_image_tag: "v4.19_2025_07_21" # noqa: var-naming[no-role-prefix]
+        aap_operator_controller_admin_password: "{{ aap_admin_password }}"
+        aap_operator_inject_manifest: true
+        aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
+        aap_operator_catalog_snapshot_image_tag: "v4.19_2025_07_21"
 
 
     - name: Ansible Product-Demos Bootstrap
@@ -120,7 +120,7 @@
     - name: (Re-)Display Access info
       ansible.builtin.debug:
         msg:
-          - "Automation Controller Admin Password: {{ aap_controller_admin_password }}"
+          - "Automation Controller Admin Password: {{ aap_operator_controller_admin_password }}"
       when:
         - hide_passwords is not defined
 

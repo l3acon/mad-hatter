@@ -24,7 +24,7 @@ aap_operator_catalog_snapshot_image_tag: "v4.19_2025_07_21"
 # For Ansible Automation Platform 2.5
 # ---------------------------------------------------------------
 aap_operator_admin_password: >-
-  {{ common_password | default(aap_controller_admin_password) }}
+  {{ common_password | default(aap_operator_controller_admin_password) }}
 aap_operator_disable_controller: false
 aap_operator_disable_eda: false
 aap_operator_disable_hub: true

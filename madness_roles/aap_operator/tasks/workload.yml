@@ -138,7 +138,7 @@
   ansible.builtin.set_fact:
     aap_controller_web_url: "https://{{ automation_controller_hostname }}"
     aap_controller_admin_user: "{{ aap_operator_admin_username | default('admin') }}"
-    aap_controller_admin_password: "{{ aap_operator_admin_password }}"
+    aap_operator_controller_admin_password: "{{ aap_operator_admin_password }}"
 
 - name: Set facts for CasC
   ansible.builtin.set_fact:
@@ -155,7 +155,7 @@
 - name: Print Access information
   ansible.builtin.debug:
     msg:
-      - aap_controller_admin_password: "{{ aap_operator_admin_password }}"
+      - aap_operator_controller_admin_password: "{{ aap_operator_admin_password }}"
   when:
     - hide_passwords is not defined
 
