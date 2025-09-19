@@ -1,12 +1,13 @@
 ---
 - name: Configure 'Azure with ARO Open Environment (Subscription Based)' with Ansible Product-Demos
   hosts: localhost
+  vars:
+    aap_operator_disable_lightspeed: false
+    aro_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
   tasks:
     - name: Slurp credentials
       ansible.builtin.include_role:
         name: aro_creds
-      vars:
-        aro_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -36,6 +37,12 @@
               (aap_machine_cred_password | regex_search('[0-9]') | ternary(1, 0)) +
               (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
             ) >= 3
+
+    - name: Assertion for required variables
+      when: aap_operator_disable_lightspeed is not true
+      ansible.builtin.assert:
+        that:
+          - aap_operator_chatbot_token|length > 0
 
     - name: Get OC login status
       ansible.builtin.command: "oc whoami --show-server=true" # noqa: no-changed-when

@@ -3,12 +3,11 @@
   hosts: localhost
   vars:
     aap_operator_disable_lightspeed: false
+    aro_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
   tasks:
     - name: Slurp credentials
       ansible.builtin.include_role:
         name: aro_creds
-      vars:
-        aro_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
