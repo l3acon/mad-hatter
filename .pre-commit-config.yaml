@@ -3,7 +3,7 @@ repos:
   - repo: local
     hooks:
       - id: ansible-lint
-        name: ansible-navigator lint --eei quay.io/matferna/madhatter:latest -v --force-color --mode stdout
+        name: ansible-navigator lint --eei quay.io/matferna/madhatter:latest
         language: python
         entry: bash -c "ansible-navigator lint --eei quay.io/matferna/madhatter:latest -v --force-color --mode stdout"
 
@@ -17,7 +17,7 @@ repos:
       - id: detect-private-key
         exclude: >
           (?x)^(
-            rosa/README.md|
+            aws/README.md|
             aro/README.md
           )$
       - id: end-of-file-fixer

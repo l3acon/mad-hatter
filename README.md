@@ -6,7 +6,7 @@ This is a work in progress.
 
 ### Down the Rabbit Hole
 This project builds off the following projects:
-1. [ROSA](./rosa/README.md)
+1. [ROSA](./aws/README.md)
 1. [ARO](./aro/README.md)
 
 ## We're all mad here
@@ -15,7 +15,7 @@ This project aims to optimize for user experience. Both execution should trouble
 Relevant metrics:
 ```
 # vanilla deployment
-time ansible-playbook rosa/apd.yml
+time ansible-playbook aws/apd.yml
 ...<play output>
 13:16.97 total
 
@@ -23,7 +23,7 @@ time ansible-playbook rosa/apd.yml
 
 ```
 # post-deploment, ideally ansible is doing nothing
-time ansible-playbook rosa/apd.yml
+time ansible-playbook awsosa/apd.yml
 ...<play output>
 42.597 total
 

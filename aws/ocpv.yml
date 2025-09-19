@@ -1,12 +1,19 @@
 ---
-- name: Configure 'AWS with ROSA Open Environment' for Ansible Product-Demos
+- name: Configure 'AWS with ROSA Open Environment' for Ansible Product-Demos with OCP-V
   hosts: localhost
   tasks:
-    - name: Slurp credentials
+    - name: Warning this may incur high costs
+      ansible.builtin.pause:
+        prompt: "This may incur high costs, please acknowledge responsibility"
+      when:
+        - ignore_prompt is not defined
+
+    - name: Parse credentials
       ansible.builtin.include_role:
         name: rosa_creds
       vars:
-        rosa_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../rosa.creds') }}"
+        rosa_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aws.creds') }}"
+        rosa_creds_user_file_path: "{{ playbook_dir }}/{{ user_creds_file | default('../user.creds') }}"
 
     - name: Check that manifest exists
       ansible.builtin.stat:
@@ -49,17 +56,12 @@
       register: oc_whoami
       ignore_errors: true
 
-    - name: Set OCP bearer token
-      when: oc_whoami is success
-      ansible.builtin.set_fact:
-        openshift_bearer_token: "{{ oc_whoami.stdout }}"
-
     - name: Reset ROSA cluster-admin
       when: oc_whoami is failed
       delegate_to: "{{ groups['rosa'] | first }}"
       block:
         - name: Get the list of ROSA clusters
-          ansible.builtin.command: "rosa list cluster"
+          ansible.builtin.command: "rosa list cluster -o json"
           register: rosa_cluster_list
           changed_when: false
           failed_when: rosa_cluster_list.rc != 0
@@ -67,7 +69,8 @@
 
         - name: Set cluster_name fact from the output
           ansible.builtin.set_fact:
-            cluster_name: "{{ rosa_cluster_list.stdout_lines[1].split()[1] }}"
+            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name'] }}"
+            rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
 
         - name: Display the extracted cluster name (for debugging)
           ansible.builtin.debug:
@@ -109,6 +112,30 @@
           retries: 30
           delay: 5
 
+    - name: Determine metal node availability
+      delegate_to: "{{ groups['rosa'] | first }}"
+      block:
+        - name: Get the list of ROSA clusters
+          ansible.builtin.command: "rosa list cluster -o json"
+          register: rosa_cluster_list
+          changed_when: false
+          failed_when: rosa_cluster_list.rc != 0
+          check_mode: false
+
+        - name: Set cluster_name fact from the output
+          ansible.builtin.set_fact:
+            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name'] }}"
+            rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
+
+        - name: Get machinepools
+          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json" # noqa: no-changed-when
+          register: machinepools
+
+        - name: Add virt machinepool
+          ansible.builtin.command: "rosa create machinepool --cluster={{ cluster_name }} --replicas 1 --availability-zone={{ rosa_availability_zone }}
+          --instance-type m5zn.metal  --name rosa-virt" # noqa: no-changed-when
+          when: machinepools.stdout | from_json | length < 2
+
     - name: Deploy AAP 2.5+ Operator
       ansible.builtin.include_role:
         name: 'aap_operator'
@@ -117,7 +144,7 @@
         aap_operator_controller_admin_password: "{{ aap_admin_password }}"
         aap_operator_inject_manifest: true
         aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
-        aap_operator_catalog_snapshot_image_tag: "v4.19_2025_09_15"
+        aap_operator_catalog_snapshot_image_tag: "{{ olm_tag | default('v4.19_2025_08_25') }}"
 
     - name: Ansible Product-Demos Bootstrap
       ansible.builtin.include_role:
@@ -132,6 +159,15 @@
       ansible.builtin.set_fact:
         openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
+#    - name: Delete
+#      ansible.builtin.include_role:
+#        name: infra.aap_configuration.dispatch
+#      vars:
+#        controller_credentials:
+#          - name: Demo Credential
+#            state: absent
+#            credential_type: Machine
+
     - name: Configure credentials we are aware of
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
@@ -140,7 +176,6 @@
           - name: Demo Credential
             credential_type: Machine
             update_secrets: true
-            organization: Default
             inputs:
               username: "admin"
               password: "{{ aap_machine_cred_password }}"
@@ -160,8 +195,45 @@
               host: "{{ openshift_api_url }}"
               bearer_token: "{{ openshift_bearer_token }}"
 
-#    - name: Launch Multi-setup
-#      ansible.controller.include_role:
-#        name: infra.aap_configuration.job_launch
-#      vars:
+        controller_launch_jobs:
+          - name: "Product Demos | Single demo setup"
+            wait: true
+            extra_vars:
+              demo: "openshift"
+
+          - name: "OpenShift / CNV / Install Operator"
+            wait: true
+
+    - name: Build CNV storage class
+      kubernetes.core.k8s:
+        wait: true
+        state: "present"
+        definition:
+          kind: StorageClass
+          apiVersion: storage.k8s.io/v1
+          metadata:
+            name: virt-gp3-csi
+            annotations:
+              storageclass.kubevirt.io/is-default-virt-class: 'true'
+          provisioner: ebs.csi.aws.com
+          parameters:
+            encrypted: 'true'
+            type: gp3
+          reclaimPolicy: Delete
+          allowVolumeExpansion: true
+          volumeBindingMode: Immediate
+
+    - name: Wait if metal node is still coming up
+      delegate_to: "{{ groups['rosa'] | first }}"
+      block:
+        - name: Wait until virt hosts comes up
+          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json"
+          register: machinepools
+          changed_when: false
+          until: >
+            (machinepools.stdout | from_json
+            | selectattr('id', 'equalto', 'rosa-virt')
+            | list)[0].status.current_replicas == 1
+          retries: 75
+          delay: 20
 ...

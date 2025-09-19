@@ -35,7 +35,7 @@
 
     - name: Ansible Product-Demos Bootstrap
       ansible.builtin.include_role:
-        name: 'apd'
+        name: 'apd_azure'
 
     - name: Show bearer token
       ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when

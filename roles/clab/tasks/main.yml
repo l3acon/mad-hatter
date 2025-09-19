@@ -1,47 +1,47 @@
 ---
 - name: Create resource group
   azure.azcollection.azure_rm_resourcegroup:
-    name: "{{ resource_group_name }}"
-    location: "{{ region }}"
+    name: "{{ clab_resource_group_name }}"
+    location: "{{ clab_region }}"
 
 - name: Create virtual network
   azure.azcollection.azure_rm_virtualnetwork:
-    resource_group: "{{ resource_group_name }}"
-    name: "{{ vnet_name }}"
-    location: "{{ region }}"
-    address_prefixes: "{{ subnet_cidr }}"
+    resource_group: "{{ clab_resource_group_name }}"
+    name: "{{ clab_vnet_name }}"
+    location: "{{ clab_region }}"
+    address_prefixes: "{{ clab_subnet_cidr }}"
 
 - name: Add subnet
   azure.azcollection.azure_rm_subnet:
-    resource_group: "{{ resource_group_name }}"
-    name: "{{ subnet_name }}"
-    address_prefix: "{{ subnet_cidr }}"
-    virtual_network: "{{ vnet_name }}"
+    resource_group: "{{ clab_resource_group_name }}"
+    name: "{{ clab_subnet_name }}"
+    address_prefix: "{{ clab_subnet_cidr }}"
+    virtual_network: "{{ clab_vnet_name }}"
 
 - name: Create public IP address
   azure.azcollection.azure_rm_publicipaddress:
-    resource_group: "{{ resource_group_name }}"
+    resource_group: "{{ clab_resource_group_name }}"
     allocation_method: Static
-    name: "{{ rhel_public_ip_name }}"
+    name: "{{ clab_rhel_public_ip_name }}"
   register: output_ip_address
-  when: use_public_ip
+  when: clab_use_public_ip
 
 - name: Dump public IP for VM which will be created
   ansible.builtin.debug:
     msg: "The public IP is {{ output_ip_address.state.ip_address }}"
-  when: use_public_ip
+  when: clab_use_public_ip
 
 - name: Set Stat for Ansible Controller
   ansible.builtin.set_stats:
     data:
       azure_vm_public_ip: "{{ output_ip_address.state.ip_address }}"
     per_host: false
-  when: use_public_ip
+  when: clab_use_public_ip
 
 - name: Create Network Security Group
   azure.azcollection.azure_rm_securitygroup:
-    resource_group: "{{ resource_group_name }}"
-    name: "{{ network_sec_group_name }}"
+    resource_group: "{{ clab_resource_group_name }}"
+    name: "{{ clab_network_sec_group_name }}"
     rules:
       - name: SSH
         protocol: Tcp
@@ -70,37 +70,37 @@
 
 - name: Create virtual network interface card with external ip
   azure.azcollection.azure_rm_networkinterface:
-    resource_group: "{{ resource_group_name }}"
-    name: "{{ rhel_nic_name }}"
-    virtual_network: "{{ vnet_name }}"
-    subnet_name: "{{ subnet_name }}"
+    resource_group: "{{ clab_resource_group_name }}"
+    name: "{{ clab_rhel_nic_name }}"
+    virtual_network: "{{ clab_vnet_name }}"
+    subnet_name: "{{ clab_subnet_name }}"
     ip_configurations:
-      - name: "{{ ip_config_name }}"
-        public_ip_address_name: "{{ rhel_public_ip_name }}"
+      - name: "{{ clab_ip_config_name }}"
+        public_ip_address_name: "{{ clab_rhel_public_ip_name }}"
         primary: true
-    security_group: "{{ network_sec_group_name }}"
-  when: use_public_ip
+    security_group: "{{ clab_network_sec_group_name }}"
+  when: clab_use_public_ip
 
 - name: Create VM
   azure.azcollection.azure_rm_virtualmachine:
-    resource_group: "{{ resource_group_name }}"
-    name: "{{ rhel_vm_name | default('demo_rhel_vm') }}"
-    vm_size: "{{ rhel_vm_size }}"
-    managed_disk_type: "{{ rhel_disk_type }}"
-    os_disk_size_gb: "{{ rhel_disk_size_gb }}"
-    admin_username: "{{ rhel_admin_user }}"
+    resource_group: "{{ clab_resource_group_name }}"
+    name: "{{ clab_rhel_vm_name | default('demo_rhel_vm') }}"
+    vm_size: "{{ clab_rhel_vm_size }}"
+    managed_disk_type: "{{ clab_rhel_disk_type }}"
+    os_disk_size_gb: "{{ clab_rhel_disk_size_gb }}"
+    admin_username: "{{ clab_rhel_admin_user }}"
     ssh_password_enabled: false
     ssh_public_keys:
-      - path: "/home/{{ rhel_admin_user }}/.ssh/authorized_keys"
-        key_data: "{{ rhel_public_key }}"
-    network_interfaces: "{{ rhel_nic_name }}"
+      - path: "/home/{{ clab_rhel_admin_user }}/.ssh/authorized_keys"
+        key_data: "{{ clab_rhel_public_key }}"
+    network_interfaces: "{{ clab_rhel_nic_name }}"
     image:
       offer: RHEL
       publisher: RedHat
-      sku: "{{ rhel_vm_sku | default('9_4') }}"
+      sku: "{{ clab_rhel_vm_sku | default('9_4') }}"
       version: latest
-    max_price: "{{ rhel_max_price | default(omit) }}"
-    priority: "{{ rhel_priority | default(omit) }}"
+    max_price: "{{ clab_rhel_max_price | default(omit) }}"
+    priority: "{{ clab_rhel_priority | default(omit) }}"
     tags:
       deployment: ansible
       purpose: demo
