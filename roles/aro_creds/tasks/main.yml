@@ -1,12 +1,19 @@
 ---
 - name: Slurp the entire contents of creds file
   ansible.builtin.slurp:
-    src: "{{ aro_creds_file_path | default('../aro.creds') }}"
+    src: "{{ aro_creds_file_path }}"
   register: slurp_result
+
+- name: Slurp the entire contents of user creds file
+  ansible.builtin.slurp:
+    src: "{{ aro_creds_user_file_path }}"
+  register: user_slurp
 
 - name: Decode the file content and set as a fact
   ansible.builtin.set_fact:
-    file_content: "{{ slurp_result.content | b64decode }}"
+    file_content: |
+      {{ slurp_result.content | b64decode }}
+      {{ user_slurp.content | b64decode }}
 
 - name: Decode the file content and set as a fact
   ansible.builtin.debug:
@@ -36,12 +43,10 @@
     # Other optional things
     # apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
     # apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"
-  when: file_content is defined
 
 - name: Derive OpenShift API URL from Console URL
   ansible.builtin.set_fact:
     openshift_api_url: "{{ openshift_console_url | regex_replace('^https://console-openshift-console.apps', 'https://api') }}:6443"
-  when: file_content is defined
 
 - name: Build azure profile data structure
   ansible.builtin.set_fact:

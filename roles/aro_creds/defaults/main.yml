@@ -1,0 +1,3 @@
+---
+aro_creds_file_path: "{{ playbook_dir }}/../aro.creds"
+aro_creds_user_file_path: "{{ playbook_dir }}/../user.creds"

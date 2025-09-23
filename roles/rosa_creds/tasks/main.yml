@@ -8,8 +8,6 @@
   ansible.builtin.slurp:
     src: "{{ rosa_creds_user_file_path }}"
   register: user_slurp
-  when:
-    - rosa_creds_user_file_path is defined
 
 - name: Decode the file content and set as a fact
   ansible.builtin.set_fact:
@@ -38,4 +36,3 @@
     # Other optional things
     # apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
     # apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"
-  when: file_content is defined
