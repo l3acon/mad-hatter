@@ -1,4 +1,5 @@
 ---
+# Azure configuration
 clab_use_public_ip: true
 clab_ip_config_name: "ipconfig1"
 clab_resource_group_name: "clab"
@@ -17,3 +18,15 @@ clab_rhel_vm_sku: "9_4"
 clab_rhel_public_key: "{{ aap_machine_cred_pub_key }}"
 clab_rhel_disk_type: "Standard_LRS" # Standard HDD
 clab_rhel_disk_size_gb: "128"
+
+# Podman configuration
+clab_podman_user_storage_content: |
+  [storage]
+  driver = "overlay"
+  graphroot = "/mnt/images/storage"
+clab_podman_image_path: "/mnt/images/"
+clab_images:
+  - "registry.gitlab.com/redhatautomation/veos-ee:4.32.0F"
+  - "registry.gitlab.com/redhatautomation/juniper-ee:23.2R2.21"
+  - "registry.gitlab.com/redhatautomation/cat8:17.13.01a"
+  - "registry.gitlab.com/redhatautomation/nexus10-ee:10.5.3.F"

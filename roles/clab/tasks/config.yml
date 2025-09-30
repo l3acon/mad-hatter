@@ -1,0 +1,22 @@
+---
+- name: Sync images
+  containers.podman.podman_image:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ clab_images }}"
+
+- name: Install ContainerLab
+  ansible.builtin.shell: bash -c "$(curl -sL https://get.containerlab.dev)"
+
+- name: Copy Clab Files
+  ansible.builtin.copy:
+    src: clab/
+    dest: ~/clab/
+
+- name: Start APD containers
+  ansible.builtin.shell:
+    cmd: containerlab deploy --reconfigure
+    chdir: "/home/{{ clab_rhel_admin_user }}/clab/product_demos/"
+  environment:
+    DOCKER_HOST: "unix:///run/user/1000/podman/podman.sock"
+  retries: 2

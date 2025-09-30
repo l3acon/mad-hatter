@@ -1,0 +1,35 @@
+name: rhdp_network
+topology:
+  kinds:
+    arista_veos:
+      image: registry.gitlab.com/redhatautomation/veos-ee:4.32.0F
+    cisco_c8000v:
+      image: registry.gitlab.com/redhatautomation/cat8:17.13.01a
+    juniper_vsrx:
+      image: registry.gitlab.com/redhatautomation/juniper-ee:23.2R2.21
+  nodes:
+    rtr1:
+      kind: cisco_c8000v
+      startup-config: configs/rtr1/startup-config.cfg
+      ports:
+      - "2322:22"
+    rtr2:
+      kind: arista_veos
+      startup-config: configs/rtr2/startup-config.cfg
+      ports:
+      - "2323:22"
+    rtr3:
+      kind: juniper_vsrx
+      startup-config: configs/rtr3/startup-config.cfg
+      ports:
+      - "2324:830"
+      - "2424:22"
+    rtr4:
+      kind: arista_veos
+      startup-config: configs/rtr4/startup-config.cfg
+      ports:
+      - "2325:22"
+  links:
+    - endpoints: ["rtr1:Gi2", "rtr2:eth1"]
+    - endpoints: ["rtr1:Gi3", "rtr3:ge-0/0/0"]
+    - endpoints: ["rtr4:eth1", "rtr2:eth2"]

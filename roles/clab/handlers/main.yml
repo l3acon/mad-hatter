@@ -1,0 +1,13 @@
+---
+- name: Restart podman service
+  ansible.builtin.systemd:
+    name: podman
+    state: restarted
+  become: true
+
+- name: Restart user podman service
+  ansible.builtin.systemd:
+    scope: user
+    name: podman
+    state: restarted
+  become: false

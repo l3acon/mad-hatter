@@ -1,0 +1,56 @@
+---
+- name: Install Podman package
+  ansible.builtin.package:
+    name: podman
+    state: present
+
+- name: Ensure the custom image storage directory exists
+  ansible.builtin.file:
+    path: "{{ clab_podman_image_path }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    state: directory
+    mode: '0777'
+
+- name: Configure Podman to use the new storage path
+  ansible.builtin.lineinfile:
+    path: /etc/containers/storage.conf
+    # This regex will match the graphroot line whether it is commented out or not
+    regexp: '^#?graphroot ?='
+    line: 'graphroot = "{{ clab_podman_image_path }}"'
+    owner: root
+    group: root
+    mode: '0644'
+    create: true # Create the file if it doesn't exist
+  notify:
+    - Restart podman service
+
+- name: Create .config/containers directory for non-root user
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.config/containers"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Configure Podman storage for non-root user
+  ansible.builtin.copy:
+    dest: "/home/{{ ansible_user }}/.config/containers/storage.conf"
+    content: "{{ clab_podman_user_storage_content }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  notify:
+    - Restart user podman service
+
+- name: Enable lingering for the user
+  ansible.builtin.command: "loginctl enable-linger {{ ansible_user }}"
+  changed_when: true # Assume change as loginctl doesn't always return a clear changed status
+
+- name: Enable podman.socket
+  ansible.builtin.systemd:
+    name: podman.socket
+    scope: user
+    enabled: true
+    state: started
+  become: false

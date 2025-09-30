@@ -1,106 +1,19 @@
 ---
-- name: Create resource group
-  azure.azcollection.azure_rm_resourcegroup:
-    name: "{{ clab_resource_group_name }}"
-    location: "{{ clab_region }}"
+- name: Build Azure resources
+  ansible.builtin.include_tasks: azure.yml
 
-- name: Create virtual network
-  azure.azcollection.azure_rm_virtualnetwork:
-    resource_group: "{{ clab_resource_group_name }}"
-    name: "{{ clab_vnet_name }}"
-    location: "{{ clab_region }}"
-    address_prefixes: "{{ clab_subnet_cidr }}"
+- name: Do rootful things (this is so ugly)
+  ansible.builtin.include_tasks: podman.yml
+  run_once: true
+  args:
+    apply:
+      become: true
+      delegate_to: clab
 
-- name: Add subnet
-  azure.azcollection.azure_rm_subnet:
-    resource_group: "{{ clab_resource_group_name }}"
-    name: "{{ clab_subnet_name }}"
-    address_prefix: "{{ clab_subnet_cidr }}"
-    virtual_network: "{{ clab_vnet_name }}"
-
-- name: Create public IP address
-  azure.azcollection.azure_rm_publicipaddress:
-    resource_group: "{{ clab_resource_group_name }}"
-    allocation_method: Static
-    name: "{{ clab_rhel_public_ip_name }}"
-  register: output_ip_address
-  when: clab_use_public_ip
-
-- name: Dump public IP for VM which will be created
-  ansible.builtin.debug:
-    msg: "The public IP is {{ output_ip_address.state.ip_address }}"
-  when: clab_use_public_ip
-
-- name: Set Stat for Ansible Controller
-  ansible.builtin.set_stats:
-    data:
-      azure_vm_public_ip: "{{ output_ip_address.state.ip_address }}"
-    per_host: false
-  when: clab_use_public_ip
-
-- name: Create Network Security Group
-  azure.azcollection.azure_rm_securitygroup:
-    resource_group: "{{ clab_resource_group_name }}"
-    name: "{{ clab_network_sec_group_name }}"
-    rules:
-      - name: SSH
-        protocol: Tcp
-        destination_port_range: 22
-        access: Allow
-        priority: 1001
-        direction: Inbound
-      - name: RDP
-        protocol: Tcp
-        destination_port_range: 3389
-        access: Allow
-        priority: 1002
-        direction: Inbound
-      - name: SSH_MAP
-        protocol: Tcp
-        destination_port_range: 2122-2123
-        access: Allow
-        priority: 1003
-        direction: Inbound
-      - name: SSH_MAP2
-        protocol: Tcp
-        destination_port_range: 2322-2325
-        access: Allow
-        priority: 1004
-        direction: Inbound
-
-- name: Create virtual network interface card with external ip
-  azure.azcollection.azure_rm_networkinterface:
-    resource_group: "{{ clab_resource_group_name }}"
-    name: "{{ clab_rhel_nic_name }}"
-    virtual_network: "{{ clab_vnet_name }}"
-    subnet_name: "{{ clab_subnet_name }}"
-    ip_configurations:
-      - name: "{{ clab_ip_config_name }}"
-        public_ip_address_name: "{{ clab_rhel_public_ip_name }}"
-        primary: true
-    security_group: "{{ clab_network_sec_group_name }}"
-  when: clab_use_public_ip
-
-- name: Create VM
-  azure.azcollection.azure_rm_virtualmachine:
-    resource_group: "{{ clab_resource_group_name }}"
-    name: "{{ clab_rhel_vm_name | default('demo_rhel_vm') }}"
-    vm_size: "{{ clab_rhel_vm_size }}"
-    managed_disk_type: "{{ clab_rhel_disk_type }}"
-    os_disk_size_gb: "{{ clab_rhel_disk_size_gb }}"
-    admin_username: "{{ clab_rhel_admin_user }}"
-    ssh_password_enabled: false
-    ssh_public_keys:
-      - path: "/home/{{ clab_rhel_admin_user }}/.ssh/authorized_keys"
-        key_data: "{{ clab_rhel_public_key }}"
-    network_interfaces: "{{ clab_rhel_nic_name }}"
-    image:
-      offer: RHEL
-      publisher: RedHat
-      sku: "{{ clab_rhel_vm_sku | default('9_4') }}"
-      version: latest
-    max_price: "{{ clab_rhel_max_price | default(omit) }}"
-    priority: "{{ clab_rhel_priority | default(omit) }}"
-    tags:
-      deployment: ansible
-      purpose: demo
+- name: Deploy containers (this is so ugly)
+  ansible.builtin.include_tasks: config.yml
+  run_once: true
+  args:
+    apply:
+      become: false
+      delegate_to: clab

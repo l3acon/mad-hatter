@@ -2,3 +2,4 @@
 exclude_paths:
   - roles/apd/defaults/main.yml
   - roles/apd/vars/main.yml
+  - roles/clab/tasks/main.yml
