@@ -22,8 +22,11 @@
     group: root
     mode: '0644'
     create: true # Create the file if it doesn't exist
-  notify:
-    - Restart podman service
+
+- name: Restart podman service
+  ansible.builtin.systemd:
+    name: podman
+    state: restarted
 
 - name: Create .config/containers directory for non-root user
   ansible.builtin.file:
@@ -40,8 +43,19 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0644'
-  notify:
-    - Restart user podman service
+
+- name: Restart user podman service (user)
+  ansible.builtin.systemd:
+    scope: user
+    name: podman
+    state: restarted
+  become: false
+
+- name: Restart user podman service (root)
+  ansible.builtin.systemd:
+    name: podman
+    state: restarted
+  become: true
 
 - name: Enable lingering for the user
   ansible.builtin.command: "loginctl enable-linger {{ ansible_user }}"
@@ -54,3 +68,6 @@
     enabled: true
     state: started
   become: false
+
+- name: Force handlers to run
+  ansible.builtin.meta: flush_handlers

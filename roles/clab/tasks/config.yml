@@ -15,8 +15,8 @@
 
 - name: Start APD containers
   ansible.builtin.shell:
-    cmd: containerlab deploy --reconfigure
-    chdir: "/home/{{ clab_rhel_admin_user }}/clab/product_demos/"
+    cmd: containerlab deploy --reconfigure --runtime podman
+    chdir: "/root/clab/product_demos/"
   environment:
     DOCKER_HOST: "unix:///run/user/1000/podman/podman.sock"
   retries: 2

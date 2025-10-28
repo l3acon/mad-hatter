@@ -15,5 +15,5 @@
   run_once: true
   args:
     apply:
-      become: false
+      become: true
       delegate_to: clab

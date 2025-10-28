@@ -5,6 +5,7 @@
     state: restarted
   become: true
 
+
 - name: Restart user podman service
   ansible.builtin.systemd:
     scope: user
