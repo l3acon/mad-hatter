@@ -43,20 +43,24 @@
       ansible.builtin.set_fact:
         openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
-    #- name: Deploy container lab
-    #  ansible.builtin.include_role:
-    #    name: "clab"
-    #  vars:
-    #    clab_topology_deployment: "rhdp"
-
-    - name: Run multi-vendor network workshop config as code
+    - name: Deploy container lab
       ansible.builtin.include_role:
-        name: "mvnw"
+        name: clab
+
+    - name: Ansible Product-Demos Bootstrap
+      ansible.builtin.include_role:
+        name: 'apd'
 
     - name: Configure credentials we are aware of
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
       vars:
+        controller_launch_jobs:
+          - name: "Product Demos | Single demo setup"
+            wait: true
+            extra_vars:
+              demo: "network"
+              
         controller_credentials:
           - name: Demo Credential
             credential_type: Machine

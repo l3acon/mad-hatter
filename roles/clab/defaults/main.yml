@@ -30,3 +30,6 @@ clab_images:
   - "registry.gitlab.com/redhatautomation/juniper-ee:23.2R2.21"
   - "registry.gitlab.com/redhatautomation/cat8:17.13.01a"
   - "registry.gitlab.com/redhatautomation/nexus10-ee:10.5.3.F"
+
+# Containerlab deployment
+clab_topology_deployment: product_demos

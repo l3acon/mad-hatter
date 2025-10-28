@@ -1,0 +1,518 @@
+aap_organizations:
+  - name: "Red Hat network organization"
+
+controller_inventories:
+  - name: "Workshop Inventory"
+    organization: "Red Hat network organization"
+
+controller_execution_environments:
+  - name: "Validated Network"
+    image: registry.gitlab.com/redhatautomation/validated-network-ee:latest
+    pull: missing
+
+  - name: "EE Validated 25"
+    image: registry.gitlab.com/redhatautomation/ee-validated-25:latest
+    pull: missing
+
+
+controller_projects:
+  - name: "Student Project"
+    organization: "Red Hat network organization"
+    scm_url: "https://gitlab.com/redhatautomation/multi-vendor-network-workshop.git"
+    scm_type: git
+    allow_override: true
+    scm_update_on_launch: no
+
+# Need to figure out how to add this
+# - name: Student Project
+#   organization: "Red Hat network organization"
+#   scm_url: "http://ansible-1:3000/gitea/network-demos-repo.git"
+#   scm_type: git
+#   allow_override: true
+#   scm_update_on_launch: yes
+
+controller_hosts:
+  - name: nxos
+    inventory: "Workshop Inventory"
+    enabled: true
+    variables:
+      ansible_user: admin
+      ansible_password: Admin_1234!
+      ansible_network_os: cisco.nxos.nxos
+      ansible_connection: ansible.netcommon.network_cli
+      ansible_host: sandbox-nxos-1.cisco.com
+
+controller_groups:
+  - name: switches
+    hosts:
+      - nxos
+    variables:
+      ansible_connection: network_cli
+      ansible_network_os: cisco.ios.ios
+    inventory: "Workshop Inventory"
+
+  - name: cisco
+    variables:
+      ansible_connection: network_cli
+      ansible_network_os: cisco.ios.ios
+    inventory: "Workshop Inventory"
+
+  - name: arista
+    variables:
+      ansible_connection: network_cli
+      ansible_network_os: arista.eos.eos
+      ansible_become: "true"
+      ansible_become_method: enable
+    inventory: "Workshop Inventory"
+
+  - name: juniper
+    variables:
+      ansible_connection: netconf
+      ansible_network_os: junipernetworks.junos.junos
+    inventory: "Workshop Inventory"
+
+# figure out how to add git tea
+#controller_credential_types:
+#  - name: Gitea Student
+#    kind: cloud
+#    injectors:
+#      extra_vars:
+#        email: "{{ email | default ('{{ email }}') }}"
+#        password: "{{ git_password | default ('{{ git_password }}') }}"
+#        username: "{{ username | default ('{{ username }}') }}"
+#        token: "{{ git_password | default ('{{ git_password }}') }}"
+#    inputs:
+#      fields:
+#         - id: username
+#           label: Username
+#           type: string
+#         - id: password
+#           label: Password
+#           secret: true
+#           type: string
+#         - id: email
+#           label: Email
+#           type: string
+#       required:
+#         - username
+#         - password
+#         - email
+#
+controller_credentials:
+  - name: "Workshop Credential"
+    organization: "Red Hat network organization"
+    credential_type: "Machine"
+    inputs:
+      username: "admin"
+      password: "ansible@123"
+
+#  - name: Gitea Credential
+#    organization: "Red Hat network organization"
+#    credential_type: Gitea Student
+#    description: ""
+#    inputs:
+#      username: "gitea"
+#      password: "gitea"
+#      email: admin@example.com
+
+controller_templates:
+  - name: "Network-Config"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "2-network_compliance_dashboard/config.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Compliance-Dashboard"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "2-network_compliance_dashboard/network_report.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Check-Compliance"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "3-network_compliance_checks_remediations/compliance.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+    job_type: check
+    diff_mode: true
+
+  - name: "Network-Run-Compliance"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "3-network_compliance_checks_remediations/compliance_run.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Troubleshooting"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "4-multi_vendor_validated_content_bgp/troubleshoot.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+#  - name: "Network-Backups-Git"
+#    organization: "Red Hat network organization"
+#    inventory: "Workshop Inventory"
+#    project: "Student Project"
+#    playbook: "1-backups_as_code/backups.yml"
+#    credentials:
+#      - "Workshop Credential"
+#      - "Gitea Credential"
+#      - "Controller Credential"
+#    execution_environment: "EE Validated 25"
+#    survey_enabled: true
+#    survey_spec:
+#      name: ""
+#      description: ""
+#      spec:
+#        - question_name: Enter your custom branch name
+#          type: text
+#          max: 1024
+#          min: 0
+#          variable: branch_name
+#          required: true
+#          default: ""
+#        - question_name: Which Group or Groups to Backup Configurations
+#          type: multiselect
+#          variable: _group
+#          required: true
+#          default: ""
+#          choices:
+#            - cisco
+#            - arista
+#            - juniper
+#
+#  - name: "Network-Validated-Persist"
+#    organization: "Red Hat network organization"
+#    inventory: "Workshop Inventory"
+#    project: "Student Project"
+#    playbook: "4-multi_vendor_validated_content_bgp/persist.yml"
+#    credentials:
+#      - "Workshop Credential"
+#      - "Gitea Credential"
+#    execution_environment: "Validated Network"
+
+  - name: "Network-Validated-List"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "4-multi_vendor_validated_content_bgp/list.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+#  - name: "Network-Validated-Deploy"
+#    organization: "Red Hat network organization"
+#    inventory: "Workshop Inventory"
+#    project: "Student Project"
+#    playbook: "4-multi_vendor_validated_content_bgp/deploy.yml"
+#    credentials:
+#      - "Workshop Credential"
+#      - "Gitea Credential"
+#    execution_environment: "Validated Network"
+
+#  - name: "Network-Validated-Detect"
+#    organization: "Red Hat network organization"
+#    inventory: "Workshop Inventory"
+#    project: "Student Project"
+#    playbook: "4-multi_vendor_validated_content_bgp/detect.yml"
+#    credentials:
+#      - "Workshop Credential"
+#      - "Gitea Credential"
+#    execution_environment: "Validated Network"
+
+#  - name: "Network-Validated-Remediate"
+#    organization: "Red Hat network organization"
+#    inventory: "Workshop Inventory"
+#    project: "Student Project"
+#    playbook: "4-multi_vendor_validated_content_bgp/remediate.yml"
+#    credentials:
+#      - "Workshop Credential"
+#      - "Gitea Credential"
+#    execution_environment: "Validated Network"
+
+#  - name: "Network-Brownfield-Resource-Modules"
+#    organization: "Red Hat network organization"
+#    inventory: "Workshop Inventory"
+#    project: "Student Project"
+#    playbook: "5-brownfield_switches_resource_modules/brownfield.yml"
+#    credentials:
+#      - "Workshop Credential"
+#      - "Gitea Credential"
+#    execution_environment: "Validated Network"
+
+  - name: "Network-Brownfield-Resource-Deploy"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "5-brownfield_switches_resource_modules/deploy.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Brownfield-Resource-Diff"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "5-brownfield_switches_resource_modules/diff.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+    job_type: check
+    diff_mode: true
+
+  - name: "Network-Brownfield-Check-Ports"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "5-brownfield_switches_resource_modules/checkports.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Upgrade-Staging"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "6-network_upgrade_as_code/staging.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Upgrade-Upgrade"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "6-network_upgrade_as_code/upgrade.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Upgrade-Validation"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "6-network_upgrade_as_code/validate_network.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+
+  - name: "Network-Config-Push"
+    organization: "Red Hat network organization"
+    inventory: "Workshop Inventory"
+    project: "Student Project"
+    playbook: "7-tuning_for_scale/onboard_network.yml"
+    credentials:
+      - "Workshop Credential"
+    execution_environment: "Validated Network"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: ""
+      spec:
+        - question_name: Do you want to send an error
+          type: multiplechoice
+          variable: error
+          required: true
+          default: "no"
+          choices:
+            - "yes"
+            - "no"
+        - question_name: Please select the Serial Batch Percentages
+          type: multiselect
+          variable: serials
+          required: true
+          default: ""
+          choices:
+            - "1"
+            - "10%"
+            - "25%"
+            - "50%"
+            - "100%"
+        - question_name: Please select the Max_Fail_Percentage
+          type: multiplechoice
+          variable: max_fail
+          required: true
+          default: ""
+          choices:
+            - "0"
+            - "5"
+            - "10"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+        - question_name: Please select the IP Address for rtr1 tu0
+          type: multiplechoice
+          variable: rtr1_tu0
+          required: true
+          default: "10.100.100.1"
+          choices:
+            - "10.100.100.1"
+        - question_name: Please provide description for rtr1 tu0
+          type: text
+          variable: rtr1_tu0_desc
+          required: true
+          default: ""
+          choices: ''
+          max: 1024
+          min: 0
+        - question_name: Please select the IP Address for rtr1 tu1
+          type: multiplechoice
+          variable: rtr1_tu1
+          required: true
+          default: "10.200.200.1"
+          choices:
+            - "10.200.200.1"
+        - question_name: Please provide description for rtr1 tu1
+          type: text
+          variable: rtr1_tu1_desc
+          required: true
+          default: "rtr1 tu1"
+          choices: ''
+          max: 1024
+          min: 0
+        - question_name: Please select the IP Address for rtr2 tu0
+          type: multiplechoice
+          variable: rtr2_tu0
+          required: true
+          default: "10.102.102.2"
+          choices:
+            - "10.102.102.2"
+        - question_name: Please provide description for rtr2 tu0
+          type: text
+          variable: rtr2_tu0_desc
+          required: true
+          default: ""
+          choices: ''
+          max: 1024
+          min: 0
+        - question_name: Please select the IP Address for rtr2 tu1
+          type: multiplechoice
+          variable: rtr2_tu1
+          required: true
+          default: "10.200.200.2"
+          choices:
+            - "10.200.200.2"
+        - question_name: Please provide description for rtr2 tu1
+          type: text
+          variable: rtr2_tu1_desc
+          required: true
+          default: "rtr2 tu1"
+          choices: ''
+          max: 1024
+          min: 0
+
+controller_workflows:
+  - name: Network-Compliance-Workflow
+    inventory: "Workshop Inventory"
+    organization: "Red Hat network organization"
+    survey_enabled: true
+    survey:
+      name: ""
+      description: ""
+      spec:
+        - question_name: Which groups/devices to run checks against?
+          type: multiselect
+          variable: _group
+          required: true
+          default: ""
+          choices:
+            - cisco
+            - arista
+            - juniper
+        - question_name: Please select the desired compliance roles?
+          type: multiselect
+          variable: tag
+          required: true
+          default: ""
+          choices:
+            - logging
+            - snmp
+            - ntp
+            - stig-ios
+            - stig-junos
+        - question_name: Do you want to save to Startup-config?
+          type: multiplechoice
+          variable: save
+          required: true
+          default: 'no'
+          choices:
+            - 'yes'
+            - 'no'
+    simplified_workflow_nodes:
+      - identifier: Network-Run-Compliance
+        unified_job_template: Network-Run-Compliance
+
+      - identifier: "Change Approval"
+        approval_node:
+          name: "Change Approval"
+          timeout: 0
+        success_nodes:
+          - Network-Run-Compliance
+
+      - identifier: Network-Check-Compliance
+        unified_job_template: Network-Check-Compliance
+        success_nodes: 
+          - "Change Approval"
+
+  - name: Network-Upgrade-Workflow
+    inventory: "Workshop Inventory"
+    organization: "Red Hat network organization"
+    survey_enabled: true
+    survey:
+      name: ""
+      description: ""
+      spec:
+        - question_name: Which Cisco IOS version to Stage
+          type: multiplechoice
+          variable: image_staging
+          required: true
+          default: ""
+          choices:
+            - 17.15.01a
+        - question_name: Which Cisco IOS version to Upgrade
+          type: multiplechoice
+          variable: image_upgrade
+          required: true
+          default: ""
+          choices:
+            - 17.15.01a
+    simplified_workflow_nodes:
+      - identifier: Network-Upgrade-Post_validation
+        unified_job_template: Network-Upgrade-Validation
+
+      - identifier: Network-Upgrade-Upgrade
+        unified_job_template: Network-Upgrade-Upgrade
+        success_nodes:
+          - Network-Upgrade-Post_validation
+
+      - identifier: Network-Upgrade-Pre_validation
+        unified_job_template: Network-Upgrade-Validation
+        success_nodes:
+          - Network-Upgrade-Upgrade
+
+      - identifier: "Upgrade Approval"
+        approval_node:
+          name: "Upgrade Approval"
+          timeout: 0
+        success_nodes:
+          - Network-Upgrade-Pre_validation
+
+      - identifier: Network-Upgrade-Staging
+        unified_job_template: Network-Upgrade-Staging
+        success_nodes: 
+          - "Upgrade Approval"

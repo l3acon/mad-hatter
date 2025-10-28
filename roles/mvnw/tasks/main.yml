@@ -1,0 +1,17 @@
+---
+- name: Assert required variables & credentials
+  ansible.builtin.assert:
+    that:
+      - "aap_hostname is defined"
+      - "aap_username is defined"
+      - "aap_password is defined"
+
+- name: Execute automation controller resource configuration
+  ansible.builtin.include_role:
+    name: infra.aap_configuration.dispatch
+
+- name: Print user message
+  ansible.builtin.debug:
+    msg: "{{ user_message }}"
+  when: user_message is defined
+...
