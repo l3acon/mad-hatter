@@ -106,17 +106,21 @@
       purpose: demo
   register: create_vm
 
+- name: Set fact
+  ansible.builtin.set_fact:
+    azure_host_ip: "{{ output_ip_address.state.ip_address }}"
+
 # Do as I say not as I do
 - name: Build host info
   ansible.builtin.add_host:
     name: "{{ clab_rhel_vm_name }}"
     ansible_user: "{{ clab_rhel_admin_user }}"
-    ansible_host: "{{ output_ip_address.state.ip_address }}"
+    ansible_host: "{{ azure_host_ip }}"
 
 - name: Wait for host to become ready
   ansible.builtin.wait_for:
     port: 22
-    host: "{{ output_ip_address.state.ip_address }}"
+    host: "{{ azure_host_ip }}"
     search_regex: "OpenSSH"
     delay: 10
     timeout: 300

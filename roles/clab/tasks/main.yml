@@ -17,3 +17,12 @@
     apply:
       become: true
       delegate_to: clab
+
+- name: Capture CasC vars for out deployment method
+  ansible.builtin.include_vars:
+    file: "{{ clab_topology_deployment }}.yml"
+
+- name: Build config as code for AAP
+  ansible.builtin.include_role:
+    name: infra.aap_configuration.dispatch
+

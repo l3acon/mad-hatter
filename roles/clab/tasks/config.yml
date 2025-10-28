@@ -13,7 +13,7 @@
     src: clab/
     dest: ~/clab/
 
-- name: Start APD containers
+- name: "Start containers for {{ clab_topology_deployment }} deployment"
   ansible.builtin.shell:
     cmd: containerlab deploy --reconfigure --runtime podman
     chdir: "/root/clab/{{ clab_topology_deployment }}/"

@@ -43,11 +43,11 @@
       ansible.builtin.set_fact:
         openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
-    #- name: Deploy container lab
-    #  ansible.builtin.include_role:
-    #    name: "clab"
-    #  vars:
-    #    clab_topology_deployment: "rhdp"
+    - name: Deploy container lab
+      ansible.builtin.include_role:
+        name: "clab"
+      vars:
+        clab_topology_deployment: "rhdp"
 
     - name: Run multi-vendor network workshop config as code
       ansible.builtin.include_role:

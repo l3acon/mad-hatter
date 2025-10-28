@@ -1,0 +1,66 @@
+controller_hosts:
+  - name: rtr1
+    inventory: "Workshop Inventory"
+    enabled: true
+    variables:
+      ansible_user: admin
+      ansible_password: admin@123
+      ansible_host: "{{ azure_host_ip }}"
+      ansible_port: 2322
+
+  - name: rtr2
+    inventory: "Workshop Inventory"
+    enabled: true
+    variables:
+      ansible_user: admin
+      ansible_password: admin@123
+      ansible_host: "{{ azure_host_ip }}"
+      ansible_port: 2323
+
+  - name: rtr3
+    inventory: "Workshop Inventory"
+    enabled: true
+    variables:
+      ansible_user: admin
+      ansible_password: admin@123
+      ansible_host: "{{ azure_host_ip }}"
+      ansible_port: 2324
+
+  - name: rtr4
+    inventory: "Workshop Inventory"
+    enabled: true
+    variables:
+      ansible_user: admin
+      ansible_password: admin@123
+      ansible_host: "{{ azure_host_ip }}"
+      ansible_port: 2325
+
+controller_groups:
+  - name: cisco
+    hosts:
+      - rtr1
+    variables:
+      ansible_connection: network_cli
+      ansible_network_os: cisco.ios.ios
+    inventory: "Workshop Inventory"
+
+  - name: arista
+    hosts:
+      - rtr2
+      - rtr4
+    variables:
+      ansible_connection: network_cli
+      ansible_network_os: arista.eos.eos
+      ansible_become: "true"
+      ansible_become_method: enable
+    inventory: "Workshop Inventory"
+
+  - name: juniper
+    hosts:
+      - rtr3
+    variables:
+      ansible_connection: netconf
+      ansible_network_os: junipernetworks.junos.junos
+    inventory: "Workshop Inventory"
+
+
