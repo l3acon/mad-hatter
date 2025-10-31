@@ -63,5 +63,3 @@
           (aap_machine_cred_password | regex_search('[0-9]') | ternary(1, 0)) +
           (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
         ) >= 3
-
-

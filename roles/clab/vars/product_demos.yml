@@ -7,7 +7,7 @@ controller_inventories:
     organization: "Red Hat network organization"
 
 controller_hosts:
-  - name: 
+  - name:
     inventory: "Workshop Inventory"
     enabled: true
     variables:

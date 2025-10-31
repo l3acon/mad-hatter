@@ -92,5 +92,3 @@ controller_groups:
       ansible_connection: netconf
       ansible_network_os: junipernetworks.junos.junos
     inventory: "Workshop Inventory"
-
-

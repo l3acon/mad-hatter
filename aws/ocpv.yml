@@ -28,7 +28,7 @@
       ignore_errors: true
 
     - name: Reset ROSA cluster-admin
-      when: 
+      when:
         - (oc_whoami is failed) or (openshift_console_url not in oc_whoami.stdout)
       delegate_to: "{{ groups['rosa'] | first }}"
       block:
