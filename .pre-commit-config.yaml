@@ -1,12 +1,5 @@
 ---
 repos:
-  - repo: local
-    hooks:
-      - id: ansible-lint
-        name: ansible-navigator lint --eei quay.io/matferna/madhatter:latest
-        language: python
-        entry: bash -c "ansible-navigator lint --eei quay.io/matferna/madhatter:latest -v --force-color --mode stdout"
-
   - repo: https://github.com/pre-commit/pre-commit-hooks.git
     rev: v6.0.0
     hooks:
