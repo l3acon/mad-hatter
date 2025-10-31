@@ -9,8 +9,8 @@ dependencies:
   python: requirements.txt
   system:
     - python3.11-devel [platform:rpm]
-    - systemd-devel
-    - gcc
+    - systemd-devel [platform:rpm]
+    - gcc [platform:rpm]
 
 additional_build_files:
   - src: ansible.cfg
