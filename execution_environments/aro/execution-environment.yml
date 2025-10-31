@@ -6,10 +6,14 @@ images:
 
 dependencies:
   galaxy: requirements.yml
-  # python: requirements.txt
+  python: requirements.txt
+  system:
+    - python3.11-devel [platform:rpm]
+    - systemd-devel
+    - gcc
 
 additional_build_files:
-  - src: ../ansible.cfg
+  - src: ansible.cfg
     dest: configs
 
 options:
@@ -17,16 +21,13 @@ options:
 
 additional_build_steps:
   prepend_base:
-    - RUN $PYCMD -m pip install --upgrade pip setuptools
-#    - COPY _build/rpms/*.rpm /tmp/openshift-clients.rpm
-#    - RUN $PKGMGR install bash-completion
-    - RUN git clone --branch ee-build-source-aap2-24 https://github.com/redhat-partner-tech/automated-smart-management.git
-          && cp -r automated-smart-management/roles/* /usr/share/ansible/roles/
-          && rm -rf automated-smart-management
-#    - COPY automated-smart-management/roles/* /usr/share/ansible/roles/
+    - ARG OPENSHIFT_CLIENT_RPM
+    - RUN $PKGMGR -y update && $PKGMGR install -y bash-completion && $PKGMGR clean all
+    - RUN curl -o /tmp/openshift-clients.rpm $OPENSHIFT_CLIENT_RPM && rpm -Uvh /tmp/openshift-clients.rpm && rm -f /tmp/openshift-clients.rpm
   prepend_galaxy:
     - ADD _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+    - ARG ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN
+    - ARG ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN
   append_final:
     - RUN rm -rf /usr/libexec/platform-python
           && ln -s /usr/bin/python3.9 /usr/libexec/platform-python
-    # - LABEL quay.expires-after="45d"

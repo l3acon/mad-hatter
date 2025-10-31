@@ -69,6 +69,10 @@
     dest: "{{ azure_dir.path }}/credentials"
 
 - name: Check that manifest exists
+  ansible.builtin.debug:
+    msg: "manifest path: {{ aap_manifest_path }}"
+
+- name: Check that manifest exists
   ansible.builtin.stat:
     path: "{{ aap_manifest_path }}"
   register: stat_result

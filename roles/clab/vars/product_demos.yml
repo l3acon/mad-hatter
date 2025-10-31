@@ -1,4 +1,11 @@
 ---
+aap_organizations:
+  - name: "Red Hat network organization"
+
+controller_inventories:
+  - name: "Workshop Inventory"
+    organization: "Red Hat network organization"
+
 controller_hosts:
   - name: 
     inventory: "Workshop Inventory"
