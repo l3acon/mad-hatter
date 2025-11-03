@@ -32,17 +32,15 @@
     azure_tenant: "{{ file_content | regex_search('Tenant ID\\n\\n([^\\s]+)', '\\1') | first }}"
     azure_subscription: "{{ file_content | regex_search('Subscription ID\\n\\n([^\\s]+)', '\\1') | first }}"
 
-    # These are user-provided
-    openshift_admin_password: "{{ file_content | regex_search('OPENSHIFT_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
-    aap_admin_password: "{{ file_content | regex_search('AAP_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
-    aap_manifest_path: "{{ file_content | regex_search('AAP_MANIFEST_PATH:\\s*(\\S+)', '\\1') | first }}"
-    aap_machine_cred_password: "{{ file_content | regex_search('AAP_MACHINE_CRED_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
-    aap_machine_cred_priv_key: "{{ file_content | regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}" # noqa: yaml[line-length]
-    aap_machine_cred_pub_key: "{{ file_content | regex_search('^ssh-rsa.*$', multiline=True) }}"
+    # These are user-provided, specify via environment variables or navigator config
     aap_operator_chatbot_token: "{{ file_content | regex_search('CHATBOT_TOKEN:\\s*(\\S+)', '\\1') | first }}"
-    # Other optional things
-    # apd_git_repo: "{{ file_content | regex_search('APD_GIT_REPO:\\s*(\\S+)', '\\1') | default('https://github.com/ansible/product-demos')}}"
-    # apd_git_repo_branch: "{{ file_content | regex_search('APD_GIT_REPO_BRANCH:\\s*(\\S+)', '\\1') | default('main') }}"
+    openshift_admin_password: "{{ aro_creds_openshift_admin_password }}"
+    aap_admin_password: "{{ aro_creds_aap_admin_password }}"
+    aap_manifest_path: "{{ aro_creds_aap_manifest_pah }}"
+    aap_machine_cred_password: "{{ aro_creds_aap_machine_cred_password }}"
+    aap_machine_cred_priv_key: "{{ aro_creds_aap_machine_cred_priv_key }}"
+    aap_machine_cred_pub_key: "{{ aro_creds_aap_machine_cred_pub_key }}"
+    ansible_ssh_private_key_file: "{{ aro_creds_ansible_ssh_private_key_file }}"
 
 - name: Derive OpenShift API URL from Console URL
   ansible.builtin.set_fact:

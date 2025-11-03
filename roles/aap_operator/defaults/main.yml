@@ -9,7 +9,7 @@ aap_operator_silent: false
 aap_operator_project: "aap"
 aap_operator_app_name: "aap"
 aap_operator_operator_name: ansible-automation-platform-operator
-aap_operator_operator_channel: "stable-2.6"
+aap_operator_operator_channel: "stable-2.5"
 aap_operator_operator_csv_nameprefix: aap-operator
 aap_operator_operator_catalog: redhat-operators
 aap_operator_starting_csv: ""

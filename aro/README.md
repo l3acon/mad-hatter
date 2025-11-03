@@ -1,20 +1,13 @@
 # ARO
 
 ## Begin at the Beginning
-1. Order underlying infrastructure, the code here is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link).
-1. Create a file called `aro.creds` in the root of this project, paste raw "info" text from demo platform.
-1. Add additional "user" vars in `user.creds` file (see playbooks for all available/required vars).
-1. Run a play
+1. Order underlying infrastructure, the playbooks here (`{{project_root}}/aro`) is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link).
+1. Configure navigator for file/volume mouns (see [ansible-navigator config](#ansible-navigator-config))
+1. Run the play
 
 ```
 # be in the project root directory
-ansible-navigator run aro/clab.yml --eei  quay.io/matferna/mh-aro:latest
-```
-
-### Troubleshooting
-Add debuging flag for Config as Code collections:
-```
- -e controller_configuration_credentials_secure_logging=false
+ansible-navigator run aro/clab.yml --eei  quay.io/matferna/mh-aro:latest -e ansible_ssh_private_key_file=/root/keys/my_priv_key
 ```
 
 ## ansible-navigator config
@@ -25,30 +18,29 @@ ansible-navigator:
     pull:
       policy: missing
     volume-mounts:
-      - src: "/home/matt/keys"
+      - src: "/home/user/keys"
         dest: "/root/keys"
         options: "Z"
-      - src: "/home/matt/manifests"
+      - src: "/home/user/manifests"
         dest: "/root/manifests"
         options: "Z"
+    environment-variables:
+      pass:
+        - AAP_MACHINE_CRED_PASSWORD
+        - CONTROLLER_PASSWORD
+      set:
+        K8S_AUTH_PASSWORD: "Curiouser&Curiouser"
 ```
 
-## User provided variables
-Add the following to the RHDP provided credentials, replacing the nonsense.
+Alternatively, vars can be passed via CLI options:
 ```
-OPENSHIFT_ADMIN_PASSWORD: Curiouser&Curiouser
-AAP_ADMIN_PASSWORD: Curiouser&Curiouser
-AAP_MANIFEST_PATH: /Curiouser/Curiouser/manifest.zip
-AAP_MACHINE_CRED_PASSWORD: Curiouser&Curiouser
-
-# Some private key, to be used as AAP Machine Credential
------BEGIN OPENSSH PRIVATE KEY-----
-SWYgSSBoYWQgYSB3b3JsZCBvZiBteSBvd24sIGV2ZXJ5dGhpbmcgd291bGQgYmUgbm9uc2Vuc2Uu
-IE5vdGhpbmcgd291bGQgYmUgd2hhdCBpdCBpcywgYmVjYXVzZSBldmVyeXRoaW5nIHdvdWxkIGJl
-IHdoYXQgaXQgaXNuJ3QuIEFuZCBjb250cmFyaXdpc2UsIHdoYXQgaXQgaXMsIGl0IHdvdWxkbid0
-IGJlLiBBbmQgd2hhdCBpdCB3b3VsZG4ndCBiZSwgaXQgd291bGQuIFlvdSBzZWU/Cg==
------END OPENSSH PRIVATE KEY-----
-
-<...COPY PASTA from RHDP CREDS PAGE...>
+ansible-navigator run aro/clab.yml --eei  quay.io/matferna/mh-aro:latest --senv K8S_AUTH_PASSWORD=Curiouser&Curiouser --senv AAP_MACHINE_CRED_PASSWORD="Cur1ouser&Cur1ouser!" --senv CONTROLLER_PASSWORD=Curiouser&Curiouser -e ansible_ssh_private_key_file=/root/keys/my_priv_key
 ```
+
 See [aro_creds](../roles/aro_creds/tasks/main.yml) for more credential loading details.
+
+### Troubleshooting
+Add debugging flag for Config as Code collections:
+```
+ -e controller_configuration_credentials_secure_logging=false
+```
