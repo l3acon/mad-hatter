@@ -1,0 +1,43 @@
+- name: Get Route for RHAAP Helm release using label
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ openshift_namespace }}"
+    label_selectors:
+      - "app.kubernetes.io/instance={{ helm_release_name }}"
+  register: rhaap_route
+  tags: [get_route]
+
+- name: Debug helm_release_name and namespace
+  debug:
+    msg: "helm_release_name={{ helm_release_name }}, openshift_namespace={{ openshift_namespace }}"
+
+- name: Debug route host
+  debug:
+    msg: "Route host is {{ rhaap_route.resources[0].spec.host }}"
+
+- name: Set RHAAP route hostname fact
+  set_fact:
+    rhaap_route_host: "{{ rhaap_route.resources[0].spec.host }}"
+
+- name: Set OAuth redirect URI and app URL
+  set_fact:
+    rhaap_redirect_url: "https://{{ rhaap_route_host }}/api/auth/rhaap/handler/frame"
+    rhaap_app_url: "https://{{ rhaap_route_host }}"
+
+- name: Update OAuth2 application in AAP with RHAAP route
+  ansible.platform.application:
+    name: "{{ aap_oauth_client_name }}"
+    description: "Self Service application"
+    organization: "{{ aap_organization }}"
+    state: present
+    authorization_grant_type: authorization-code
+    client_type: confidential
+    redirect_uris:
+      - "{{ rhaap_redirect_url }}"
+    app_url: "{{ rhaap_app_url }}"
+    aap_hostname: "{{ controller_host }}"
+    aap_username: "{{ controller_username }}"
+    aap_password: "{{ controller_password }}"
+    aap_validate_certs: "{{ controller_verify_ssl }}"
+  tags: [update_oauth]

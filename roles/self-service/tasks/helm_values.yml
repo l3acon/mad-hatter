@@ -1,0 +1,44 @@
+- name: Get OpenShift base domain from default IngressController
+  redhat.openshift.k8s:
+    api_version: operator.openshift.io/v1
+    kind: IngressController
+    name: default
+    namespace: openshift-ingress-operator
+    state: present
+  register: ingress_info
+
+- name: Set base domain fact
+  set_fact:
+    openshift_base_domain: "{{ ingress_info.result.status.domain }}"
+
+- name: Fail if base domain is not defined
+  fail:
+    msg: "openshift_base_domain is not set. Check the IngressController or cluster access."
+  when: ingress_info.result.status.domain is not defined
+
+- name: Set base domain fact
+  set_fact:
+    openshift_base_domain: "{{ ingress_info.result.status.domain }}"
+
+- name: Add Openshift repository
+  kubernetes.core.helm_repository:
+    name: openshift
+    repo_url: "{{ helm_repo_url }}"
+
+- name: Install RHAAP chart from openshift repo
+  kubernetes.core.helm:
+    name: "{{ helm_release_name }}"
+    release_name: "{{ helm_release_name }}"
+    chart_ref: "{{ helm_repo_name }}/{{ helm_chart_name }}"
+    chart_version: "{{ helm_chart_version }}"
+    release_namespace: "{{ openshift_namespace }}"
+    values_files: "{{ helm_values }}"
+    release_state: present
+    set_values:
+      - value: redhat-developer-hub.global.clusterRouterBase={{ openshift_base_domain }}
+        value_type: string
+      - value: redhat-developer-hub.upstream.backstage.appConfig.auth.providers.rhaap.production.checkSSL={{ aap_ssl_verify }}
+        value_type: string
+      - value: redhat-developer-hub.upstream.backstage.appConfig.ansible.rhaap.checkSSL={{ aap_ssl_verify }}
+        value_type: string
+  tags: helm

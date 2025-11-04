@@ -1,0 +1,22 @@
+- name: Create OAuth2 application in AAP
+  ansible.platform.application:
+    name: "{{ aap_oauth_client_name}}"
+    description: "Self Service application"
+    organization: "{{ aap_organization }}"
+    state: present
+    authorization_grant_type: authorization-code
+    client_type: confidential
+    redirect_uris:
+      - "{{ rhaap_redirect_url | default('https://placeholder.com') }}"
+    app_url: "{{ rhaap_app_url | default('https://placeholder.com') }}"
+    aap_hostname: "{{ controller_host }}"
+    aap_username: "{{ controller_username }}"
+    aap_password: "{{ controller_password }}"
+    aap_validate_certs: "{{ controller_verify_ssl }}"
+  register: app_result
+  tags: [create_oauth]
+
+- name: Show OAuth2 application result
+  debug:
+    var: app_result
+  tags: [create_oauth]

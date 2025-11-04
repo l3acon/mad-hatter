@@ -1,0 +1,47 @@
+- name: Create ImageStream for plugin-registry
+  redhat.openshift.k8s:
+    state: present
+    definition:
+      apiVersion: image.openshift.io/v1
+      kind: ImageStream
+      metadata:
+        name: plugin-registry
+        namespace: "{{ openshift_namespace }}"
+
+- name: Create BuildConfig for plugin-registry (binary build)
+  redhat.openshift.k8s:
+    state: present
+    definition:
+      apiVersion: build.openshift.io/v1
+      kind: BuildConfig
+      metadata:
+        name: plugin-registry
+        namespace: "{{ openshift_namespace }}"
+        labels:
+          app: plugin-registry
+      spec:
+        output:
+          to:
+            kind: ImageStreamTag
+            name: plugin-registry:latest
+        source:
+          type: Binary
+        strategy:
+          type: Source
+          sourceStrategy:
+            from:
+              kind: ImageStreamTag
+              name: httpd:2.4-ubi8
+              namespace: openshift
+        triggers:
+          - type: ConfigChange
+  tags: [deploy_plugin]
+
+- name: Start plugin-registry build from local dir
+  command: >
+    oc start-build plugin-registry
+    --from-dir={{ plugin_root_dir }}
+    --wait
+    -n {{ openshift_namespace }}
+  delegate_to: localhost
+  run_once: true

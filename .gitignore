@@ -6,3 +6,4 @@ podman-build*
 ansible-navigator.log
 execution_environments/aro/context
 execution_environments/rosa/context
+roles/self-service/files/plugins/

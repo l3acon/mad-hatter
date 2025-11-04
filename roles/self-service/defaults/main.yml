@@ -1,0 +1,17 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for self-service
+plugin_root_dir: "{{ role_path }}/files/plugins"
+helm_values: "{{ role_path }}/files/helm/values.yml"
+openshift_namespace: self-service
+helm_chart_version: "2.0.3"
+helm_repo_url: "https://charts.openshift.io"
+helm_repo_name: "openshift-helm-charts"
+helm_chart_name: "redhat-rhaap-portal"
+helm_release_name: "self-service"
+controller_host: "" # AAP Controller Route
+oauth_redirect_uri_suffix: "/api/auth/rhaap/handler/frame"
+controller_verify_ssl: True
+aap_oauth_client_name: "Self Service"
+aap_organization: "Default"
+aap_ssl_verify: true

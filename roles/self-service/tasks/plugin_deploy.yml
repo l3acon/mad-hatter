@@ -1,0 +1,85 @@
+- name: Get plugin registry ImageStream
+  redhat.openshift.k8s:
+    kind: ImageStream
+    api_version: image.openshift.io/v1
+    name: plugin-registry
+    namespace: "{{ openshift_namespace }}"
+  register: imagestream_info
+  tags: [deploy_plugin]
+
+- name: Extract plugin registry image digest
+  set_fact:
+    plugin_registry_image_digest: "{{ imagestream_info.result.status.tags[0]['items'][0]['dockerImageReference'] }}"
+  when:
+    - imagestream_info.result.status.tags is defined
+    - imagestream_info.result.status.tags[0]['items'] is defined
+    - imagestream_info.result.status.tags[0]['items'] | length > 0
+  tags: [deploy_plugin]
+
+- name: Fail if plugin_registry_image_digest is not defined
+  fail:
+    msg: "plugin_registry_image_digest could not be extracted from ImageStream."
+  when: plugin_registry_image_digest is not defined
+  tags: [deploy_plugin]
+
+- name: Create Deployment for plugin-registry
+  redhat.openshift.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: plugin-registry
+        namespace: "{{ openshift_namespace }}"
+        labels:
+          app: plugin-registry
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: plugin-registry
+        template:
+          metadata:
+            labels:
+              app: plugin-registry
+          spec:
+            containers:
+              - name: plugin-registry
+                image: "{{ plugin_registry_image_digest }}"
+                ports:
+                  - containerPort: 8080
+                  - containerPort: 8443
+  tags: [deploy_plugin]
+
+- name: Create Service for plugin-registry
+  redhat.openshift.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: plugin-registry
+        namespace: "{{ openshift_namespace }}"
+        labels:
+          app: plugin-registry
+          app.kubernetes.io/component: plugin-registry
+          app.kubernetes.io/instance: plugin-registry
+          app.kubernetes.io/name: plugin-registry
+        annotations:
+          openshift.io/generated-by: OpenShiftNewApp
+      spec:
+        selector:
+          app: plugin-registry  # ✅ Fixed selector
+        ports:
+          - name: 8080-tcp
+            protocol: TCP
+            port: 8080
+            targetPort: 8080
+          - name: 8443-tcp
+            protocol: TCP
+            port: 8443
+            targetPort: 8443
+        type: ClusterIP
+        sessionAffinity: None
+        internalTrafficPolicy: Cluster
+  tags: [deploy_plugin]

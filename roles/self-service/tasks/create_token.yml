@@ -1,0 +1,17 @@
+---
+- name: Create AAP OAuth token
+  tags: [create_token]
+  ansible.platform.token:
+    description: "Developer Hub token"
+    scope: "write"
+    state: present
+    aap_hostname: "{{ controller_host }}"
+    aap_username: "{{ controller_username }}"
+    aap_password: "{{ controller_password }}"
+    aap_validate_certs: "{{ controller_verify_ssl }}"
+  register: aap_token_result
+
+- name: Show AAP token value
+  debug:
+    msg: "AAP token: {{ aap_token_result.ansible_facts.aap_token.token }}"
+  when: show_token | default(false)
