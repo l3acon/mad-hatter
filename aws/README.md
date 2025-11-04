@@ -1,31 +1,49 @@
 # ROSA
 
+## Yellow brick road
+This project is oriented around AAP and OpenShift virtualization. We deploy a metal AWS instance and configure it for use with ROSA. [APD](github.com/ansible/product-demos) is used for AAP content. Use this for Day 2 demos around OCP and VM management.
+
 ## Begin at the Beginning
 1. Order underlying infrastructure, the code here is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/sandboxes-gpte.rosa.prod&utm_source=webapp&utm_medium=share-link).
 1. Create a file called `rosa.creds` in the root of this project, paste raw "info" text from demo platform.
-1. Add additional variables in the same `rosa.creds` file (see playbooks for all available/required vars).
+1. Configure navigator for file/volume mouns (see [ansible-navigator config](#ansible-navigator-config))
 1. Run a play
+
 ```
 # be in the root directory
-ansible-playbook rosa/ocpv.yml
+ansible-navigator run aws/ocpv.yml --eei quay.io/matferna/mh-rosa:latest --senv K8S_AUTH_PASSWORD=Curiouser&Curiouser --senv AAP_MACHINE_CRED_PASSWORD="Cur1ouser&Cur1ouser" --senv CONTROLLER_PASSWORD=Curiouser&Curiouser
+```
+See [rosa_creds](../roles/rosa_creds/tasks/main.yml) and [user_creds](../roles/user_creds/tasks/main.yml) for more details on credential loading.
+
+## ansible-navigator config
+I use volume-mounts for ssh keys and manifest files.  Here is an example navigator config:
+```
+ansible-navigator:
+  execution-environment:
+    pull:
+      policy: missing
+    volume-mounts:
+      - src: "/home/user/keys"
+        dest: "/root/keys"
+        options: "Z"
+      - src: "/home/user/manifests"
+        dest: "/root/manifests"
+        options: "Z"
+    environment-variables:
+      pass:
+        - AAP_MACHINE_CRED_PASSWORD
+        - CONTROLLER_PASSWORD
+      set:
+        K8S_AUTH_PASSWORD: "Curiouser&Curiouser"
 ```
 
-## User provided variables
-Add the following to the RHDP provided credentials, replacing the nonsense.
+Alternatively, vars can be passed via CLI options:
 ```
-OPENSHIFT_ADMIN_PASSWORD: Curiouser&Curiouser
-AAP_ADMIN_PASSWORD: Curiouser&Curiouser
-AAP_MANIFEST_PATH: /Curiouser/Curiouser/manifest.zip
-AAP_MACHINE_CRED_PASSWORD: Curiouser&Curiouser
-
-# Some private key, to be used as AAP Machine Credential
------BEGIN OPENSSH PRIVATE KEY-----
-SWYgSSBoYWQgYSB3b3JsZCBvZiBteSBvd24sIGV2ZXJ5dGhpbmcgd291bGQgYmUgbm9uc2Vuc2Uu
-IE5vdGhpbmcgd291bGQgYmUgd2hhdCBpdCBpcywgYmVjYXVzZSBldmVyeXRoaW5nIHdvdWxkIGJl
-IHdoYXQgaXQgaXNuJ3QuIEFuZCBjb250cmFyaXdpc2UsIHdoYXQgaXQgaXMsIGl0IHdvdWxkbid0
-IGJlLiBBbmQgd2hhdCBpdCB3b3VsZG4ndCBiZSwgaXQgd291bGQuIFlvdSBzZWU/Cg==
------END OPENSSH PRIVATE KEY-----
-
-<...COPY PASTA from RHDP CREDS PAGE...>
+ansible-navigator run aws/ocpv.yml --eei  quay.io/matferna/mh-rosa:latest --senv K8S_AUTH_PASSWORD=Curiouser&Curiouser --senv AAP_MACHINE_CRED_PASSWORD="Cur1ouser&Cur1ouser!" --senv CONTROLLER_PASSWORD=Curiouser&Curiouser -e ansible_ssh_private_key_file=/root/keys/my_priv_key
 ```
-See [rosa_creds](../roles/rosa_creds/tasks/main.yml) for more details credential loading details.
+
+### Troubleshooting
+Add debugging flag for Config as Code collections:
+```
+ -e controller_configuration_credentials_secure_logging=false
+`

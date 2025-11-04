@@ -1,3 +1,2 @@
 ---
 rosa_creds_file_path: "{{ playbook_dir }}/../aws.creds"
-rosa_creds_user_file_path: "{{ playbook_dir }}/../user.creds"

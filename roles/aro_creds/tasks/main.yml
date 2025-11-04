@@ -4,20 +4,10 @@
     src: "{{ aro_creds_file_path }}"
   register: slurp_result
 
-- name: Slurp the entire contents of user creds file
-  ansible.builtin.slurp:
-    src: "{{ aro_creds_user_file_path }}"
-  register: user_slurp
-
 - name: Decode the file content and set as a fact
   ansible.builtin.set_fact:
     file_content: |
       {{ slurp_result.content | b64decode }}
-      {{ user_slurp.content | b64decode }}
-
-- name: Decode the file content and set as a fact
-  ansible.builtin.debug:
-    msg: "{{ file_content | regex_search('Resource Group\\n\\n([^\\s]+)', '\\1') | first }}"
 
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
@@ -31,16 +21,6 @@
     azure_password: "{{ file_content | regex_search('2 - Your Azure Environment Details(?:.|\\n)*?Password\\n\\n([^\\s]+)', '\\1') | first }}"
     azure_tenant: "{{ file_content | regex_search('Tenant ID\\n\\n([^\\s]+)', '\\1') | first }}"
     azure_subscription: "{{ file_content | regex_search('Subscription ID\\n\\n([^\\s]+)', '\\1') | first }}"
-
-    # These are user-provided, specify via environment variables or navigator config
-    aap_operator_chatbot_token: "{{ file_content | regex_search('CHATBOT_TOKEN:\\s*(\\S+)', '\\1') | first }}"
-    openshift_admin_password: "{{ aro_creds_openshift_admin_password }}"
-    aap_admin_password: "{{ aro_creds_aap_admin_password }}"
-    aap_manifest_path: "{{ aro_creds_aap_manifest_pah }}"
-    aap_machine_cred_password: "{{ aro_creds_aap_machine_cred_password }}"
-    aap_machine_cred_priv_key: "{{ aro_creds_aap_machine_cred_priv_key }}"
-    aap_machine_cred_pub_key: "{{ aro_creds_aap_machine_cred_pub_key }}"
-    ansible_ssh_private_key_file: "{{ aro_creds_ansible_ssh_private_key_file }}"
 
 - name: Derive OpenShift API URL from Console URL
   ansible.builtin.set_fact:
@@ -66,15 +46,6 @@
     content: "{{ azure_profile | community.general.to_ini }}"
     dest: "{{ azure_dir.path }}/credentials"
 
-- name: Check that manifest exists
-  ansible.builtin.debug:
-    msg: "manifest path: {{ aap_manifest_path }}"
-
-- name: Check that manifest exists
-  ansible.builtin.stat:
-    path: "{{ aap_manifest_path }}"
-  register: stat_result
-
 - name: Assertion for required variables
   ansible.builtin.assert:
     that:
@@ -85,28 +56,4 @@
       - azure_password|length > 0
       - azure_tenant|length > 0
       - azure_subscription|length > 0
-      - aap_admin_password|length > 0
-      - aap_manifest_path|length > 0
-      - aap_machine_cred_priv_key|length > 0
       - stat_result.stat.exists
-      # ensure RSA key
-      - aap_machine_cred_priv_key is regex('^-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----\n(.+\n)+-----END (?:RSA|OPENSSH) PRIVATE KEY-----\s*$')
-      # enforce Windows password requirements
-      - aap_machine_cred_password|length >= 8
-      - ( (aap_machine_cred_password | regex_search('[A-Z]') | ternary(1, 0)) +
-          (aap_machine_cred_password | regex_search('[a-z]') | ternary(1, 0)) +
-          (aap_machine_cred_password | regex_search('[0-9]') | ternary(1, 0)) +
-          (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
-        ) >= 3
-
-- name: Assertion for public key (when required)
-  when: aro_creds_require_pub_key is defined and aro_creds_require_pub_key
-  ansible.builtin.assert:
-    that:
-      - aap_machine_cred_pub_key|length > 0
-
-- name: Assertion for required variables (lightspeed)
-  when: aap_operator_disable_lightspeed is not true
-  ansible.builtin.assert:
-    that:
-      - aap_operator_chatbot_token|length > 0

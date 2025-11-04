@@ -4,16 +4,10 @@
     src: "{{ rosa_creds_file_path }}"
   register: rosa_slurp
 
-- name: Slurp the entire contents of user creds file
-  ansible.builtin.slurp:
-    src: "{{ rosa_creds_user_file_path }}"
-  register: user_slurp
-
 - name: Decode the file content and set as a fact
   ansible.builtin.set_fact:
     file_content: |
       {{ rosa_slurp.content | b64decode }}
-      {{ user_slurp.content | b64decode }}
 
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
@@ -27,18 +21,6 @@
     rosa_bastion_host: "{{ file_content | regex_search('SSH Command:\\s*ssh\\s+\\S+@(\\S+)', '\\1') | first }}"
     rosa_bastion_password: "{{ file_content | regex_search('SSH Password:\\s*(\\S+)', '\\1') | first }}"
 
-    # These are user-provided
-    openshift_admin_password: "{{ file_content | regex_search('OPENSHIFT_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
-    aap_admin_password: "{{ file_content | regex_search('AAP_ADMIN_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
-    aap_manifest_path: "{{ file_content | regex_search('AAP_MANIFEST_PATH:\\s*(\\S+)', '\\1') | first }}"
-    aap_machine_cred_password: "{{ file_content | regex_search('AAP_MACHINE_CRED_PASSWORD:\\s*(\\S+)', '\\1') | first }}"
-    aap_machine_cred_priv_key: "{{ file_content | regex_search('-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----[\\s\\S]*-----END (?:RSA|OPENSSH) PRIVATE KEY-----') }}" # noqa: yaml[line-length]
-
-- name: Check that manifest exists
-  ansible.builtin.stat:
-    path: "{{ aap_manifest_path }}"
-  register: stat_result
-
 - name: Assertion for required variables
   ansible.builtin.assert:
     that:
@@ -49,17 +31,3 @@
       - aws_secret_key|length > 0
       - openshift_console_url|length > 0
       - openshift_api_url|length > 0
-      - openshift_admin_password|length > 0
-      - aap_admin_password|length > 0
-      - aap_manifest_path|length > 0
-      - aap_machine_cred_priv_key|length > 0
-      - stat_result.stat.exists
-      # ensure RSA key
-      - aap_machine_cred_priv_key is regex('^-----BEGIN (?:RSA|OPENSSH) PRIVATE KEY-----\n(.+\n)+-----END (?:RSA|OPENSSH) PRIVATE KEY-----\s*$')
-      # enforce Windows password requirements
-      - aap_machine_cred_password|length >= 8
-      - ( (aap_machine_cred_password | regex_search('[A-Z]') | ternary(1, 0)) +
-          (aap_machine_cred_password | regex_search('[a-z]') | ternary(1, 0)) +
-          (aap_machine_cred_password | regex_search('[0-9]') | ternary(1, 0)) +
-          (aap_machine_cred_password | regex_search('[!@#$%^&*(),.?":{}|<>]') | ternary(1, 0))
-        ) >= 3

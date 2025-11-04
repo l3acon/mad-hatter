@@ -5,26 +5,6 @@ First it works. Then it documents.
 This is a work in progress.
 
 ### Down the Rabbit Hole
-This project builds off the following projects:
-1. [ROSA](./aws/README.md)
-1. [ARO](./aro/README.md)
-
-## We're all mad here
-This project aims to optimize for user experience. Both execution should troubleshooting should be as seamless and easy as possible. Long runningg tasks should be started and polled to allow for reasonalbe time management.
-
-Relevant metrics:
-```
-# vanilla deployment
-time ansible-playbook aws/apd.yml
-...<play output>
-13:16.97 total
-
-```
-
-```
-# post-deploment, ideally ansible is doing nothing
-time ansible-playbook awsosa/apd.yml
-...<play output>
-42.597 total
-
-```
+There are two infrastructures this project builds upon. See the individual README's for details.
+1. [ROSA](./aws/README.md) - for OpenShift virtualization we deploy a metal AWS instance and configure it for use with ROSA. [APD](github.com/ansible/product-demos) is used for AAP content. Use this for Day 2 demos around OCP and VM management.
+1. [ARO](./aro/README.md) - for [CONTAINERlab](https://containerlab.dev/) orchistration. AAP is deployed on ARO and a containerlab (clab) VM is deployed on Azure to host containerlab virtualized network devices. Use this for AAP for networking use cases and demos.

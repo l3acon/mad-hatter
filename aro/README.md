@@ -9,6 +9,7 @@
 # be in the project root directory
 ansible-navigator run aro/clab.yml --eei  quay.io/matferna/mh-aro:latest -e ansible_ssh_private_key_file=/root/keys/my_priv_key
 ```
+See [rosa_creds](../roles/rosa_creds/tasks/main.yml) and [user_creds](../roles/user_creds/tasks/main.yml) for more details on credential loading.
 
 ## ansible-navigator config
 I use volume-mounts for ssh keys and manifest files.  Here is an example navigator config:
@@ -36,8 +37,6 @@ Alternatively, vars can be passed via CLI options:
 ```
 ansible-navigator run aro/clab.yml --eei  quay.io/matferna/mh-aro:latest --senv K8S_AUTH_PASSWORD=Curiouser&Curiouser --senv AAP_MACHINE_CRED_PASSWORD="Cur1ouser&Cur1ouser!" --senv CONTROLLER_PASSWORD=Curiouser&Curiouser -e ansible_ssh_private_key_file=/root/keys/my_priv_key
 ```
-
-See [aro_creds](../roles/aro_creds/tasks/main.yml) for more credential loading details.
 
 ### Troubleshooting
 Add debugging flag for Config as Code collections:

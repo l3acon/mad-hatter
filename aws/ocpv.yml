@@ -11,9 +11,10 @@
     - name: Parse credentials
       ansible.builtin.include_role:
         name: rosa_creds
-      vars:
-        rosa_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aws.creds') }}"
-        rosa_creds_user_file_path: "{{ playbook_dir }}/{{ user_creds_file | default('../user.creds') }}"
+
+    - name: Parse credentials
+      ansible.builtin.include_role:
+        name: user_creds
 
     - name: Add ROSA bastion to inventory
       ansible.builtin.add_host:
