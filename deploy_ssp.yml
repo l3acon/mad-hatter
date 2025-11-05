@@ -1,0 +1,17 @@
+---
+- name: Install self-service portal
+  hosts: localhost
+  # set these:
+  #vars:
+  #  controller_username: admin
+  #  controller_password: SomePassword
+  #  github_token: gh_something
+  #
+  #  # AAP OAuth/user token will be created automatically
+  #
+  #  namespace: self-service #change if you want a different ns/project
+  #  controller_host: https://my-aap-deployment.example.com
+  tasks:
+   - name: include role
+     ansible.builtin.include_role:
+       name: self-service

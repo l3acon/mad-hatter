@@ -9,7 +9,6 @@ helm_repo_url: "https://charts.openshift.io"
 helm_repo_name: "openshift-helm-charts"
 helm_chart_name: "redhat-rhaap-portal"
 helm_release_name: "self-service"
-controller_host: "" # AAP Controller Route
 oauth_redirect_uri_suffix: "/api/auth/rhaap/handler/frame"
 controller_verify_ssl: True
 aap_oauth_client_name: "Self Service"
