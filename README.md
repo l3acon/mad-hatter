@@ -15,9 +15,11 @@ Currently I run this as an add-on (and stolen from [Hicham](https://github.com/n
 1. Download and untar plugins to `${project_root}/roles/self-service/files/plugins`
 1. Install depends (see below)
 1. Set the required variables (see below)
+1. Login to openshift using CLI (see below)
 1. Run the playbook.
 
 ```
 ansible-galaxy collection install -r roles/self-service/requirements.yml
-ansible-playbook deploy_ss.yml -e controller_username=admin -e controller_password=SomePassword -e github_token=gh_something -e namespace=self-service -e controller_host=https://my-aap-deployment.example.com
+oc login --token=sha256~mylongtoken --server=https://api.my-ocp.com:443
+ansible-playbook deploy_ssp.yml -e controller_username=admin -e controller_password=SomePassword -e github_token=gh_something -e namespace=self-service -e controller_host=https://my-aap-deployment.example.com
 ```

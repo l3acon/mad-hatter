@@ -1,6 +1,9 @@
 ---
 - name: Configure 'AWS with ROSA Open Environment' for Ansible Product-Demos with OCP-V
   hosts: localhost
+  vars:
+    aap_operator_operator_channel: "stable-2.6"
+    # aap_operator_disable_lightspeed: false
   tasks:
     - name: Warning this may incur high costs
       ansible.builtin.pause:
