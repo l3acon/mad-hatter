@@ -12,15 +12,15 @@
 - name: Extract key variables using regular expressions
   ansible.builtin.set_fact:
     # These are provided from RHPD
-    openshift_console_url: "{{ file_content | regex_search('Your ARO Console\\n+(https://[^/]+)', '\\1') | first }}"
+    openshift_console_url: "{{ file_content | regex_search('Your ARO Console\\s+(https?://[^\\s]+)', '\\1') | first |trim('/') }}"
     openshift_kubeadmin_password: "{{ file_content | regex_search('Username\\s+kubeadmin\\s+Password\\s+([^\\s]+)', '\\1') | first }}"
 
     # ARO
-    azure_resourcegroup: "{{ file_content | regex_search('Resource Group\\n\\n([^\\s]+)', '\\1') | first }}"
-    azure_client_id: "{{ file_content | regex_search('Application/Client/Service Principal ID\\n+([^\\s]+)', '\\1') | first }}"
-    azure_password: "{{ file_content | regex_search('2 - Your Azure Environment Details(?:.|\\n)*?Password\\n\\n([^\\s]+)', '\\1') | first }}"
-    azure_tenant: "{{ file_content | regex_search('Tenant ID\\n\\n([^\\s]+)', '\\1') | first }}"
-    azure_subscription: "{{ file_content | regex_search('Subscription ID\\n\\n([^\\s]+)', '\\1') | first }}"
+    azure_resourcegroup: "{{ file_content | regex_search('Resource Group\\s+(openenv-[^\\s]+)', '\\1') | first }}"
+    azure_client_id: "{{ file_content | regex_search('Application/Client/Service Principal ID\\s+([^\\s]+)', '\\1') | first }}"
+    azure_password: "{{ file_content | regex_search('2 - Your Azure Environment Details(?:.|\\n)*?Password\\s+([^\\s]+)', '\\1') | first }}"
+    azure_tenant: "{{ file_content | regex_search('Tenant ID\\s+([^\\s]+)', '\\1') | first }}"
+    azure_subscription: "{{ file_content | regex_search('Subscription ID\\s+([^\\s]+)', '\\1') | first }}"
 
 - name: Derive OpenShift API URL from Console URL
   ansible.builtin.set_fact:
@@ -56,4 +56,3 @@
       - azure_password|length > 0
       - azure_tenant|length > 0
       - azure_subscription|length > 0
-      - stat_result.stat.exists

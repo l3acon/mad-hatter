@@ -38,6 +38,13 @@ Alternatively, vars can be passed via CLI options:
 ansible-navigator run aro/clab.yml --eei  quay.io/matferna/mh-aro:latest --senv K8S_AUTH_PASSWORD=Curiouser&Curiouser --senv AAP_MACHINE_CRED_PASSWORD="Cur1ouser&Cur1ouser!" --senv CONTROLLER_PASSWORD=Curiouser&Curiouser -e ansible_ssh_private_key_file=/root/keys/my_priv_key
 ```
 
+
+Here's how I _actually_ run it:
+```
+ansible-navigator run aro/clab.yml --eei quay.io/matferna/mh-aro:latest -e controller_configuration_credentials_secure_logging=false --senv K8S_AUTH_PASSWORD=<pass> --senv AAP_MACHINE_CRED_PASSWORD="<p@Ss>" --senv CONTROLLER_PASSWORD=<pass> -e ansible_ssh_private_key_file=/root/keys/mounted_key_name -e user_creds_ansible_ssh_private_key_file=/root/keys/mounted_key_name -e user_creds_ansible_ssh_pub_key_file=/root/keys/mounted_pub.pub
+```
+
+
 ### Troubleshooting
 Add debugging flag for Config as Code collections:
 ```
