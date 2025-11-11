@@ -5,7 +5,7 @@ This project is oriented around AAP and OpenShift virtualization. We deploy a me
 
 ## Begin at the Beginning
 1. Order underlying infrastructure, the code here is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/sandboxes-gpte.rosa.prod&utm_source=webapp&utm_medium=share-link).
-1. Wait for RHDP to provision then go to the YAML tab, copy its contents to a file named `aws.creds.yml` in the root of this project.
+1. Once RHDP deploys ROSA go to the YAML tab and copy its contents to a file named `aws.creds.yml` in the root of this project.
 1. Configure navigator for file/volume mouns (see [ansible-navigator config](#ansible-navigator-config))
 1. Run the play (se below)
 

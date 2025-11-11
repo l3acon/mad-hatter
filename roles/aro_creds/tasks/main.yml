@@ -1,30 +1,17 @@
 ---
-- name: Slurp the entire contents of creds file
-  ansible.builtin.slurp:
-    src: "{{ aro_creds_file_path }}"
-  register: slurp_result
-
-- name: Decode the file content and set as a fact
-  ansible.builtin.set_fact:
-    file_content: |
-      {{ slurp_result.content | b64decode }}
-
-- name: Extract key variables using regular expressions
+- name: Extract vars from provision data
   ansible.builtin.set_fact:
     # These are provided from RHPD
-    openshift_console_url: "{{ file_content | regex_search('Your ARO Console\\s+(https?://[^\\s]+)', '\\1') | first |trim('/') }}"
-    openshift_kubeadmin_password: "{{ file_content | regex_search('Username\\s+kubeadmin\\s+Password\\s+([^\\s]+)', '\\1') | first }}"
+    openshift_console_url: "{{ aro_provision_data.aro_console }}"
+    openshift_api_url: "{{ aro_provision_data.aro_public_api_url }}"
+    openshift_kubeadmin_password: "{{ aro_provision_data.aro_kube_password }}"
 
     # ARO
-    azure_resourcegroup: "{{ file_content | regex_search('Resource Group\\s+(openenv-[^\\s]+)', '\\1') | first }}"
-    azure_client_id: "{{ file_content | regex_search('Application/Client/Service Principal ID\\s+([^\\s]+)', '\\1') | first }}"
-    azure_password: "{{ file_content | regex_search('2 - Your Azure Environment Details(?:.|\\n)*?Password\\s+([^\\s]+)', '\\1') | first }}"
-    azure_tenant: "{{ file_content | regex_search('Tenant ID\\s+([^\\s]+)', '\\1') | first }}"
-    azure_subscription: "{{ file_content | regex_search('Subscription ID\\s+([^\\s]+)', '\\1') | first }}"
-
-- name: Derive OpenShift API URL from Console URL
-  ansible.builtin.set_fact:
-    openshift_api_url: "{{ openshift_console_url | regex_replace('^https://console-openshift-console.apps', 'https://api') }}:6443"
+    azure_resourcegroup: "{{ aro_provision_data.azure_resource_group }}"
+    azure_client_id: "{{ aro_provision_data.azure_service_principal_id }}"
+    azure_password: "{{ aro_provision_data.azure_service_principal_password }}"
+    azure_tenant: "{{ aro_provision_data.azure_tenant}}"
+    azure_subscription: "{{ aro_provision_data.azure_subscription}}"
 
 - name: Build azure profile data structure
   ansible.builtin.set_fact:
@@ -56,3 +43,4 @@
       - azure_password|length > 0
       - azure_tenant|length > 0
       - azure_subscription|length > 0
+      - openshift_api_url|length > 0

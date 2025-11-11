@@ -1,2 +1,3 @@
 ---
-aro_creds_file_path: "{{ playbook_dir }}/../aro.creds"
+aro_creds_file_path: "{{ playbook_dir }}/../aro.creds.yml"
+aro_provision_data: "{{ (lookup('file', aro_creds_file_path) | from_yaml).status.resources[0].state.spec.vars.provision_data }}"

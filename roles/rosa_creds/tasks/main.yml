@@ -2,9 +2,10 @@
 - name: Extract vars from provision data
   ansible.builtin.set_fact:
     # These are provided from RHPD
-    # ROSA
     openshift_console_url: "{{ rosa_provision_data.rosa_openshift_console_url }}"
     openshift_api_url: "{{ rosa_provision_data.rosa_openshift_api_url }}"
+
+    # ROSA
     aws_access_key: "{{ rosa_provision_data.aws_access_key_id}}"
     aws_secret_key: "{{ rosa_provision_data.aws_secret_access_key }}"
     rosa_bastion_user: "{{ rosa_provision_data.ssh_username }}"
