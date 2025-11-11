@@ -172,24 +172,25 @@
           - name: "OpenShift / CNV / Install Operator"
             wait: true
 
-    - name: Build CNV storage class
-      kubernetes.core.k8s:
-        wait: true
-        state: "present"
-        definition:
-          kind: StorageClass
-          apiVersion: storage.k8s.io/v1
-          metadata:
-            name: virt-gp3-csi
-            annotations:
-              storageclass.kubevirt.io/is-default-virt-class: 'true'
-          provisioner: ebs.csi.aws.com
-          parameters:
-            encrypted: 'true'
-            type: gp3
-          reclaimPolicy: Delete
-          allowVolumeExpansion: true
-          volumeBindingMode: Immediate
+# Nothing around the storage makes sense
+#    - name: Build CNV storage class
+#      kubernetes.core.k8s:
+#        wait: true
+#        state: "present"
+#        definition:
+#          kind: StorageClass
+#          apiVersion: storage.k8s.io/v1
+#          metadata:
+#            name: virt-gp3-csi
+#            annotations:
+#              storageclass.kubevirt.io/is-default-virt-class: 'true'
+#          provisioner: ebs.csi.aws.com
+#          parameters:
+#            encrypted: 'true'
+#            type: gp3
+#          reclaimPolicy: Delete
+#          allowVolumeExpansion: true
+#          volumeBindingMode: Immediate
 
     - name: Wait if metal node is still coming up
       delegate_to: "{{ groups['rosa'] | first }}"

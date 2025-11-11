@@ -1,0 +1,7 @@
+---
+- name: Include rosa_creds role
+  hosts: localhost
+  tasks:
+    - name: include role
+      ansible.builtin.include_role:
+        name: rosa_creds

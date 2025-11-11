@@ -1,0 +1,7 @@
+---
+- name: Include user_creds role
+  hosts: localhost
+  tasks:
+    - name: include role
+      ansible.builtin.include_role:
+        name: user_creds
