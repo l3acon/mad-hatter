@@ -2,6 +2,7 @@
 
 ## Begin at the Beginning
 1. Order underlying infrastructure, the playbooks here (`{{project_root}}/aro`) is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link).
+1. Once RHDP deploys ARO go to the YAML tab and copy its contents to a file named `aro.creds.yml` in the root of this project.
 1. Configure navigator for file/volume mouns (see [ansible-navigator config](#ansible-navigator-config))
 1. Run the play
 

@@ -5,12 +5,12 @@ This project is oriented around AAP and OpenShift virtualization. We deploy a me
 
 ## Begin at the Beginning
 1. Order underlying infrastructure, the code here is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/sandboxes-gpte.rosa.prod&utm_source=webapp&utm_medium=share-link).
-1. Create a file called `rosa.creds` in the root of this project, paste raw "info" text from demo platform.
+1. Once RHDP deploys ROSA go to the YAML tab and copy its contents to a file named `aws.creds.yml` in the root of this project.
 1. Configure navigator for file/volume mouns (see [ansible-navigator config](#ansible-navigator-config))
-1. Run a play
+1. Run the play (se below)
 
 ```
-# be in the root directory
+# be in the project root directory
 ansible-navigator run aws/ocpv.yml --eei quay.io/matferna/mh-rosa:latest --senv K8S_AUTH_PASSWORD=Curiouser&Curiouser --senv AAP_MACHINE_CRED_PASSWORD="Cur1ouser&Cur1ouser" --senv CONTROLLER_PASSWORD=Curiouser&Curiouser
 ```
 See [rosa_creds](../roles/rosa_creds/tasks/main.yml) and [user_creds](../roles/user_creds/tasks/main.yml) for more details on credential loading.

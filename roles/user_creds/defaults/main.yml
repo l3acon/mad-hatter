@@ -1,5 +1,5 @@
 ---
-user_creds_file_path: "{{ playbook_dir }}/../user.creds"
+user_creds_file_path: "{{ playbook_dir }}/../user.creds.yml"
 
 # likely expose via navigator volume mount
 user_creds_ansible_ssh_private_key_file: "/root/keys/my_priv_key"

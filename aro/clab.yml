@@ -3,7 +3,6 @@
   hosts: localhost
   vars:
     aap_operator_disable_lightspeed: false
-    aro_creds_file_path: "{{ playbook_dir }}/{{ creds_file | default('../aro.creds') }}"
     aro_creds_require_pub_key: true
   tasks:
     - name: Slurp credentials
