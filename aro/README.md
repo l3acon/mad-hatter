@@ -3,6 +3,7 @@
 ## Begin at the Beginning
 1. Order underlying infrastructure, the playbooks here (`{{project_root}}/aro`) is compatible with this [this RHDP CI](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link).
 1. Once RHDP deploys ARO go to the YAML tab and copy its contents to a file named `aro.creds.yml` in the root of this project.
+1. Configure `user.creds.yml` file at the root of this project (see [user.creds.yml](#user.creds.yml))
 1. Configure navigator for file/volume mouns (see [ansible-navigator config](#ansible-navigator-config))
 1. Run the play
 
@@ -10,7 +11,15 @@
 # be in the project root directory
 ansible-navigator run aro/clab.yml --eei  quay.io/matferna/mh-aro:latest -e ansible_ssh_private_key_file=/root/keys/my_priv_key
 ```
-See [rosa_creds](../roles/rosa_creds/tasks/main.yml) and [user_creds](../roles/user_creds/tasks/main.yml) for more details on credential loading.
+See [aro_creds](../roles/aro_creds/tasks/main.yml) and [user_creds](../roles/user_creds/tasks/main.yml) for more details on credential loading.
+
+## user.creds.yml
+At a minimum the following variables are required in this file.
+```
+aap_operator_chatbot_token: <some token>
+openshift_admin_password: <k8s password>
+```
+See [user_creds](../roles/user_creds/tasks/main.yml) for more details on credential loading.
 
 ## ansible-navigator config
 I use volume-mounts for ssh keys and manifest files.  Here is an example navigator config:
