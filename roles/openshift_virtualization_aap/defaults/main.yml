@@ -5,6 +5,8 @@ openshift_virt_aap_ee_image: quay.io/matferna/mh-rosa:latest
 openshift_virt_aap_ee_name: OpenShift Virtualization EE
 
 openshift_virt_aap_project_scm_url: https://github.com/l3acon/mad-hatter
+# When CasC is applied via playbooks/openshift_virtualization/aap_rollout_casc.yml, the playbook sets this from
+# `git rev-parse --abbrev-ref HEAD` if unset so the controller project tracks your checkout branch.
 openshift_virt_aap_project_scm_branch: main
 openshift_virt_aap_project_name: OpenShift Virtualization (mad-hatter)
 

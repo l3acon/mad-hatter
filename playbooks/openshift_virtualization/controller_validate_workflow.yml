@@ -1,0 +1,80 @@
+---
+# Launch "OpenShift Virtualization | Provision VM and install package" and wait for success.
+# Requires: oc logged in; CasC applied; openshift_virt_aap_vm_ssh_* paths readable on the control node.
+# Optional: -e smoke_vm_namespace= -e openshift_virt_aap_vm_ssh_public_key_file= -e ocpv_post_package_name=bc
+- name: Validate provision + post-install workflow on controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_username: admin
+    aap_casc_aap_namespace: "{{ aap_operator_project | default('aap') }}"
+    aap_casc_route_name: "{{ aap_operator_app_name | default('aap') }}"
+    smoke_vm_namespace: ocpv-aap-smoke
+    ocpv_post_package_name: bc
+  tasks:
+    - name: Discover AAP and OpenShift API from oc context
+      ansible.builtin.include_tasks: tasks/discover_aap_from_oc.yml
+
+    - name: Timestamp for default VM name
+      ansible.builtin.command: date +%s
+      changed_when: false
+      register: ocpv_wf_epoch
+
+    - name: Default workflow test VM name
+      ansible.builtin.set_fact:
+        smoke_vm_name: "{{ smoke_vm_name | default('mh-wf-' ~ ocpv_wf_epoch.stdout) }}"
+
+    - name: Ensure smoke namespace exists
+      ansible.builtin.command: oc create namespace "{{ smoke_vm_namespace }}"
+      register: ocpv_wf_create_ns
+      changed_when: ocpv_wf_create_ns.rc == 0
+      failed_when: >
+        ocpv_wf_create_ns.rc != 0
+        and ('AlreadyExists' not in (ocpv_wf_create_ns.stderr | default('')))
+        and ('already exists' not in (ocpv_wf_create_ns.stderr | default('')))
+
+    - name: Read SSH public key for workflow survey
+      ansible.builtin.slurp:
+        src: "{{ openshift_virt_aap_vm_ssh_public_key_file | default('/home/matt/keys/id_rsa.pub') }}"
+      register: ocpv_wf_pub_slurp
+
+    - name: Launch workflow on controller
+      ansible.controller.workflow_launch:
+        workflow_template: "OpenShift Virtualization | Provision VM and install package"
+        organization: Default
+        controller_host: "{{ aap_hostname }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: false
+        extra_vars:
+          ocpv_vm_name: "{{ smoke_vm_name }}"
+          ocpv_vm_namespace: "{{ smoke_vm_namespace }}"
+          ocpv_instancetype_name: u1.medium
+          ocpv_preference_name: fedora
+          ocpv_ssh_public_key: "{{ ocpv_wf_pub_slurp.content | b64decode | trim }}"
+          ocpv_post_package_name: "{{ ocpv_post_package_name }}"
+        wait: true
+        timeout: 1200
+      register: ocpv_wf_launch
+      no_log: false
+
+    - name: Assert workflow job succeeded
+      ansible.builtin.assert:
+        that:
+          - ocpv_wf_launch.status | default('') == 'successful'
+        fail_msg: "Workflow status was {{ ocpv_wf_launch.status | default('unknown') }}, id {{ ocpv_wf_launch.id | default('?') }}"
+
+    - name: Assert VirtualMachine exists
+      ansible.builtin.command: >-
+        oc get vm {{ smoke_vm_name }} -n {{ smoke_vm_namespace }}
+        -o jsonpath={.metadata.name}
+      changed_when: false
+      register: ocpv_wf_get_vm
+      failed_when: ocpv_wf_get_vm.stdout | trim | length == 0
+
+    - name: Report workflow validation
+      ansible.builtin.debug:
+        msg:
+          - "Workflow job id {{ ocpv_wf_launch.id }} status {{ ocpv_wf_launch.status }}"
+          - "VirtualMachine {{ smoke_vm_namespace }}/{{ ocpv_wf_get_vm.stdout | trim }}"
