@@ -1,13 +1,16 @@
 ---
-# Post-provision: SSH to the guest as fedora and install a package (dnf).
-# Requires a Machine credential on the job template matching the SSH public key used at VM create
-# (for example from workflow survey variable ocpv_ssh_public_key).
-# Expects: ocpv_vm_name, ocpv_vm_namespace, ocpv_post_package_name
-- name: Discover guest address from KubeVirt VMI
-  hosts: localhost
-  connection: local
+# Post-provision: install a package on a Fedora guest discovered by the Controller
+# "OpenShift Virtualization" inventory source (plugin: redhat.openshift_virtualization).
+#
+# Expects extra vars: ocpv_vm_namespace, ocpv_vm_name, ocpv_post_package_name (workflow survey or job extra_vars).
+# Host name in that inventory is {namespace}-{vm_name} (see Red Hat OpenShift Virtualization / AAP inventory docs).
+#
+# Job template must use the KubeVirt dynamic inventory and a Machine credential whose key matches the VM's
+# ssh_authorized_keys (e.g. survey ocpv_ssh_public_key on Create VM).
+- name: Install requested package on guest
+  hosts: "{{ ocpv_vm_namespace | trim }}-{{ ocpv_vm_name | trim }}"
   gather_facts: false
-  tasks:
+  pre_tasks:
     - name: Validate required job variables
       ansible.builtin.assert:
         that:
@@ -17,66 +20,11 @@
         fail_msg: >-
           Set ocpv_vm_name, ocpv_vm_namespace, and ocpv_post_package_name (workflow survey or extra vars).
 
-    - name: Wait until VMI reports a guest IP
-      kubernetes.core.k8s_info:
-        api_version: kubevirt.io/v1
-        kind: VirtualMachineInstance
-        name: "{{ ocpv_vm_name }}"
-        namespace: "{{ ocpv_vm_namespace }}"
-      register: ocpv_vmi
-      until: >-
-        ocpv_vmi.resources | length > 0
-        and (
-          ocpv_vmi.resources[0].status.interfaces | default([])
-          | selectattr('ipAddress', 'defined')
-          | map(attribute='ipAddress')
-          | list
-          | length > 0
-        )
-      retries: 40
-      delay: 15
-
-    - name: Extract first guest IP from VMI interfaces
-      ansible.builtin.set_fact:
-        ocpv_guest_ip: >-
-          {{
-            (
-              ocpv_vmi.resources[0].status.interfaces | default([])
-              | selectattr('ipAddress', 'defined')
-              | map(attribute='ipAddress')
-              | list
-              | first
-            ) | default('', true)
-          }}
-
-    - name: Require a routable guest IP
-      ansible.builtin.assert:
-        that:
-          - ocpv_guest_ip | length > 0
-        fail_msg: >-
-          No ipAddress on VMI yet. Ensure the VM is running and masquerade networking exposes an address.
-
-    # VMI can report an address before cloud-init finishes and sshd listens; otherwise SSH fails fast with "Connection refused".
-    - name: Wait until SSH is accepting on guest
-      ansible.builtin.wait_for:
-        host: "{{ ocpv_guest_ip }}"
-        port: 22
+    - name: Wait for SSH (VM can appear in inventory before sshd accepts connections)
+      ansible.builtin.wait_for_connection:
         delay: 10
         timeout: 600
-        state: started
 
-    - name: Add guest to in-memory inventory for SSH
-      ansible.builtin.add_host:
-        name: ocpv_guest
-        groups: ocpv_guests
-        ansible_host: "{{ ocpv_guest_ip }}"
-        ansible_user: fedora
-        ansible_connection: ssh
-        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-
-- name: Install requested package on guest
-  hosts: ocpv_guests
-  gather_facts: false
   tasks:
     - name: Install package with dnf
       ansible.builtin.dnf:

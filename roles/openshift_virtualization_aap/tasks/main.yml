@@ -70,6 +70,16 @@
     controller_password: "{{ aap_password }}"
     validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
+- name: Ensure KubeVirt dynamic inventory exists
+  ansible.controller.inventory:
+    name: "{{ openshift_virt_aap_kubevirt_inventory_name }}"
+    organization: Default
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
 # infra.aap_configuration subroles ship empty defaults (e.g. controller_projects: [], aap_organizations: [])
 # that override this role's defaults while dispatch runs. Host facts survive nested include_role.
 # Skip controller_inventories in dispatch (inventory ensured by the task above).
@@ -79,6 +89,7 @@
     controller_execution_environments: "{{ controller_execution_environments }}"
     controller_projects: "{{ controller_projects }}"
     controller_inventories: []
+    controller_inventory_sources: "{{ openshift_virt_aap_controller_inventory_sources }}"
     controller_hosts: "{{ controller_hosts }}"
     controller_workflows: "{{ controller_workflows }}"
 

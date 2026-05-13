@@ -12,6 +12,31 @@ openshift_virt_aap_project_name: OpenShift Virtualization (mad-hatter)
 
 openshift_virt_aap_inventory_name: OpenShift Virtualization Runtime
 
+# Dynamic inventory for OpenShift Virtualization VMs (Controller source: openshift_virtualization / redhat.openshift_virtualization).
+# List every namespace where job templates or workflows create VMs so sync discovers them.
+openshift_virt_aap_kubevirt_inventory_name: "OpenShift Virtualization | KubeVirt VMs"
+openshift_virt_aap_kubevirt_inventory_source_name: "OpenShift Virtualization | KubeVirt inventory sync"
+openshift_virt_aap_kubevirt_inventory_namespaces:
+  - ocpv-aap-smoke
+
+# Dispatched to infra.aap_configuration.controller_inventory_sources (Runtime inventory stays module-managed only).
+openshift_virt_aap_controller_inventory_sources:
+  - name: "{{ openshift_virt_aap_kubevirt_inventory_source_name }}"
+    inventory: "{{ openshift_virt_aap_kubevirt_inventory_name }}"
+    organization: Default
+    description: >-
+      OpenShift Virtualization dynamic inventory (redhat.openshift_virtualization). Namespace list:
+      openshift_virt_aap_kubevirt_inventory_namespaces.
+    source: openshift_virtualization
+    credential: OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    overwrite: true
+    update_on_launch: false
+    timeout: 600
+    verbosity: 1
+    source_vars:
+      namespaces: "{{ openshift_virt_aap_kubevirt_inventory_namespaces }}"
+
 controller_validate_certs: false
 controller_configuration_async_delay: 3
 
