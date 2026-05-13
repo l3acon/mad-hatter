@@ -18,6 +18,29 @@
         + openshift_virt_aap_openshift_credential
       }}
 
+# controller_inventories role passes `variables` through a regex_replace chain that breaks omit/empty dict on Ansible 2.20+.
+- name: Ensure controller inventory exists
+  ansible.controller.inventory:
+    name: "{{ openshift_virt_aap_inventory_name }}"
+    organization: Default
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
+# infra.aap_configuration subroles ship empty defaults (e.g. controller_projects: [], aap_organizations: [])
+# that override this role's defaults while dispatch runs. Host facts survive nested include_role.
+# Skip controller_inventories in dispatch (inventory ensured by the task above).
+- name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
+  ansible.builtin.set_fact:
+    aap_organizations: "{{ aap_organizations }}"
+    controller_execution_environments: "{{ controller_execution_environments }}"
+    controller_projects: "{{ controller_projects }}"
+    controller_inventories: []
+    controller_hosts: "{{ controller_hosts }}"
+    controller_workflows: "{{ controller_workflows }}"
+
 - name: Apply Automation Controller configuration (OpenShift Virtualization CasC)
   ansible.builtin.include_role:
     name: infra.aap_configuration.dispatch

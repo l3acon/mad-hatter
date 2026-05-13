@@ -1,6 +1,7 @@
 ---
-# Override in job template extra vars or playbook -e if needed
-openshift_virt_aap_ee_image: registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest
+# Override in job template extra vars or playbook -e if needed.
+# ee-minimal does not ship redhat.openshift_virtualization; build from execution_environments/rosa/ (publishes quay.io/matferna/mh-rosa).
+openshift_virt_aap_ee_image: quay.io/matferna/mh-rosa:latest
 openshift_virt_aap_ee_name: OpenShift Virtualization EE
 
 openshift_virt_aap_project_scm_url: https://github.com/l3acon/mad-hatter
@@ -14,6 +15,10 @@ controller_configuration_async_delay: 3
 
 # Appended in tasks/main.yml after OpenShift token credential (and with openshift_virt_aap_extra_controller_credentials)
 openshift_virt_aap_extra_controller_credentials: []
+
+# Optional Machine credential name (e.g. "Demo Credential") with private key matching the workflow survey
+# SSH public key (ocpv_ssh_public_key). Appended to the post-install job template credential list.
+openshift_virt_aap_post_install_jt_credentials_suffix: []
 
 openshift_virt_aap_controller_credentials:
   - name: Automation Hub
@@ -45,7 +50,7 @@ openshift_virt_aap_openshift_credential:
       host: "{{ openshift_api_url }}"
       bearer_token: "{{ openshift_bearer_token }}"
 
-gateway_organizations:
+aap_organizations:
   - name: Default
     galaxy_credentials:
       - Ansible Galaxy
@@ -54,7 +59,7 @@ gateway_organizations:
 controller_execution_environments:
   - name: "{{ openshift_virt_aap_ee_name }}"
     image: "{{ openshift_virt_aap_ee_image }}"
-    pull: missing
+    pull: always
 
 controller_inventories:
   - name: "{{ openshift_virt_aap_inventory_name }}"
@@ -73,4 +78,6 @@ controller_projects:
     scm_url: "{{ openshift_virt_aap_project_scm_url }}"
     scm_branch: "{{ openshift_virt_aap_project_scm_branch }}"
     default_environment: "{{ openshift_virt_aap_ee_name }}"
+    allow_override: true
+    scm_update_on_launch: true
     wait: true

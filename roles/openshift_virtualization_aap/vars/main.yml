@@ -11,34 +11,8 @@ controller_templates:
       - Controller Credential
       - OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
-    ask_variables_on_launch: false
-    survey_enabled: true
-    survey_spec:
-      name: ""
-      description: Create a Fedora-based VM using instancetype / preference defaults.
-      spec:
-        - question_name: VM name
-          type: text
-          variable: ocpv_vm_name
-          required: true
-          min: 1
-          max: 253
-        - question_name: Namespace
-          type: text
-          variable: ocpv_vm_namespace
-          required: true
-          min: 1
-          max: 63
-        - question_name: Instancetype name
-          type: text
-          variable: ocpv_instancetype_name
-          required: false
-          default: u1.medium
-        - question_name: Preference name
-          type: text
-          variable: ocpv_preference_name
-          required: false
-          default: fedora
+    ask_variables_on_launch: true
+    survey_enabled: false
 
   - name: "OpenShift Virtualization | Delete VM"
     job_type: run
@@ -63,6 +37,17 @@ controller_templates:
           type: text
           variable: ocpv_vm_namespace
           required: true
+
+  - name: "OpenShift Virtualization | Post-install package on VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_post_install_package.yml
+    credentials: "{{ ['Controller Credential', 'OpenShift Credential'] + openshift_virt_aap_post_install_jt_credentials_suffix }}"
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
 
   - name: "OpenShift Virtualization | VM lifecycle (simple)"
     job_type: run
@@ -167,3 +152,73 @@ controller_templates:
       - OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
+
+controller_workflows:
+  - name: "OpenShift Virtualization | Provision VM and install package"
+    description: >-
+      Create a Fedora-based VM, then SSH as fedora to install a package with dnf.
+      The workflow survey collects an SSH public key for cloud-init; add a Machine credential
+      whose private key matches that public key (append the credential name to
+      openshift_virt_aap_post_install_jt_credentials_suffix when including this role, e.g. ['Demo Credential']).
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: false
+    allow_simultaneous: false
+    ask_inventory_on_launch: false
+    ask_scm_branch_on_launch: false
+    ask_limit_on_launch: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: node101
+        unified_job_template: "OpenShift Virtualization | Create VM"
+        all_parents_must_converge: false
+        success_nodes:
+          - node201
+        failure_nodes: []
+        always_nodes: []
+      - identifier: node201
+        unified_job_template: "OpenShift Virtualization | Post-install package on VM"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+    survey_spec:
+      name: ""
+      description: >-
+        VM parameters, SSH public key for the fedora user (paste id_ed25519.pub or rsa),
+        optional instancetype/preference, and a package name to install after the guest has an IP.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+          min: 1
+          max: 63
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: fedora
+        - question_name: SSH public key for fedora user
+          type: text
+          variable: ocpv_ssh_public_key
+          required: true
+          min: 1
+          max: 8192
+        - question_name: Package to install
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 256

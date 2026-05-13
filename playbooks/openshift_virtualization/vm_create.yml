@@ -15,6 +15,16 @@
         fail_msg: >-
           Set ocpv_vm_name and ocpv_vm_namespace (for example via job template survey).
 
+    - name: Optionally build cloud-init with SSH public key for fedora user
+      when:
+        - ocpv_cloudinit_userdata is not defined
+        - ocpv_ssh_public_key | default('') | trim | length > 0
+      ansible.builtin.set_fact:
+        ocpv_cloudinit_userdata: |
+          #cloud-config
+          ssh_authorized_keys:
+            - "{{ ocpv_ssh_public_key | trim }}"
+
     - name: Create VirtualMachine
       redhat.openshift_virtualization.kubevirt_vm:
         name: "{{ ocpv_vm_name }}"
