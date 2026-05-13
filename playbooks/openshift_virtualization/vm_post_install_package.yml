@@ -56,6 +56,15 @@
         fail_msg: >-
           No ipAddress on VMI yet. Ensure the VM is running and masquerade networking exposes an address.
 
+    # VMI can report an address before cloud-init finishes and sshd listens; otherwise SSH fails fast with "Connection refused".
+    - name: Wait until SSH is accepting on guest
+      ansible.builtin.wait_for:
+        host: "{{ ocpv_guest_ip }}"
+        port: 22
+        delay: 10
+        timeout: 600
+        state: started
+
     - name: Add guest to in-memory inventory for SSH
       ansible.builtin.add_host:
         name: ocpv_guest
