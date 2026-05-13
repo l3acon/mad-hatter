@@ -192,13 +192,15 @@ if (-not (Test-Path -LiteralPath $sysprep)) {
 }
 
 Write-Host 'Launching sysprep /generalize /oobe /shutdown (VM will power off when finished)...'
-$sysprepArgs = @(
-    '/generalize'
-    '/oobe'
-    '/shutdown'
-    "/unattend:$unattend"
-)
+# Do not use Start-Process -ArgumentList with an array when /unattend includes spaces (Program Files).
+# Sysprep then receives a truncated argv and prints only its USAGE banner.
+$unattendArg = '/unattend:{0}' -f $unattend
+Write-Host "Invoking: $sysprep /generalize /oobe /shutdown $unattendArg"
 
-if ($Force -or $PSCmdlet.ShouldProcess($sysprep, ($sysprepArgs -join ' '))) {
-    Start-Process -FilePath $sysprep -ArgumentList $sysprepArgs -Wait
+if ($Force -or $PSCmdlet.ShouldProcess($sysprep, "/generalize /oobe /shutdown $unattendArg")) {
+    & $sysprep @('/generalize', '/oobe', '/shutdown', $unattendArg)
+    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        throw "sysprep.exe exited with code $LASTEXITCODE"
+    }
 }
+Write-Host 'Sysprep process exited (guest may still be shutting down).'
