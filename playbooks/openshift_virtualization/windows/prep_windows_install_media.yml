@@ -1,0 +1,9 @@
+---
+# Ordered prep: blank OS DataVolume, upload eval ISO, apply installer VM.
+# Run from repo root with oc logged in. ISO upload streams the full file (multi-GB).
+#
+#   ansible-playbook playbooks/openshift_virtualization/windows/prep_windows_install_media.yml \
+#     -e ocpv_win_iso_local_path=/home/matt/Downloads/SERVER_EVAL_x64FRE_en-us.iso
+- import_playbook: dv_create_blank_os.yml
+- import_playbook: dv_upload_iso.yml
+- import_playbook: vm_apply_installer.yml

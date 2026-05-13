@@ -34,6 +34,23 @@
           Set openshift_virt_aap_vm_ssh_private_key_file / openshift_virt_aap_vm_ssh_public_key_file,
           or disable with openshift_virt_aap_vm_ssh_machine_cred_enabled: false.
 
+- name: Verify Windows VM SSH key file exists (when Windows Machine credential enabled)
+  when: openshift_virt_aap_windows_vm_ssh_machine_cred_enabled | bool
+  block:
+    - name: Stat Windows VM SSH private key
+      ansible.builtin.stat:
+        path: "{{ openshift_virt_aap_windows_vm_ssh_private_key_file }}"
+      register: openshift_virt_aap_win_ssh_priv_stat
+
+    - name: Assert Windows VM SSH private key exists
+      ansible.builtin.assert:
+        that:
+          - openshift_virt_aap_win_ssh_priv_stat.stat.exists | bool
+          - openshift_virt_aap_win_ssh_priv_stat.stat.isreg | bool
+        fail_msg: >-
+          openshift_virt_aap_windows_vm_ssh_machine_cred_enabled is true but the private key file is missing.
+          Set openshift_virt_aap_windows_vm_ssh_private_key_file or disable with openshift_virt_aap_windows_vm_ssh_machine_cred_enabled: false.
+
 - name: Build merged controller credentials for dispatch # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     controller_credentials: >-
@@ -54,6 +71,21 @@
               },
             ]
             if openshift_virt_aap_vm_ssh_machine_cred_enabled | bool else []
+          )
+        + (
+            [
+              {
+                'name': openshift_virt_aap_windows_vm_ssh_machine_cred_name,
+                'credential_type': 'Machine',
+                'organization': 'Default',
+                'update_secrets': true,
+                'inputs': {
+                  'username': openshift_virt_aap_windows_vm_ssh_username,
+                  'ssh_key_data': lookup('file', openshift_virt_aap_windows_vm_ssh_private_key_file),
+                },
+              },
+            ]
+            if openshift_virt_aap_windows_vm_ssh_machine_cred_enabled | bool else []
           )
         + openshift_virt_aap_openshift_credential
       }}

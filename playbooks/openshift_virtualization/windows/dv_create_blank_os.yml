@@ -1,0 +1,50 @@
+---
+# Create a blank DataVolume for Windows installation target (virtio system disk).
+# Run before vm_apply_installer.yml. Size should fit a full Windows Server + updates + cloudbase-init.
+#
+# With storage classes that use WaitForFirstConsumer (e.g. gp3-csi on ROSA), the PVC often stays Pending
+# until a VirtualMachine references this DataVolume; that is expected.
+#
+# Required extra vars: none if defaults suffice.
+#   -e ocpv_win_namespace=ocpv-aap-smoke
+#   -e ocpv_win_os_blank_dv_name=windows-server-os-work
+#   -e ocpv_win_os_disk_size=60Gi
+#   -e ocpv_win_storage_class=gp3-csi
+- name: Create blank DataVolume for Windows OS disk
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ocpv_win_namespace: ocpv-aap-smoke
+    ocpv_win_os_blank_dv_name: windows-server-os-work
+    ocpv_win_os_disk_size: 60Gi
+    ocpv_win_storage_class: gp3-csi
+  tasks:
+    - name: Assert namespace is set
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_namespace is defined and ocpv_win_namespace | length > 0
+          - ocpv_win_os_blank_dv_name is defined and ocpv_win_os_blank_dv_name | length > 0
+
+    - name: Ensure blank OS DataVolume exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: "{{ ocpv_win_os_blank_dv_name }}"
+            namespace: "{{ ocpv_win_namespace }}"
+            annotations:
+              cdi.kubevirt.io/storage.bind.immediate.requested: "true"
+          spec:
+            source:
+              blank: {}
+            pvc:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: "{{ ocpv_win_os_disk_size }}"
+              storageClassName: "{{ ocpv_win_storage_class }}"
+        wait: false

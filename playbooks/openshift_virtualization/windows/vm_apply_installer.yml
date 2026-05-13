@@ -1,0 +1,29 @@
+---
+# Apply the one-time Windows installer VirtualMachine (ISO + blank OS + virtio drivers).
+# Prereqs: DataVolumes for ISO and blank OS exist (dv_upload_iso.yml, dv_create_blank_os.yml).
+#
+#   ansible-playbook playbooks/openshift_virtualization/windows/vm_apply_installer.yml
+- name: Apply Windows installer VirtualMachine manifest
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ocpv_win_namespace: ocpv-aap-smoke
+    ocpv_win_installer_vm_name: windows-server-installer
+    ocpv_win_iso_dv_name: windows-server-eval-iso
+    ocpv_win_os_blank_dv_name: windows-server-os-work
+    ocpv_win_virtio_containerdisk_image: quay.io/kubevirt/virtio-container-disk:v1.2.0
+    ocpv_win_installer_cpu_cores: 4
+    ocpv_win_installer_memory: 8Gi
+  tasks:
+    - name: Assert required names
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_namespace is defined and ocpv_win_namespace | length > 0
+          - ocpv_win_installer_vm_name is defined and ocpv_win_installer_vm_name | length > 0
+
+    - name: Apply VirtualMachine from template
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'windows_installer_vm.yaml.j2') | from_yaml }}"
+        wait: false

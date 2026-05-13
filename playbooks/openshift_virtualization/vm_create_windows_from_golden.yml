@@ -1,0 +1,59 @@
+---
+# Create a Windows VirtualMachine booting from an existing root DataVolume (golden image)
+# and optional cloudbase-init / cloud-config user-data on cloudInitNoCloud.
+#
+# Extra vars / survey:
+#   ocpv_vm_name, ocpv_vm_namespace, ocpv_win_root_dv_name
+#   ocpv_instancetype_name (default u1.medium), ocpv_preference_name (default windows.2k22)
+#   ocpv_cloudinit_userdata (optional raw #cloud-config for cloudbase-init)
+- name: Create Windows VM from DataVolume
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate required job variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_vm_name is defined and ocpv_vm_name | length > 0
+          - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
+          - ocpv_win_root_dv_name is defined and ocpv_win_root_dv_name | length > 0
+        fail_msg: >-
+          Set ocpv_vm_name, ocpv_vm_namespace, and ocpv_win_root_dv_name (existing DataVolume for C:).
+
+    - name: Build cloudInitNoCloud user data (minimal cloud-config when unset)
+      ansible.builtin.set_fact:
+        ocpv_cloudinit_userdata_effective: >-
+          {{ ocpv_cloudinit_userdata | default('#cloud-config\n# Add cloudbase-init compatible config here.\n', true) }}
+
+    - name: Build volume list (root DataVolume + NoCloud)
+      ansible.builtin.set_fact:
+        ocpv_vm_volumes:
+          - name: root
+            dataVolume:
+              name: "{{ ocpv_win_root_dv_name }}"
+          - name: cloudinit
+            cloudInitNoCloud:
+              userData: "{{ ocpv_cloudinit_userdata_effective }}"
+
+    - name: Create Windows VirtualMachine
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+        state: present
+        labels: "{{ ocpv_vm_labels | default(omit) }}"
+        instancetype:
+          name: "{{ ocpv_instancetype_name | default('u1.medium') }}"
+        preference:
+          name: "{{ ocpv_preference_name | default('windows.2k22') }}"
+        spec:
+          domain:
+            devices:
+              interfaces:
+                - name: default
+                  masquerade: {}
+          networks:
+            - name: default
+              pod: {}
+          volumes: "{{ ocpv_vm_volumes }}"
+        wait: "{{ ocpv_vm_wait | default(true) }}"
+        wait_timeout: "{{ ocpv_vm_wait_timeout | default(900) }}"

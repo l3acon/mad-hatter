@@ -1,0 +1,71 @@
+# One-time Windows installer VM: boots eval ISO from DataVolume, installs to blank OS DataVolume.
+# Attach virtio drivers CD so Setup can see the virtio system disk.
+# After installation, delete this VM and either clone the OS DV or upload a generalized golden image.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: "{{ ocpv_win_installer_vm_name }}"
+  namespace: "{{ ocpv_win_namespace }}"
+  labels:
+    app.kubernetes.io/name: mad-hatter-windows-installer
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: "{{ ocpv_win_installer_vm_name }}"
+    spec:
+      domain:
+        machine:
+          type: q35
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+        cpu:
+          cores: {{ ocpv_win_installer_cpu_cores | int }}
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            # Boot order: lower number = tried first. The virtio driver CD is a containerDisk CD-ROM; if it has no
+            # bootOrder (or is listed first), firmware often tries it before the Windows ISO and the VM never boots setup.
+            - name: winiso
+              cdrom:
+                bus: sata
+              bootOrder: 1
+            - name: osdisk
+              disk:
+                bus: virtio
+              bootOrder: 2
+            - name: virtioscsi
+              cdrom:
+                bus: sata
+              bootOrder: 99
+          interfaces:
+            - name: default
+              masquerade: {}
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            relaxed: {}
+            vapic: {}
+            spinlocks:
+              spinlocks: 8191
+        resources:
+          requests:
+            memory: "{{ ocpv_win_installer_memory }}"
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: winiso
+          dataVolume:
+            name: "{{ ocpv_win_iso_dv_name }}"
+        - name: osdisk
+          dataVolume:
+            name: "{{ ocpv_win_os_blank_dv_name }}"
+        - name: virtioscsi
+          containerDisk:
+            image: "{{ ocpv_win_virtio_containerdisk_image }}"

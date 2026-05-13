@@ -1,0 +1,100 @@
+---
+# Post-provision: connect with WinRM and install a package using Chocolatey (bootstrap if needed).
+# Expects: ocpv_vm_name, ocpv_vm_namespace, ocpv_post_package_name, ocpv_windows_admin_password
+#
+# Job template should use the Windows execution environment (ansible.windows + pywinrm).
+- name: Discover guest IP from VMI and wait for WinRM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate required job variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_vm_name is defined and ocpv_vm_name | length > 0
+          - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
+          - ocpv_post_package_name is defined and ocpv_post_package_name | length > 0
+          - ocpv_windows_admin_password is defined and ocpv_windows_admin_password | length > 0
+        fail_msg: >-
+          Set ocpv_vm_name, ocpv_vm_namespace, ocpv_post_package_name, and ocpv_windows_admin_password.
+
+    - name: Wait until VMI reports a guest IP
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: ocpv_vmi
+      until: >-
+        ocpv_vmi.resources | length > 0
+        and (
+          ocpv_vmi.resources[0].status.interfaces | default([])
+          | selectattr('ipAddress', 'defined')
+          | map(attribute='ipAddress')
+          | list
+          | length > 0
+        )
+      retries: 40
+      delay: 15
+
+    - name: Extract first guest IP from VMI interfaces
+      ansible.builtin.set_fact:
+        ocpv_guest_ip: >-
+          {{
+            (
+              ocpv_vmi.resources[0].status.interfaces | default([])
+              | selectattr('ipAddress', 'defined')
+              | map(attribute='ipAddress')
+              | list
+              | first
+            ) | default('', true)
+          }}
+
+    - name: Require a routable guest IP
+      ansible.builtin.assert:
+        that:
+          - ocpv_guest_ip | length > 0
+        fail_msg: >-
+          No ipAddress on VMI yet.
+
+    - name: Wait until WinRM answers (HTTP 5985)
+      ansible.builtin.wait_for:
+        host: "{{ ocpv_guest_ip }}"
+        port: "{{ ocpv_windows_winrm_port | default(5985) }}"
+        delay: 15
+        timeout: 900
+        state: started
+
+    - name: Add guest to in-memory inventory for WinRM
+      ansible.builtin.add_host:
+        name: ocpv_win_guest
+        groups: ocpv_win_guests
+        ansible_host: "{{ ocpv_guest_ip }}"
+        ansible_user: "{{ ocpv_windows_admin_user | default('Administrator') }}"
+        ansible_password: "{{ ocpv_windows_admin_password }}"
+        ansible_connection: winrm
+        ansible_port: "{{ ocpv_windows_winrm_port | default(5985) }}"
+        ansible_winrm_transport: "{{ ocpv_windows_winrm_transport | default('ntlm') }}"
+        ansible_winrm_scheme: http
+        ansible_winrm_server_cert_validation: ignore
+
+- name: Install requested package with Chocolatey
+  hosts: ocpv_win_guests
+  gather_facts: false
+  tasks:
+    - name: Wait for WinRM session
+      ansible.windows.win_ping:
+
+    - name: Install Chocolatey when missing
+      ansible.windows.win_shell: |
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        }
+      changed_when: false
+
+    - name: Install package with Chocolatey
+      ansible.windows.win_shell: "choco install -y '{{ ocpv_post_package_name }}'"
+      register: ocpv_choco
+      changed_when: ocpv_choco.rc == 0

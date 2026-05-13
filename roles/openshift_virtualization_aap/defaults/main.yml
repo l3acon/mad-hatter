@@ -4,6 +4,16 @@
 openshift_virt_aap_ee_image: quay.io/matferna/mh-rosa:latest
 openshift_virt_aap_ee_name: OpenShift Virtualization EE
 
+# Windows automation EE (build from execution_environments/windows/ and push before CasC references the image).
+openshift_virt_aap_ee_windows_image: quay.io/matferna/mh-windows:latest
+openshift_virt_aap_ee_windows_name: OpenShift Virtualization Windows EE
+
+# Optional second Machine credential for Windows guests (e.g. OpenSSH as Administrator). Off by default.
+openshift_virt_aap_windows_vm_ssh_machine_cred_enabled: false
+openshift_virt_aap_windows_vm_ssh_machine_cred_name: "OpenShift Virtualization | Windows VM SSH"
+openshift_virt_aap_windows_vm_ssh_username: Administrator
+openshift_virt_aap_windows_vm_ssh_private_key_file: "{{ openshift_virt_aap_vm_ssh_private_key_file }}"
+
 openshift_virt_aap_project_scm_url: https://github.com/l3acon/mad-hatter
 # When CasC is applied via playbooks/openshift_virtualization/aap_rollout_casc.yml, the playbook sets this from
 # `git rev-parse --abbrev-ref HEAD` if unset so the controller project tracks your checkout branch.
@@ -95,6 +105,9 @@ aap_organizations:
 controller_execution_environments:
   - name: "{{ openshift_virt_aap_ee_name }}"
     image: "{{ openshift_virt_aap_ee_image }}"
+    pull: always
+  - name: "{{ openshift_virt_aap_ee_windows_name }}"
+    image: "{{ openshift_virt_aap_ee_windows_image }}"
     pull: always
 
 controller_inventories:

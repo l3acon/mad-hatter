@@ -54,6 +54,32 @@ controller_templates:
     ask_variables_on_launch: true
     survey_enabled: false
 
+  - name: "OpenShift Virtualization | Create Windows VM from DataVolume"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_create_windows_from_golden.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "OpenShift Virtualization | Post-install Chocolatey on Windows VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_post_install_windows.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
   - name: "OpenShift Virtualization | VM lifecycle (simple)"
     job_type: run
     organization: Default
@@ -232,3 +258,79 @@ controller_workflows:
           required: true
           min: 1
           max: 256
+
+  - name: "OpenShift Virtualization | Provision Windows VM and install package"
+    description: >-
+      Create a Windows VM from an existing golden root DataVolume, then connect with WinRM and install a Chocolatey package.
+      Requires WinRM on the guest. Uses EE {{ openshift_virt_aap_ee_windows_name }}.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: false
+    allow_simultaneous: false
+    ask_inventory_on_launch: false
+    ask_scm_branch_on_launch: false
+    ask_limit_on_launch: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Provision Windows VM
+        unified_job_template: "OpenShift Virtualization | Create Windows VM from DataVolume"
+        all_parents_must_converge: false
+        success_nodes:
+          - Install Windows packages
+        failure_nodes: []
+        always_nodes: []
+      - identifier: Install Windows packages
+        unified_job_template: "OpenShift Virtualization | Post-install Chocolatey on Windows VM"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+    survey_spec:
+      name: ""
+      description: >-
+        VM identity, golden root DataVolume name, Chocolatey package id, and Administrator password (WinRM).
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+          min: 1
+          max: 63
+        - question_name: Root DataVolume name
+          question_description: >-
+            Existing DataVolume in the same namespace containing the Windows system disk (golden image).
+          type: text
+          variable: ocpv_win_root_dv_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: windows.2k22
+        - question_name: Local Administrator password
+          type: password
+          variable: ocpv_windows_admin_password
+          required: true
+          min: 1
+          max: 256
+        - question_name: Chocolatey package id
+          question_description: >-
+            Package name as used with choco install (for example notepadplusplus, firefox).
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 128

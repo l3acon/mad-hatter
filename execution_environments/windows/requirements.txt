@@ -1,0 +1,5 @@
+kubernetes
+jmespath
+pywinrm
+requests-credssp
+pyspnego
