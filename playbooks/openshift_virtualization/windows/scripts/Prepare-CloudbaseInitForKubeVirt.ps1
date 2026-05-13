@@ -6,7 +6,8 @@
 .DESCRIPTION
     Intended to run once on a freshly installed Windows Server VM (Administrator session) before you
     seal the disk for OpenShift Virtualization / KubeVirt. After completion the VM shuts down; power off
-    is normal — capture or clone the root DataVolume next.
+    is normal — capture or clone the root DataVolume next. On Windows Server Core, sysprep omits /oobe
+    by default (OOBE wizard is not available there).
 
     Typical use:
       1. Finish Windows setup and log in as Administrator.
@@ -39,6 +40,12 @@
 .PARAMETER SkipSysprep
     Install and configure only; do not run sysprep (for debugging).
 
+.PARAMETER SysprepOobeMode
+    Controls whether sysprep uses /oobe. **Auto** (default): omit /oobe on **Windows Server Core**
+    (OOBE wizard / msoobe.exe is not supported there and can fail with hr=0x80040154); use /oobe on
+    other SKUs. **Oobe** / **NoOobe** override the auto choice. Without /oobe, Microsoft documents
+    that the next boot still runs the **specialize** pass (see Sysprep /generalize /shutdown).
+
 .EXAMPLE
     .\Prepare-CloudbaseInitForKubeVirt.ps1 -Verbose
 
@@ -56,11 +63,25 @@ param(
 
     [uri] $MsiDownloadUri = $null,
 
-    [switch] $SkipSysprep
+    [switch] $SkipSysprep,
+
+    [ValidateSet('Auto', 'Oobe', 'NoOobe')]
+    [string] $SysprepOobeMode = 'Auto'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Test-WindowsServerCoreInstallation {
+    try {
+        $it = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' `
+                -Name InstallationType -ErrorAction Stop).InstallationType
+        return ($null -ne $it) -and ($it -eq 'Server Core')
+    }
+    catch {
+        return $false
+    }
+}
 
 function Test-Administrator {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -107,7 +128,7 @@ $nocloudFirst =
     'cloudbaseinit.metadata.services.httpservice.HttpService,' +
     'cloudbaseinit.metadata.services.maasservice.MaaSHttpService'
 
-function Update-CloudbaseConfFile {
+function Update-CloudbaseMainConf {
     param(
         [Parameter(Mandatory = $true)]
         [string] $Path
@@ -120,6 +141,31 @@ function Update-CloudbaseConfFile {
     Copy-Item -Path $Path -Destination "$Path.bak.$stamp" -Force
 
     $text = Get-Content -LiteralPath $Path -Raw
+
+    # Stock cloudbase-init.conf uses a MULTI-LINE comma list for metadata_services=. Our earlier
+    # single-line replace left orphaned continuation lines and broke parsing — that can surface as
+    # sysprep / first-boot reboot loops. Remove the entire block, then insert one clean line.
+    if ($text -match 'nocloudservice\.NoCloudConfigDriveService') {
+        Write-Verbose "metadata_services already references NoCloud (nocloudservice) in $Path"
+    }
+    else {
+        $removed = [regex]::Replace(
+            $text,
+            '(?ms)^\s*metadata_services\s*=.*?(?=^[A-Za-z0-9_\[]|\z)',
+            '',
+            1)
+        if ($removed.Length -eq $text.Length) {
+            Write-Warning "No metadata_services= block found in $Path; appending new entry only."
+        }
+        $text = $removed
+        $insert = "metadata_services=$nocloudFirst`r`n"
+        if ($text -match '\[DEFAULT\]') {
+            $text = $text -replace '(\[DEFAULT\]\s*\r?\n)', "`$1$insert"
+        }
+        else {
+            $text = "[DEFAULT]`r`n$insert" + $text
+        }
+    }
 
     # Ensure config-drive / NoCloud media are scanned (ISO + CD paths).
     foreach ($pair in @(
@@ -137,34 +183,15 @@ function Update-CloudbaseConfFile {
         }
     }
 
-    # Prepend NoCloud-related services to metadata_services= (once).
-    if ($text -match 'nocloudservice\.NoCloudConfigDriveService') {
-        Write-Verbose "metadata_services already references NoCloud (nocloudservice) in $Path"
-    }
-    elseif ($text -match '(?m)^(\s*metadata_services\s*=\s*)(.*)$') {
-        $prefix = $Matches[1]
-        $rest = $Matches[2].Trim()
-        $newLine = "${prefix}$nocloudFirst$rest"
-        $m = [regex]::Match($text, '(?m)^\s*metadata_services\s*=.*$')
-        if (-not $m.Success) { throw "metadata_services regex mismatch in $Path" }
-        $text = $text.Substring(0, $m.Index) + $newLine + $text.Substring($m.Index + $m.Length)
-    }
-    else {
-        $inject = "`r`nmetadata_services=$nocloudFirst`r`n"
-        if ($text -match '\[DEFAULT\]') {
-            $text = $text -replace '(\[DEFAULT\]\s*\r?\n)', "`$1$inject"
-        }
-        else {
-            $text = "[DEFAULT]$inject" + $text
-        }
-    }
-
-    Set-Content -LiteralPath $Path -Value $text -Encoding utf8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $text, $utf8NoBom)
     Write-Host "Updated $Path"
 }
 
-Update-CloudbaseConfFile -Path (Join-Path $cbConfDir 'cloudbase-init.conf')
-Update-CloudbaseConfFile -Path (Join-Path $cbConfDir 'cloudbase-init-unattend.conf')
+# Only patch the main config used after clone. Do NOT rewrite cloudbase-init-unattend.conf: the
+# sysprep specialize path expects Cloudbase's stock layout; a broken unattend.conf contributes to
+# reboot / recovery loops.
+Update-CloudbaseMainConf -Path (Join-Path $cbConfDir 'cloudbase-init.conf')
 
 # Cloudbase ships Unattend.xml so sysprep runs the init pass with cloudbase-init-unattend.conf.
 $unattendCandidates = @(
@@ -178,7 +205,8 @@ if (-not $unattend) {
 
 Write-Host "Using unattend: $unattend"
 
-# Ensure Cloudbase Init service starts after clone (installer usually sets Automatic).
+# Stop the service before sysprep so it does not race with specialize; it remains Automatic for clones.
+Get-Service -Name 'cloudbase-init' -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
 Get-Service -Name 'cloudbase-init' -ErrorAction SilentlyContinue | Set-Service -StartupType Automatic -ErrorAction SilentlyContinue
 
 if ($SkipSysprep) {
@@ -191,14 +219,32 @@ if (-not (Test-Path -LiteralPath $sysprep)) {
     throw "Sysprep not found at $sysprep"
 }
 
-Write-Host 'Launching sysprep /generalize /oobe /shutdown (VM will power off when finished)...'
+$useOobe = switch ($SysprepOobeMode) {
+    'Oobe' { $true }
+    'NoOobe' { $false }
+    default {
+        if (Test-WindowsServerCoreInstallation) { $false }
+        else { $true }
+    }
+}
+$oobeLabel = if ($useOobe) { '/generalize /oobe /shutdown' } else { '/generalize /shutdown (no /oobe; Server Core or NoOobe)' }
+Write-Host "Launching sysprep $oobeLabel (VM will power off when finished)..."
+if (-not $useOobe -and (Test-WindowsServerCoreInstallation)) {
+    Write-Verbose 'Server Core detected: skipping /oobe so msoobe/OOBE COM stack is not invoked (avoids REGDB_E_CLASSNOTREG / 0x80040154).'
+}
 # Do not use Start-Process -ArgumentList with an array when /unattend includes spaces (Program Files).
 # Sysprep then receives a truncated argv and prints only its USAGE banner.
 $unattendArg = '/unattend:{0}' -f $unattend
-Write-Host "Invoking: $sysprep /generalize /oobe /shutdown $unattendArg"
+$sysprepArgs = [System.Collections.Generic.List[string]]::new()
+$sysprepArgs.Add('/generalize')
+if ($useOobe) { $sysprepArgs.Add('/oobe') }
+$sysprepArgs.Add('/shutdown')
+$sysprepArgs.Add($unattendArg)
+$argSummary = ($sysprepArgs -join ' ')
+Write-Host "Invoking: $sysprep $argSummary"
 
-if ($Force -or $PSCmdlet.ShouldProcess($sysprep, "/generalize /oobe /shutdown $unattendArg")) {
-    & $sysprep @('/generalize', '/oobe', '/shutdown', $unattendArg)
+if ($Force -or $PSCmdlet.ShouldProcess($sysprep, $argSummary)) {
+    & $sysprep @($sysprepArgs.ToArray())
     if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
         throw "sysprep.exe exited with code $LASTEXITCODE"
     }

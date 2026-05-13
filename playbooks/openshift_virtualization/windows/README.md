@@ -45,8 +45,28 @@ After install, the guest may have **no working network** until **NetKVM** (VirtI
 
 Script: **`scripts/Prepare-CloudbaseInitForKubeVirt.ps1`**
 
-- Downloads Cloudbase-Init MSI from GitHub, installs silently, patches **`cloudbase-init.conf`** and **`cloudbase-init-unattend.conf`** for KubeVirt-style **NoCloud** metadata, then runs **`sysprep.exe /generalize /oobe /shutdown`** with Cloudbase’s **`Unattend.xml`**.
+- Downloads Cloudbase-Init MSI from GitHub, installs silently, patches **`cloudbase-init.conf`** only (see below), then runs **`sysprep.exe /generalize [/oobe] /shutdown`** with Cloudbase’s **`Unattend.xml`**. On **Windows Server Core**, **`/oobe` is omitted by default** so setup does not try to launch the OOBE wizard (see below).
 - Run from an **elevated** PowerShell.
+- **`cloudbase-init-unattend.conf` is left stock.** Rewriting it (or half-replacing multi-line `metadata_services`) can break the sysprep specialize path and cause **reboot / recovery loops**.
+
+### Sysprep / reboot loop after running the script
+
+Likely causes we have seen:
+
+1. **Corrupt `cloudbase-init.conf`** — Cloudbase ships **`metadata_services=` as a multi-line comma list**. Replacing only the **first** line leaves invalid continuation lines; the parser misbehaves and Windows can enter **specialize / OOBE recovery loops**.
+2. **Editing `cloudbase-init-unattend.conf` unnecessarily** — the unattend phase expects Cloudbase’s default layout; keep it unless you know exactly what to change.
+
+The script now **removes the entire `metadata_services` block** (multi-line aware), inserts **one** clean line, sets **`config_drive_cdrom`** / **`config_drive_raw_hhd`**, writes **UTF-8 without BOM**, and **stops** the `cloudbase-init` service before sysprep.
+
+**Recovery:** restore from `cloudbase-init.conf.bak.<timestamp>` next to the file, then reinstall Cloudbase or rerun a fixed script.
+
+### `setuperr.log`: `[msoobe.exe] Failed to create the wizard … hr=0x80040154`
+
+**`0x80040154`** is **`REGDB_E_CLASSNOTREG`** (a COM class is not registered). **`msoobe.exe`** is the **OOBE** (out-of-box experience) shell. On **Windows Server Core**, the full OOBE wizard stack is not present, so **`sysprep … /oobe`** can fail in **`UnattendGC\setuperr.log`** with this pattern even though other steps look fine.
+
+**What to do:** use an updated prep script: on **Windows Server Core** it omits **`/oobe`** automatically. You can force the same behavior on any SKU with **`-SysprepOobeMode NoOobe`**. Microsoft documents that after **`/generalize /shutdown`**, the next boot still runs the **specialize** configuration pass, which is what Cloudbase’s **`Unattend.xml`** relies on. If you truly need interactive OOBE, install **Server with Desktop Experience** (or a client SKU) instead of Core.
+
+The drive letter in paths (for example **`F:\Windows\Panther\…`**) is whatever volume Windows assigned during setup or recovery; the same log files live under **`%SystemRoot%\Panther\`** on the system volume.
 
 ### Sysprep shows only “USAGE: sysprep.exe …”
 
