@@ -31,7 +31,9 @@ openshift_virt_aap_controller_inventory_sources:
     credential: OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     overwrite: true
-    update_on_launch: false
+    # Re-sync when the post-install job runs so inventory matches the API even if the workflow sync raced.
+    update_on_launch: true
+    update_cache_timeout: 0
     timeout: 600
     verbosity: 1
     source_vars:
