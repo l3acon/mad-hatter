@@ -1,0 +1,29 @@
+---
+# Start / stop / restart for a single VM (wraps infra.openshift_virtualization_ops.vm_lifecycle).
+- name: Simple VM lifecycle (start | stop | restart)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    openshift_host: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_HOST', default=Undefined) | default('', True) }}"
+    openshift_api_key: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY', default=Undefined) | default('', True) }}"
+    openshift_verify_ssl: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_VERIFY_SSL', default='') | default(false) | bool }}"
+  tasks:
+    - name: Validate required job variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_vm_operation is defined
+          - ocpv_vm_operation in ['start', 'stop', 'restart']
+          - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
+          - ocpv_vm_name is defined and ocpv_vm_name | length > 0
+
+    - name: Run VM lifecycle operations
+      ansible.builtin.include_role:
+        name: infra.openshift_virtualization_ops.vm_lifecycle
+        tasks_from: vm_operations.yml
+      vars:
+        vm_lifecycle_vm_operations_request:
+          - operation: "{{ ocpv_vm_operation }}"
+            namespace: "{{ ocpv_vm_namespace }}"
+            names:
+              - "{{ ocpv_vm_name }}"

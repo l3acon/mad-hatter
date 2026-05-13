@@ -28,6 +28,7 @@
       kubernetes.core.k8s:
         state: present
         definition: "{{ lookup('template', 'admin_secret.j2') }}"
+      register: r_aap_admin_secret_apply
 
     - name: Create Lightspeed
       when: aap_operator_disable_lightspeed is not true
@@ -113,13 +114,76 @@
 - name: Inject AAP Manifest
   when: aap_operator_inject_manifest | bool
   block:
+    - name: Wait for controller and gateway to pick up admin secret changes
+      ansible.builtin.pause:
+        seconds: 120
+      when: r_aap_admin_secret_apply.changed | default(false)
+
+    # AAP 2.6+ issues OAuth tokens at /api/gateway/v1/tokens/; ansible.controller still
+    # POSTs to /api/controller/v2/tokens/ by default, which returns 401 on 2.6.
+    - name: Obtain OAuth2 token from AAP gateway (2.6+)
+      ansible.builtin.uri:
+        url: "https://{{ automation_controller_hostname }}/api/gateway/v1/tokens/"
+        method: POST
+        url_username: "{{ aap_operator_admin_username | default('admin') }}"
+        url_password: "{{ aap_operator_admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          description: Ansible playbook manifest application
+          application: null
+          scope: write
+        return_content: true
+        status_code: [200, 201]
+        validate_certs: false
+      register: r_gw_token
+      ignore_errors: true
+
+    - name: Obtain OAuth2 token from controller API (2.5 and earlier)
+      ansible.builtin.uri:
+        url: "https://{{ automation_controller_hostname }}/api/controller/v2/tokens/"
+        method: POST
+        url_username: "{{ aap_operator_admin_username | default('admin') }}"
+        url_password: "{{ aap_operator_admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          description: Ansible playbook manifest application
+          application: null
+          scope: write
+        return_content: true
+        status_code: [200, 201]
+        validate_certs: false
+      register: r_legacy_token
+      when: r_gw_token is failed
+      ignore_errors: true
+
+    - name: Set OAuth token fact for license module
+      ansible.builtin.set_fact:
+        _controller_api_oauth_token: >-
+          {{
+            (r_gw_token.json.token | default(r_gw_token.json.access_token | default('')))
+            if not (r_gw_token is failed)
+            else (r_legacy_token.json.token | default(r_legacy_token.json.access_token | default('')))
+          }}
+
+    - name: Assert OAuth token was obtained
+      ansible.builtin.assert:
+        that:
+          - _controller_api_oauth_token | length > 0
+        fail_msg: >-
+          Could not obtain an API token from /api/gateway/v1/tokens/ or /api/controller/v2/tokens/.
+          Confirm CONTROLLER_PASSWORD matches the controller admin password (log in to the controller UI as admin).
+          After changing the aap-admin-password secret, wait for reconciliation or use the pause when the secret task reports changed.
+
     - name: Do inject
       ansible.controller.license:
         manifest: "{{ aap_operator_inject_manifest_path }}"
         controller_host: "https://{{ automation_controller_hostname }}"
-        controller_username: admin
-        controller_password: "{{ aap_operator_admin_password }}"
-        validate_certs: true
+        aap_token: "{{ _controller_api_oauth_token }}"
+        validate_certs: false
+        controller_username: "{{ omit }}"
+        controller_password: "{{ omit }}"
       register: r_aap_license
 
 # Make sure to inject the manifest before creating the rolebinding;

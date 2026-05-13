@@ -1,0 +1,169 @@
+---
+# Job templates: attach "OpenShift Credential" for API access (K8S_AUTH_* injectors).
+controller_templates:
+  - name: "OpenShift Virtualization | Create VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_create.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: false
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Create a Fedora-based VM using instancetype / preference defaults.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+          min: 1
+          max: 63
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: fedora
+
+  - name: "OpenShift Virtualization | Delete VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_delete.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: ""
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+
+  - name: "OpenShift Virtualization | VM lifecycle (simple)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_operations_simple.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Start, stop, or restart a single VM by name.
+      spec:
+        - question_name: Operation
+          type: multiplechoice
+          variable: ocpv_vm_operation
+          required: true
+          choices:
+            - start
+            - stop
+            - restart
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+
+  - name: "OpenShift Virtualization | Snapshot VM (simple)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_backup_snapshot.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Create a VirtualMachineSnapshot for one VM.
+      spec:
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+
+  - name: "OpenShift Virtualization | VM operations (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_operations.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "OpenShift Virtualization | VM backup (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_backup.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "OpenShift Virtualization | VM restore (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_restore.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "OpenShift Virtualization | VM hot plug (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_hot_plug.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true

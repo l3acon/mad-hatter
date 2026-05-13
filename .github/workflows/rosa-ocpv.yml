@@ -1,12 +1,6 @@
-name: Run rosa/ocpv.yml playbook
+name: Run aws/ocpv.yml playbook
 on:
   workflow_dispatch:
-    inputs:
-      olm_tag:
-        description: 'OLM snapshot to use, e.g. from https://quay.io/repository/gpte-devops-automation/olm_snapshot_redhat_catalog?tab=tags&tag=latest'
-        required: true
-        default: 'v4.19_2025_09_01'
-        type: string
 jobs:
   rosa-ocpv:
     runs-on: ubuntu-latest
@@ -59,4 +53,4 @@ jobs:
           curl --user ${{ secrets.MANIFEST_CREDS }} https://manifest.lab.cheeseburgia.com/${{ secrets.MANIFEST_PATH }} --output $(pwd)/manifest.zip
 
       - name: Run Ansible Playbook
-        run: ansible-playbook rosa/ocpv.yml -e ignore_prompt=true -e hide_passwords=true -e olm_tag=${{ inputs.olm_tag }}
+        run: ansible-playbook aws/ocpv.yml -e ignore_prompt=true -e hide_passwords=true

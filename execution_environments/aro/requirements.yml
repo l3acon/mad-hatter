@@ -8,3 +8,9 @@ collections:
   - name: containers.podman
   - name: community.general
     version: "9.5.0"
+  - name: redhat.openshift
+    version: ">=4.0.0"
+  - name: redhat.openshift_virtualization
+    version: ">=2.2.4"
+  - name: infra.openshift_virtualization_ops
+    version: ">=1.0.1"

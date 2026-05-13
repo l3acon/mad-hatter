@@ -1,0 +1,19 @@
+---
+- name: Delete OpenShift Virtualization VM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate required job variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_vm_name is defined and ocpv_vm_name | length > 0
+          - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
+
+    - name: Delete VirtualMachine
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+        state: absent
+        wait: "{{ ocpv_vm_wait | default(true) }}"
+        wait_timeout: "{{ ocpv_vm_wait_timeout | default(600) }}"

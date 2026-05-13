@@ -1,0 +1,76 @@
+---
+# Override in job template extra vars or playbook -e if needed
+openshift_virt_aap_ee_image: registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest
+openshift_virt_aap_ee_name: OpenShift Virtualization EE
+
+openshift_virt_aap_project_scm_url: https://github.com/l3acon/mad-hatter
+openshift_virt_aap_project_scm_branch: main
+openshift_virt_aap_project_name: OpenShift Virtualization (mad-hatter)
+
+openshift_virt_aap_inventory_name: OpenShift Virtualization Runtime
+
+controller_validate_certs: false
+controller_configuration_async_delay: 3
+
+# Appended in tasks/main.yml after OpenShift token credential (and with openshift_virt_aap_extra_controller_credentials)
+openshift_virt_aap_extra_controller_credentials: []
+
+openshift_virt_aap_controller_credentials:
+  - name: Automation Hub
+    organization: Default
+    credential_type: Ansible Galaxy/Automation Hub API Token
+    update_secrets: false
+    inputs:
+      url: https://console.redhat.com/api/automation-hub/
+      auth_url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+
+  - name: Controller Credential
+    organization: Default
+    credential_type: Red Hat Ansible Automation Platform
+    update_secrets: false
+    state: exists
+    inputs:
+      host: "{{ aap_hostname }}"
+      username: "{{ aap_username }}"
+      password: "{{ aap_password }}"
+      verify_ssl: "{{ openshift_virt_aap_verify_ssl }}"
+
+openshift_virt_aap_verify_ssl: false
+
+openshift_virt_aap_openshift_credential:
+  - name: OpenShift Credential
+    credential_type: OpenShift or Kubernetes API Bearer Token
+    organization: Default
+    inputs:
+      host: "{{ openshift_api_url }}"
+      bearer_token: "{{ openshift_bearer_token }}"
+
+gateway_organizations:
+  - name: Default
+    galaxy_credentials:
+      - Ansible Galaxy
+      - Automation Hub
+
+controller_execution_environments:
+  - name: "{{ openshift_virt_aap_ee_name }}"
+    image: "{{ openshift_virt_aap_ee_image }}"
+    pull: missing
+
+controller_inventories:
+  - name: "{{ openshift_virt_aap_inventory_name }}"
+    organization: Default
+
+controller_hosts:
+  - name: localhost
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    variables:
+      ansible_connection: local
+
+controller_projects:
+  - name: "{{ openshift_virt_aap_project_name }}"
+    organization: Default
+    scm_type: git
+    scm_url: "{{ openshift_virt_aap_project_scm_url }}"
+    scm_branch: "{{ openshift_virt_aap_project_scm_branch }}"
+    default_environment: "{{ openshift_virt_aap_ee_name }}"
+    wait: true

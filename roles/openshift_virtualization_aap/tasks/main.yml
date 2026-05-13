@@ -1,0 +1,23 @@
+---
+- name: Assert required variables and credentials
+  ansible.builtin.assert:
+    that:
+      - aap_hostname is defined
+      - aap_username is defined
+      - aap_password is defined
+      - openshift_api_url is defined
+      - openshift_bearer_token is defined
+      - openshift_bearer_token | length > 0
+
+- name: Build merged controller credentials for dispatch # noqa: var-naming[no-role-prefix]
+  ansible.builtin.set_fact:
+    controller_credentials: >-
+      {{
+        openshift_virt_aap_controller_credentials
+        + (openshift_virt_aap_extra_controller_credentials | default([]))
+        + openshift_virt_aap_openshift_credential
+      }}
+
+- name: Apply Automation Controller configuration (OpenShift Virtualization CasC)
+  ansible.builtin.include_role:
+    name: infra.aap_configuration.dispatch

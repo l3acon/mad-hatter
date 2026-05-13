@@ -1,8 +1,0 @@
----
-# override these in job template extra vars if needed
-apd_ee_image_version: '25'
-apd_ee_image: quay.io/ansible-product-demos/apd-ee-{{ apd_ee_image_version }}:latest
-apd_verify_ssl: false
-
-controller_validate_certs: false
-controller_configuration_async_delay: 3
