@@ -44,7 +44,12 @@ controller_templates:
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
     playbook: playbooks/openshift_virtualization/vm_post_install_package.yml
-    credentials: "{{ ['Controller Credential', 'OpenShift Credential'] + openshift_virt_aap_post_install_jt_credentials_suffix }}"
+    credentials: >-
+      {{
+        ['Controller Credential', 'OpenShift Credential']
+        + ([openshift_virt_aap_vm_ssh_machine_cred_name] if openshift_virt_aap_vm_ssh_machine_cred_enabled else [])
+        + (openshift_virt_aap_post_install_jt_credentials_suffix | default([]))
+      }}
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
     survey_enabled: false
@@ -157,9 +162,10 @@ controller_workflows:
   - name: "OpenShift Virtualization | Provision VM and install package"
     description: >-
       Create a Fedora-based VM, then SSH as fedora to install a package with dnf.
-      The workflow survey collects an SSH public key for cloud-init; add a Machine credential
-      whose private key matches that public key (append the credential name to
-      openshift_virt_aap_post_install_jt_credentials_suffix when including this role, e.g. ['Demo Credential']).
+      When openshift_virt_aap_vm_ssh_machine_cred_enabled, paste the contents of the same public key file
+      used for CasC (openshift_virt_aap_vm_ssh_public_key_file, default id_rsa.pub) into the survey so it matches
+      the controller Machine credential "{{ openshift_virt_aap_vm_ssh_machine_cred_name }}".
+      Optional extra Machine credentials: openshift_virt_aap_post_install_jt_credentials_suffix.
     organization: Default
     survey_enabled: true
     ask_variables_on_launch: false
@@ -211,6 +217,9 @@ controller_workflows:
           required: false
           default: fedora
         - question_name: SSH public key for fedora user
+          question_description: >-
+            Must match the private key in the "{{ openshift_virt_aap_vm_ssh_machine_cred_name }}" Machine credential
+            when openshift_virt_aap_vm_ssh_machine_cred_enabled (default id_rsa / id_rsa.pub paths).
           type: text
           variable: ocpv_ssh_public_key
           required: true

@@ -16,9 +16,16 @@ controller_configuration_async_delay: 3
 # Appended in tasks/main.yml after OpenShift token credential (and with openshift_virt_aap_extra_controller_credentials)
 openshift_virt_aap_extra_controller_credentials: []
 
-# Optional Machine credential name (e.g. "Demo Credential") with private key matching the workflow survey
-# SSH public key (ocpv_ssh_public_key). Appended to the post-install job template credential list.
+# Optional extra Machine credential names (private keys must match workflow survey SSH public keys).
+# Appended after Controller/OpenShift and the optional Fedora VM SSH credential below.
 openshift_virt_aap_post_install_jt_credentials_suffix: []
+
+# Machine credential for SSH to Fedora KubeVirt guests (workflow post-install). Reads local key files during CasC.
+openshift_virt_aap_vm_ssh_machine_cred_enabled: true
+openshift_virt_aap_vm_ssh_machine_cred_name: "OpenShift Virtualization | Fedora VM SSH"
+openshift_virt_aap_vm_ssh_username: fedora
+openshift_virt_aap_vm_ssh_private_key_file: /home/matt/keys/id_rsa
+openshift_virt_aap_vm_ssh_public_key_file: /home/matt/keys/id_rsa.pub
 
 openshift_virt_aap_controller_credentials:
   - name: Automation Hub

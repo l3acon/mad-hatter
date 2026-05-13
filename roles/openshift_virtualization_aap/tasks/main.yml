@@ -9,14 +9,55 @@
       - openshift_bearer_token is defined
       - openshift_bearer_token | length > 0
 
+- name: Verify Fedora VM SSH key files exist (when auto Machine credential enabled)
+  when: openshift_virt_aap_vm_ssh_machine_cred_enabled | bool
+  block:
+    - name: Stat Fedora VM SSH private key
+      ansible.builtin.stat:
+        path: "{{ openshift_virt_aap_vm_ssh_private_key_file }}"
+      register: openshift_virt_aap_vm_ssh_priv_stat
+
+    - name: Stat Fedora VM SSH public key
+      ansible.builtin.stat:
+        path: "{{ openshift_virt_aap_vm_ssh_public_key_file }}"
+      register: openshift_virt_aap_vm_ssh_pub_stat
+
+    - name: Assert keypair files exist for Machine credential lookup
+      ansible.builtin.assert:
+        that:
+          - openshift_virt_aap_vm_ssh_priv_stat.stat.exists | bool
+          - openshift_virt_aap_vm_ssh_priv_stat.stat.isreg | bool
+          - openshift_virt_aap_vm_ssh_pub_stat.stat.exists | bool
+          - openshift_virt_aap_vm_ssh_pub_stat.stat.isreg | bool
+        fail_msg: >-
+          openshift_virt_aap_vm_ssh_machine_cred_enabled is true but a key path is missing or not a file.
+          Set openshift_virt_aap_vm_ssh_private_key_file / openshift_virt_aap_vm_ssh_public_key_file,
+          or disable with openshift_virt_aap_vm_ssh_machine_cred_enabled: false.
+
 - name: Build merged controller credentials for dispatch # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     controller_credentials: >-
       {{
         openshift_virt_aap_controller_credentials
         + (openshift_virt_aap_extra_controller_credentials | default([]))
+        + (
+            [
+              {
+                'name': openshift_virt_aap_vm_ssh_machine_cred_name,
+                'credential_type': 'Machine',
+                'organization': 'Default',
+                'update_secrets': true,
+                'inputs': {
+                  'username': openshift_virt_aap_vm_ssh_username,
+                  'ssh_key_data': lookup('file', openshift_virt_aap_vm_ssh_private_key_file),
+                },
+              },
+            ]
+            if openshift_virt_aap_vm_ssh_machine_cred_enabled | bool else []
+          )
         + openshift_virt_aap_openshift_credential
       }}
+  no_log: true
 
 # controller_inventories role passes `variables` through a regex_replace chain that breaks omit/empty dict on Ansible 2.20+.
 - name: Ensure controller inventory exists
