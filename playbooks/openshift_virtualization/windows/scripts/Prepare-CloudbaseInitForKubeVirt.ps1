@@ -10,11 +10,25 @@
 
     Typical use:
       1. Finish Windows setup and log in as Administrator.
-      2. Download this script, e.g. from raw GitHub (replace BRANCH):
-           https://raw.githubusercontent.com/l3acon/mad-hatter/BRANCH/playbooks/openshift_virtualization/windows/scripts/Prepare-CloudbaseInitForKubeVirt.ps1
-      3.  powershell.exe -ExecutionPolicy Bypass -File .\Prepare-CloudbaseInitForKubeVirt.ps1 -Confirm:$false
+      2. Download this script (replace BRANCH). You must use -Uri and -OutFile by name — a second
+         positional argument causes "PositionalParameterNotFound" on Invoke-WebRequest:
+           $u = 'https://raw.githubusercontent.com/l3acon/mad-hatter/BRANCH/playbooks/openshift_virtualization/windows/scripts/Prepare-CloudbaseInitForKubeVirt.ps1'
+           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+           Invoke-WebRequest -Uri $u -OutFile "$PWD\Prepare-CloudbaseInitForKubeVirt.ps1" -UseBasicParsing
+         Alternative (works on older hosts):
+           (New-Object System.Net.WebClient).DownloadFile($u, "$PWD\Prepare-CloudbaseInitForKubeVirt.ps1")
+      3. From an elevated PowerShell (recommended):
+           .\Prepare-CloudbaseInitForKubeVirt.ps1 -Force -Verbose
+         From cmd.exe (avoid -Confirm:$false here — cmd can pass it as a string and break binding):
+           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Prepare-CloudbaseInitForKubeVirt.ps1 -Force -Verbose
+         Or use -Command so PowerShell parses booleans:
+           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& .\Prepare-CloudbaseInitForKubeVirt.ps1 -Confirm:`$false -Verbose"
 
-    Use -Confirm:$false for unattended confirmation of install + sysprep. Use -WhatIf to preview.
+    -Force skips confirmation for MSI install and sysprep (non-interactive). -Confirm:$false works only when
+    the outer shell is PowerShell, not cmd.exe.
+
+.PARAMETER Force
+    Run msiexec install and sysprep without prompting (use instead of -Confirm:$false when started from cmd.exe).
 
 .PARAMETER CloudbaseVersion
     GitHub release tag to install (default 1.1.8).
@@ -29,10 +43,15 @@
     .\Prepare-CloudbaseInitForKubeVirt.ps1 -Verbose
 
 .EXAMPLE
+    .\Prepare-CloudbaseInitForKubeVirt.ps1 -Force -Verbose
+
+.EXAMPLE
     .\Prepare-CloudbaseInitForKubeVirt.ps1 -Confirm:$false -Verbose
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
+    [switch] $Force,
+
     [string] $CloudbaseVersion = '1.1.8',
 
     [uri] $MsiDownloadUri = $null,
@@ -68,7 +87,7 @@ $msiLocal = Join-Path $env:TEMP $msiName
 Write-Verbose "Downloading: $MsiDownloadUri"
 Invoke-WebRequest -Uri $MsiDownloadUri -OutFile $msiLocal -UseBasicParsing
 
-if ($PSCmdlet.ShouldProcess($msiLocal, 'Install Cloudbase-Init (msiexec)')) {
+if ($Force -or $PSCmdlet.ShouldProcess($msiLocal, 'Install Cloudbase-Init (msiexec)')) {
     $p = Start-Process -FilePath msiexec.exe -ArgumentList @('/i', $msiLocal, '/qn', '/norestart') -Wait -PassThru
     if ($p.ExitCode -notin 0, 3010) {
         throw "msiexec failed with exit code $($p.ExitCode)"
@@ -180,6 +199,6 @@ $sysprepArgs = @(
     "/unattend:$unattend"
 )
 
-if ($PSCmdlet.ShouldProcess($sysprep, ($sysprepArgs -join ' '))) {
+if ($Force -or $PSCmdlet.ShouldProcess($sysprep, ($sysprepArgs -join ' '))) {
     Start-Process -FilePath $sysprep -ArgumentList $sysprepArgs -Wait
 }
