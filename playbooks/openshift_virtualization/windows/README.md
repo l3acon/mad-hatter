@@ -88,6 +88,35 @@ After you have a **golden root DataVolume** name in the same namespace:
 - **`../vm_post_install_windows.yml`** — VMI IP, WinRM, Chocolatey bootstrap.
 - CasC workflow **OpenShift Virtualization — Provision Windows VM and install package** uses the **Windows execution environment** (`execution_environments/windows/`).
 
+### WinRM: Ansible remoting PowerShell script
+
+Cloudbase-init and a generalized golden image **do not replace** enabling **WinRM** the way Ansible expects. In practice we still ran **`ConfigureRemotingForAnsible.ps1`** from the [Ansible documentation examples](https://raw.githubusercontent.com/ansible/ansible-documentation/refs/heads/devel/examples/scripts/ConfigureRemotingForAnsible.ps1) (see [Managing Windows with WinRM](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#winrm-setup)) **once per image** (or on the installer VM before capture, if WinRM must be baked in). Run it from an **elevated** PowerShell, then create the AAP **Machine** credential with the same **Administrator** password (or the account you configured). Without that step, **`vm_post_install_windows.yml`** and ad-hoc **`win_ping`** jobs time out or fail before authentication.
+
+That script turns on **PowerShell remoting / WinRM**, sets **`LocalAccountTokenFilterPolicy`** for local admin over the network, adds a **self-signed HTTPS listener on 5986** (and firewall for it), and typically leaves or creates an **HTTP listener on 5985** (via **`Enable-PSRemoting`**). It can enable **Basic** auth on the WinRM service unless you pass **`-DisableBasicAuth`**. After **sysprep / generalize**, re-run with **`-ForceNewSSLCert`** if HTTPS fails because the listener certificate no longer matches the new machine identity.
+
+#### Ansible variables (`ansible.builtin.winrm`)
+
+Use the [winrm connection plugin](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/winrm_connection.html) (short name **`winrm`**). Credentials usually come from **`ansible_user`** / **`ansible_password`** (or a Machine credential in AAP); the plugin also honors **`ansible_winrm_user`** / **`ansible_winrm_password`**.
+
+| Variable | Role |
+|----------|------|
+| **`ansible_connection`** | Must be **`winrm`** for this plugin (alternative: **`psrp`** with `ansible_psrp_*`; see the same [WinRM guide](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html)). |
+| **`ansible_host`** | Reachable address of the guest (KubeVirt inventory sets this from the VMI). |
+| **`ansible_port`** or **`ansible_winrm_port`** | **`5985`** for HTTP, **`5986`** for HTTPS (plugin default is **5986** if scheme implies TLS—set explicitly when using HTTP). |
+| **`ansible_winrm_scheme`** | **`http`** or **`https`** (must match the listener you target). |
+| **`ansible_winrm_transport`** | Auth wrapper: **`ntlm`** for local or domain accounts without Kerberos setup; **`basic`** only with TLS or when you accept the risk; **`kerberos`** in AD (see [Kerberos](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#kerberos-and-negotiate)); **`credssp`** only if you need delegation (see [CredSSP](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#credssp)). |
+| **`ansible_winrm_server_cert_validation`** | Use **`ignore`** when the guest uses the script’s **self-signed** HTTPS certificate (or set **`ansible_winrm_ca_trust_path`** to a PEM chain you trust). |
+| **`ansible_winrm_connection_timeout`** | Optional; raises WS-Man / HTTP read timeouts for slow networks (see plugin docs). |
+| **`ansible_winrm_message_encryption`** | Optional **`always`** for stricter message-level encryption over HTTP when using **`psrp`** / **`winrm`** (see [encryption](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#winrm-encryption)). |
+
+**Two common profiles after `ConfigureRemotingForAnsible.ps1`:**
+
+1. **HTTP 5985 + NTLM** (matches **`vm_post_install_windows.yml`** defaults): NTLM encrypts the payload over HTTP, which Ansible documents as acceptable for this transport. Set **`ansible_connection: winrm`**, **`ansible_port: 5985`**, **`ansible_winrm_scheme: http`**, **`ansible_winrm_transport: ntlm`**, **`ansible_winrm_server_cert_validation: ignore`** (ignored for HTTP; harmless).
+
+2. **HTTPS 5986 + NTLM** (aligns with the script’s TLS listener): **`ansible_port: 5986`**, **`ansible_winrm_scheme: https`**, **`ansible_winrm_transport: ntlm`**, **`ansible_winrm_server_cert_validation: ignore`** until you replace the cert with one your controllers trust.
+
+Pick **one** listener (5985 or 5986) consistently in **`wait_for`**, inventory host vars, and firewall/network policy.
+
 ## Related paths
 
 - `../vm_create_windows_from_golden.yml`, `../vm_post_install_windows.yml`
