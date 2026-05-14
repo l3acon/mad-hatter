@@ -88,6 +88,18 @@ After you have a **golden root DataVolume** name in the same namespace:
 - **`../vm_post_install_windows.yml`** — VMI IP, WinRM, Chocolatey bootstrap.
 - CasC workflow **OpenShift Virtualization — Provision Windows VM and install package** uses the **Windows execution environment** (`execution_environments/windows/`).
 
+### KubeVirt inventory with WinRM defaults (CasC)
+
+CasC adds a second dynamic inventory **`OpenShift Virtualization | KubeVirt VMs (WinRM)`** (see `roles/openshift_virtualization_aap/defaults/main.yml`: `openshift_virt_aap_kubevirt_winrm_inventory_*`). It uses the same **`openshift_virtualization`** sync and namespaces as the primary KubeVirt inventory, and sets **inventory-level** variables so synced hosts default to **`ansible_connection: winrm`**, **`ansible_winrm_scheme: http`**, **`ansible_winrm_transport: ntlm`**, **`ansible_winrm_server_cert_validation: ignore`**, **`ansible_port: 5985`**. Re-run **`playbooks/openshift_virtualization/aap_rollout_casc.yml`** after pulling these changes, then **sync** both inventory sources in the controller UI (or wait for `update_on_launch`).
+
+### Troubleshoot WinRM from AAP
+
+Job template **OpenShift Virtualization | Troubleshoot Windows WinRM connectivity** runs **`vm_troubleshoot_windows_winrm.yml`**: `wait_for` to the VMI IP on **5985** from the execution environment (same network path as **pywinrm**), lists **NetworkPolicies** in the VM namespace and **`aap`**, then **`win_ping`**. Launch with **Limit** = the KubeVirt inventory host (usually **`<namespace>-<vmname>`**), survey **namespace / VM name**, and **prompt for your WinRM Machine credential** (`ask_credential_on_launch`).
+
+### Optional NetworkPolicy (OCP egress)
+
+If namespaces use **default-deny** egress, automation pods may need an explicit allow rule to reach VM overlay IPs on **5985/5986**. See **`manifests/example-networkpolicy-aap-egress-winrm.yaml`** (edit namespaces and tighten **`podSelector`**); apply with **`oc apply`**. This is cluster-specific—use only when policy analysis shows blocked egress.
+
 ### WinRM: Ansible remoting PowerShell script
 
 Cloudbase-init and a generalized golden image **do not replace** enabling **WinRM** the way Ansible expects. In practice we still ran **`ConfigureRemotingForAnsible.ps1`** from the [Ansible documentation examples](https://raw.githubusercontent.com/ansible/ansible-documentation/refs/heads/devel/examples/scripts/ConfigureRemotingForAnsible.ps1) (see [Managing Windows with WinRM](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#winrm-setup)) **once per image** (or on the installer VM before capture, if WinRM must be baked in). Run it from an **elevated** PowerShell, then create the AAP **Machine** credential with the same **Administrator** password (or the account you configured). Without that step, **`vm_post_install_windows.yml`** and ad-hoc **`win_ping`** jobs time out or fail before authentication.

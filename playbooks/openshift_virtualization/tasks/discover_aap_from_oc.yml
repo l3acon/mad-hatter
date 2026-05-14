@@ -26,7 +26,7 @@
 - name: Discover controller hostname from route
   when: aap_hostname is not defined
   ansible.builtin.command: >-
-    oc get route {{ aap_casc_route_name }} -n {{ aap_casc_aap_namespace }}
+    oc get route {{ aap_casc_controller_route_name | default('aap-controller') }} -n {{ aap_casc_aap_namespace }}
     -o jsonpath={.spec.host}
   changed_when: false
   register: aap_rollout_route
@@ -39,7 +39,7 @@
 - name: Discover admin password from cluster secret
   when: aap_password is not defined
   ansible.builtin.command: >-
-    oc get secret {{ aap_casc_route_name }}-admin-password -n {{ aap_casc_aap_namespace }}
+    oc get secret {{ aap_casc_admin_secret_name | default('aap-controller-admin-password') }} -n {{ aap_casc_aap_namespace }}
     -o jsonpath={.data.password}
   changed_when: false
   register: aap_rollout_secret_b64

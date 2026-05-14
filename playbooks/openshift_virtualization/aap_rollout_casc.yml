@@ -1,6 +1,6 @@
 ---
 # Apply roles/openshift_virtualization_aap CasC to an existing controller (job templates, project, EE, credentials, inventory).
-# Requires: oc logged into the cluster; route and admin secret match aap_operator defaults (namespace aap, route/secret prefix aap).
+# Requires: oc logged into the cluster. Controller API uses route/secret **aap-controller** (not the gateway **aap** route).
 # Optional: -e aap_hostname= -e aap_password= -e openshift_api_url= -e openshift_bearer_token= to skip discovery.
 # Optional: -e openshift_virt_aap_project_scm_branch=main to pin the controller project branch (otherwise the
 # checkout's current git branch is used so CasC matches the branch you are developing on).
@@ -12,6 +12,9 @@
     aap_username: admin
     aap_casc_aap_namespace: "{{ aap_operator_project | default('aap') }}"
     aap_casc_route_name: "{{ aap_operator_app_name | default('aap') }}"
+    # Automation controller API (ansible.controller modules need Basic auth to /api/v2/* — not anonymous ping only).
+    aap_casc_controller_route_name: aap-controller
+    aap_casc_admin_secret_name: aap-controller-admin-password
     _mad_hatter_repo_root: "{{ playbook_dir | dirname | dirname }}"
   tasks:
     - name: Default controller project SCM branch to current git branch when unset

@@ -1,0 +1,105 @@
+---
+# Diagnose controller/EE → Windows guest WinRM path (KubeVirt pod network) and run win_ping.
+#
+# Extra vars / survey:
+#   ocpv_vm_namespace, ocpv_vm_name
+#   ocpv_windows_winrm_port (default 5985), ocpv_tr_tcp_timeout (default 30)
+#   ocpv_netpol_check_namespaces (optional; default includes VM namespace and "aap")
+#
+# Job template: set Inventory to "OpenShift Virtualization | KubeVirt VMs (WinRM)" and
+# Limit to the dynamic hostname (usually "<namespace>-<vmname>").
+- name: WinRM connectivity diagnostics (local modules on execution node)
+  hosts: all
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate required extra vars
+      ansible.builtin.assert:
+        that:
+          - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
+          - ocpv_vm_name is defined and ocpv_vm_name | length > 0
+          - ansible_play_hosts | length == 1
+        fail_msg: >-
+          Set ocpv_vm_namespace and ocpv_vm_name. Set the job Limit to exactly one host from the
+          KubeVirt inventory (typically {{ ocpv_vm_namespace | default('NAMESPACE') }}-{{ ocpv_vm_name | default('VM') }}).
+
+    - name: Optional inventory hostname check (KubeVirt default host_format is namespace-name)
+      when: ocpv_tr_enforce_inventory_hostname | default(false) | bool
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == (ocpv_vm_namespace ~ '-' ~ ocpv_vm_name)
+        fail_msg: >-
+          inventory_hostname ({{ inventory_hostname }}) does not equal {{ ocpv_vm_namespace }}-{{ ocpv_vm_name }}.
+          Fix the job Limit or clear ocpv_tr_enforce_inventory_hostname.
+
+    - name: Read VirtualMachineInstance for guest IP
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: ocpv_tr_vmi
+
+    - name: Require running VMI
+      ansible.builtin.assert:
+        that:
+          - ocpv_tr_vmi.resources | length > 0
+        fail_msg: No VMI {{ ocpv_vm_namespace }}/{{ ocpv_vm_name }} — is the VM powered on?
+
+    - name: Extract guest IP from VMI interfaces
+      ansible.builtin.set_fact:
+        ocpv_tr_guest_ip: >-
+          {{
+            (
+              ocpv_tr_vmi.resources[0].status.interfaces | default([])
+              | selectattr('ipAddress', 'defined')
+              | map(attribute='ipAddress')
+              | list
+              | first
+            ) | default('', true)
+          }}
+
+    - name: Require guest IP on VMI
+      ansible.builtin.assert:
+        that:
+          - ocpv_tr_guest_ip | length > 0
+        fail_msg: VMI has no ipAddress on interfaces yet.
+
+    - name: TCP probe WinRM port from execution environment (same path as pywinrm)
+      ansible.builtin.wait_for:
+        host: "{{ ocpv_tr_guest_ip }}"
+        port: "{{ ocpv_windows_winrm_port | default(5985) }}"
+        delay: 3
+        timeout: "{{ ocpv_tr_tcp_timeout | default(30) | int }}"
+        state: started
+      register: ocpv_tr_wait
+      ignore_errors: true
+
+    - name: List NetworkPolicies in selected namespaces (egress/ingress visibility)
+      kubernetes.core.k8s_info:
+        api_version: networking.k8s.io/v1
+        kind: NetworkPolicy
+        namespace: "{{ item }}"
+      loop: "{{ ocpv_netpol_check_namespaces | default([ocpv_vm_namespace, 'aap']) | unique }}"
+      register: ocpv_tr_netpol
+      ignore_errors: true
+
+    - name: Report NetworkPolicy counts
+      ansible.builtin.debug:
+        msg: >-
+          namespace={{ item.item }} policies={{ item.resources | default([]) | length }}
+      loop: "{{ ocpv_tr_netpol.results | default([]) }}"
+      when: item is not skipped
+
+    - name: Summarize TCP result
+      ansible.builtin.debug:
+        msg:
+          - "VMI IP={{ ocpv_tr_guest_ip }} port={{ ocpv_windows_winrm_port | default(5985) }}"
+          - "TCP wait_for: {{ 'succeeded' if ocpv_tr_wait is not failed else 'FAILED (likely network path, guest firewall, or WinRM not listening)' }}"
+
+- name: WinRM application ping (uses inventory WinRM variables)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: win_ping
+      ansible.windows.win_ping:

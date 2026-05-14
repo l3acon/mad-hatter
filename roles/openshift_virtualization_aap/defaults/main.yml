@@ -29,6 +29,37 @@ openshift_virt_aap_kubevirt_inventory_source_name: "OpenShift Virtualization | K
 openshift_virt_aap_kubevirt_inventory_namespaces:
   - ocpv-aap-smoke
 
+# Constructed inventory: same KubeVirt hosts plus WinRM connection variables (see template).
+openshift_virt_aap_kubevirt_winrm_inventory_enabled: true
+openshift_virt_aap_kubevirt_winrm_inventory_name: "OpenShift Virtualization | KubeVirt VMs (WinRM)"
+openshift_virt_aap_kubevirt_winrm_inventory_source_name: "OpenShift Virtualization | KubeVirt inventory sync (WinRM)"
+# Applied to the WinRM inventory object in Tower (merged with per-host facts from the sync).
+openshift_virt_aap_kubevirt_winrm_inventory_variables:
+  ansible_connection: winrm
+  ansible_winrm_scheme: http
+  ansible_winrm_transport: ntlm
+  ansible_winrm_server_cert_validation: ignore
+  ansible_port: 5985
+
+# Second openshift_virtualization source targeting the WinRM inventory (same namespaces as primary).
+openshift_virt_aap_kubevirt_winrm_inventory_sources:
+  - name: "{{ openshift_virt_aap_kubevirt_winrm_inventory_source_name }}"
+    inventory: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
+    organization: Default
+    description: >-
+      Same OpenShift Virtualization sync as the primary KubeVirt inventory; inventory variables
+      (openshift_virt_aap_kubevirt_winrm_inventory_variables) default ansible_connection to WinRM for Windows.
+    source: openshift_virtualization
+    credential: OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    overwrite: true
+    update_on_launch: true
+    update_cache_timeout: 0
+    timeout: 600
+    verbosity: 1
+    source_vars:
+      namespaces: "{{ openshift_virt_aap_kubevirt_inventory_namespaces }}"
+
 # Dispatched to infra.aap_configuration.controller_inventory_sources (Runtime inventory stays module-managed only).
 openshift_virt_aap_controller_inventory_sources:
   - name: "{{ openshift_virt_aap_kubevirt_inventory_source_name }}"

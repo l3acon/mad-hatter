@@ -80,6 +80,45 @@ controller_templates:
     ask_variables_on_launch: true
     survey_enabled: false
 
+  - name: "OpenShift Virtualization | Troubleshoot Windows WinRM connectivity"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_troubleshoot_windows_winrm.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    ask_variables_on_launch: false
+    ask_limit_on_launch: true
+    ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Set Job Template Limit to the KubeVirt inventory hostname (usually "<namespace>-<vmname>").
+        At launch, select your WinRM Machine credential. Optional second credential slot if your controller requires it.
+      spec:
+        - question_name: VM namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+        - question_name: WinRM TCP port
+          type: text
+          variable: ocpv_windows_winrm_port
+          required: false
+          default: "5985"
+        - question_name: TCP probe timeout (seconds)
+          type: text
+          variable: ocpv_tr_tcp_timeout
+          required: false
+          default: "30"
+
   - name: "OpenShift Virtualization | VM lifecycle (simple)"
     job_type: run
     organization: Default

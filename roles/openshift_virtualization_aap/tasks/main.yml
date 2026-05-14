@@ -112,6 +112,26 @@
     controller_password: "{{ aap_password }}"
     validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
+- name: Ensure KubeVirt WinRM inventory exists (inventory-level WinRM defaults for synced hosts)
+  when: openshift_virt_aap_kubevirt_winrm_inventory_enabled | bool
+  ansible.controller.inventory:
+    name: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
+    organization: Default
+    state: present
+    variables: "{{ openshift_virt_aap_kubevirt_winrm_inventory_variables }}"
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
+- name: Merge optional WinRM inventory source into CasC inventory source list
+  ansible.builtin.set_fact:
+    openshift_virt_aap_controller_inventory_sources_for_dispatch: >-
+      {{
+        openshift_virt_aap_controller_inventory_sources
+        + (openshift_virt_aap_kubevirt_winrm_inventory_sources | default([]) if openshift_virt_aap_kubevirt_winrm_inventory_enabled | bool else [])
+      }}
+
 # infra.aap_configuration subroles ship empty defaults (e.g. controller_projects: [], aap_organizations: [])
 # that override this role's defaults while dispatch runs. Host facts survive nested include_role.
 # Skip controller_inventories in dispatch (inventory ensured by the task above).
@@ -121,7 +141,7 @@
     controller_execution_environments: "{{ controller_execution_environments }}"
     controller_projects: "{{ controller_projects }}"
     controller_inventories: []
-    controller_inventory_sources: "{{ openshift_virt_aap_controller_inventory_sources }}"
+    controller_inventory_sources: "{{ openshift_virt_aap_controller_inventory_sources_for_dispatch }}"
     controller_hosts: "{{ controller_hosts }}"
     controller_workflows: "{{ controller_workflows }}"
 
