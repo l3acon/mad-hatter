@@ -90,9 +90,9 @@ That almost always means **sysprep did not receive a valid command line**. The u
 
 After you have a **golden root DataVolume** name in the same namespace:
 
-- **`../vm_create_windows_from_golden.yml`** — VM from that DV + `cloudInitNoCloud`.
-- **`../vm_post_install_windows.yml`** — VMI IP, WinRM, Chocolatey bootstrap.
-- CasC workflow **OpenShift Virtualization — Provision Windows VM and install package** uses the **Windows execution environment** (`execution_environments/windows/`).
+- **`../vm_create_windows_from_golden.yml`** — VM from that DV + `cloudInitNoCloud`. When **`ocpv_cloudinit_userdata`** is not set, the playbook renders **`windows/windows_golden_nocloud.yaml.j2`**: a **sentinel file** under `C:\Windows\Temp\.ocpv-cloudbase-init-sentinel` and an **Administrator** **`users`** entry (plaintext **`passwd`**, per [cloudbase-init cloud-config](https://cloudbase-init.readthedocs.io/en/latest/userdata.html)) so the guest password matches **`ocpv_windows_admin_password`** from the workflow survey before WinRM connects.
+- **`../vm_post_install_windows.yml`** — VMI IP, WinRM, optional **sentinel check** (`ocpv_verify_cloudbase_init`, default true), Chocolatey bootstrap.
+- CasC workflow **OpenShift Virtualization | Provision Windows VM and install package** chains the two job templates. The **create** job template uses the **OpenShift Virtualization EE** (`openshift_virt_aap_ee_name`, Kubernetes API only). The **post-install** job template still uses the **Windows EE** (`openshift_virt_aap_ee_windows_name`, `ansible.windows` + **pywinrm**); that image must pull successfully on the cluster or the second node fails with worker stream / pod errors even when the first node and cloudbase-init are fine.
 
 ### KubeVirt inventory with WinRM defaults (CasC)
 
