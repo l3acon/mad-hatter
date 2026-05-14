@@ -2,7 +2,9 @@
 version: 3
 images:
   base_image:
-    name: registry.redhat.io/ansible-automation-platform-25/ee-minimal-rhel9:latest
+    # Public pull (no registry.redhat.io login required for local/CI builds). Same stack as mh-rosa EE;
+    # ansible-builder layers Windows collections and pywinrm on top.
+    name: quay.io/matferna/mh-rosa:latest
 dependencies:
   galaxy: requirements.yml
   python: requirements.txt
