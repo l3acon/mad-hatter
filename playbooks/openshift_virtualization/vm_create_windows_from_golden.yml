@@ -5,7 +5,10 @@
 # Extra vars / survey:
 #   ocpv_vm_name, ocpv_vm_namespace, ocpv_win_root_dv_name
 #   ocpv_instancetype_name (default u1.medium), ocpv_preference_name (default windows.2k22)
-#   ocpv_cloudinit_userdata (optional raw #cloud-config for cloudbase-init)
+#   ocpv_windows_admin_password (optional; when ocpv_cloudinit_userdata is unset, included in
+#     default #cloud-config so cloudbase-init resets Administrator to match the workflow password)
+#   ocpv_cloudinit_userdata (optional raw #cloud-config; overrides default golden template)
+#   ocpv_cloudinit_set_hostname (optional bool, default false — set_hostname can trigger a reboot)
 - name: Create Windows VM from DataVolume
   hosts: localhost
   connection: local
@@ -20,10 +23,19 @@
         fail_msg: >-
           Set ocpv_vm_name, ocpv_vm_namespace, and ocpv_win_root_dv_name (existing DataVolume for C:).
 
-    - name: Build cloudInitNoCloud user data (minimal cloud-config when unset)
+    - name: Build cloudInitNoCloud user data for cloudbase-init
       ansible.builtin.set_fact:
         ocpv_cloudinit_userdata_effective: >-
-          {{ ocpv_cloudinit_userdata | default('#cloud-config\n# Add cloudbase-init compatible config here.\n', true) }}
+          {{
+            (
+              lookup('template', (playbook_dir | trim) ~ '/windows/templates/windows_golden_nocloud.yaml.j2')
+              if (
+                ocpv_cloudinit_userdata is not defined
+                or (ocpv_cloudinit_userdata | string | trim | length) == 0
+              )
+              else (ocpv_cloudinit_userdata | string)
+            )
+          }}
 
     - name: Build volume list (root DataVolume + NoCloud)
       ansible.builtin.set_fact:

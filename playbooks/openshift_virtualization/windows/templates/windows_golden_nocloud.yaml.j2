@@ -1,0 +1,19 @@
+#cloud-config
+# Applied by cloudbase-init from KubeVirt cloudInitNoCloud (NoCloudConfigDriveService).
+# See: https://cloudbase-init.readthedocs.io/en/latest/userdata.html
+write_files:
+  - path: 'C:\Windows\Temp\.ocpv-cloudbase-init-sentinel'
+    content: |
+      cloudbase-init-userdata-applied
+      vm_name={{ ocpv_vm_name }}
+    permissions: '0644'
+{% if ocpv_cloudinit_set_hostname | default(false) | bool %}
+set_hostname: {{ ocpv_vm_name | trim }}
+{% endif %}
+{% if ocpv_windows_admin_password is defined and ocpv_windows_admin_password | string | length > 0 %}
+# On Windows, passwd is a plaintext string (cloudbase-init docs).
+users:
+  - name: Administrator
+    passwd: {{ ocpv_windows_admin_password | string | to_json }}
+    inactive: false
+{% endif %}

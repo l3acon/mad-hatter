@@ -63,7 +63,7 @@ controller_templates:
     credentials:
       - Controller Credential
       - OpenShift Credential
-    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
     survey_enabled: false
 
@@ -302,7 +302,10 @@ controller_workflows:
   - name: "OpenShift Virtualization | Provision Windows VM and install package"
     description: >-
       Create a Windows VM from an existing golden root DataVolume, then connect with WinRM and install a Chocolatey package.
-      Requires WinRM on the guest. Uses EE {{ openshift_virt_aap_ee_windows_name }}.
+      Requires WinRM on the golden image. The create step uses the OpenShift Virtualization EE (Kubernetes API only);
+      the install step uses the Windows EE (ansible.windows + pywinrm). When you do not pass custom
+      ocpv_cloudinit_userdata, the create playbook injects default #cloud-config (sentinel file + optional
+      Administrator passwd) so cloudbase-init applies the same Administrator password as this workflow survey.
     organization: Default
     survey_enabled: true
     ask_variables_on_launch: false
@@ -329,6 +332,8 @@ controller_workflows:
       name: ""
       description: >-
         VM identity, golden root DataVolume name, Chocolatey package id, and Administrator password (WinRM).
+        The create job passes this password into default NoCloud user-data when ocpv_cloudinit_userdata is unset,
+        so cloudbase-init can align the guest password with WinRM before the install job runs.
       spec:
         - question_name: VM name
           type: text

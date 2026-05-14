@@ -2,6 +2,10 @@
 # Post-provision: connect with WinRM and install a package using Chocolatey (bootstrap if needed).
 # Expects: ocpv_vm_name, ocpv_vm_namespace, ocpv_post_package_name, ocpv_windows_admin_password
 #
+# Optional extra vars:
+#   ocpv_verify_cloudbase_init (default true) — assert cloudInitNoCloud sentinel exists (default path below).
+#   ocpv_cloudbase_sentinel_path (default C:\Windows\Temp\.ocpv-cloudbase-init-sentinel)
+#
 # Job template should use the Windows execution environment (ansible.windows + pywinrm).
 - name: Discover guest IP from VMI and wait for WinRM
   hosts: localhost
@@ -84,6 +88,23 @@
   tasks:
     - name: Wait for WinRM session
       ansible.windows.win_ping:
+
+    - name: Verify cloudbase-init applied default NoCloud user-data (sentinel file)
+      when: ocpv_verify_cloudbase_init | default(true) | bool
+      block:
+        - name: Stat cloudbase-init sentinel from golden NoCloud template
+          ansible.windows.win_stat:
+            path: "{{ ocpv_cloudbase_sentinel_path | default('C:\\Windows\\Temp\\.ocpv-cloudbase-init-sentinel') }}"
+          register: ocpv_cloudbase_sentinel
+
+        - name: Require sentinel file from vm_create_windows_from_golden default user-data
+          ansible.builtin.assert:
+            that:
+              - ocpv_cloudbase_sentinel.stat.exists | bool
+            fail_msg: >-
+              Sentinel missing at {{ ocpv_cloudbase_sentinel_path | default('C:\\Windows\\Temp\\.ocpv-cloudbase-init-sentinel') }}.
+              Cloudbase-init may not have processed NoCloud user-data (metadata_services / config drive), or this job
+              used custom ocpv_cloudinit_userdata without write_files. Set ocpv_verify_cloudbase_init: false to skip.
 
     - name: Install Chocolatey when missing
       ansible.windows.win_shell: |
