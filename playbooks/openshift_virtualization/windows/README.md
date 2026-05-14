@@ -39,15 +39,21 @@ During setup (or afterward in Core), Windows may not see the virtio **system dis
 
 ### Network
 
-After install, the guest may have **no working network** until **NetKVM** (VirtIO Ethernet) is installed from the same CD (Device Manager is not available on Core — use `Get-PnpDevice`, **`pnputil /add-driver ...\NetKVM\...\*.inf /subdirs /install`**, then `Restart-NetAdapter`). See comments in `scripts/Prepare-CloudbaseInitForKubeVirt.ps1` for download examples.
+After install, the guest may have **no working network** until **NetKVM** (VirtIO Ethernet) is installed from the same CD (Device Manager is not available on Core — use `Get-PnpDevice`, **`pnputil /add-driver ...\NetKVM\...\*.inf /subdirs /install`**, then `Restart-NetAdapter`). See **`scripts/prepare-win.ps1`** header comments for download examples.
 
-## 4. Cloudbase-Init and sysprep
+## 4. `prepare-win.ps1` — WinRM, firewall, Cloudbase-Init, sysprep
 
-Script: **`scripts/Prepare-CloudbaseInitForKubeVirt.ps1`**
+Primary script: **`scripts/prepare-win.ps1`**. The legacy filename **`scripts/Prepare-CloudbaseInitForKubeVirt.ps1`** is a thin wrapper that forwards to it (same parameters as before).
 
-- Downloads Cloudbase-Init MSI from GitHub, installs silently, patches **`cloudbase-init.conf`** only (see below), then runs **`sysprep.exe /generalize [/oobe] /shutdown`** with Cloudbase’s **`Unattend.xml`**. On **Windows Server Core**, **`/oobe` is omitted by default** so setup does not try to launch the OOBE wizard (see below).
-- Run from an **elevated** PowerShell.
-- **`cloudbase-init-unattend.conf` is left stock.** Rewriting it (or half-replacing multi-line `metadata_services`) can break the sysprep specialize path and cause **reboot / recovery loops**.
+Run from an **elevated** PowerShell. Typical flow:
+
+1. **Ansible `ConfigureRemotingForAnsible.ps1`** — Downloaded from the [Ansible documentation examples](https://raw.githubusercontent.com/ansible/ansible-documentation/refs/heads/devel/examples/scripts/ConfigureRemotingForAnsible.ps1) unless you pass **`-ConfigureRemotingScriptPath`**. Enables PowerShell remoting / WinRM, **`LocalAccountTokenFilterPolicy`**, HTTP and HTTPS listeners, and the firewall rules that script adds. **`-WinRmSkipNetworkProfileCheck`** defaults to **true** so a **Public** NIC profile (common on lab VMs) does not block setup.
+2. **Disable Windows Firewall** for **Domain / Private / Public** profiles (`Set-NetFirewallProfile`, with **`netsh advfirewall set allprofiles state off`** fallback) so **host** firewall does not block AAP execution environments from reaching **5985/5986** (cluster **NetworkPolicy** may still restrict traffic).
+3. **Cloudbase-Init** — MSI from GitHub, patches **`cloudbase-init.conf`** only (see below), then **`sysprep.exe /generalize [/oobe] /shutdown`** with Cloudbase’s **`Unattend.xml`**. On **Windows Server Core**, **`/oobe` is omitted by default** so setup does not try to launch the OOBE wizard (see below).
+
+**`cloudbase-init-unattend.conf` is left stock.** Rewriting it (or half-replacing multi-line `metadata_services`) can break the sysprep specialize path and cause **reboot / recovery loops**.
+
+Optional switches: **`-SkipWinRmConfiguration`**, **`-SkipFirewallDisable`** (not recommended for AAP), **`-AnsibleConfigureRemotingUri`**, **`-WinRmCertValidityDays`**, **`-WinRmForceNewSSLCert`**, **`-WinRmGlobalHttpFirewallAccess`**, **`-WinRmEnableCredSSP`**, plus **`-SkipSysprep`**, **`-SysprepOobeMode`**, **`-CloudbaseVersion`**, **`-MsiDownloadUri`**, **`-Force`**.
 
 ### Sysprep / reboot loop after running the script
 
@@ -64,7 +70,7 @@ The script now **removes the entire `metadata_services` block** (multi-line awar
 
 **`0x80040154`** is **`REGDB_E_CLASSNOTREG`** (a COM class is not registered). **`msoobe.exe`** is the **OOBE** (out-of-box experience) shell. On **Windows Server Core**, the full OOBE wizard stack is not present, so **`sysprep … /oobe`** can fail in **`UnattendGC\setuperr.log`** with this pattern even though other steps look fine.
 
-**What to do:** use an updated prep script: on **Windows Server Core** it omits **`/oobe`** automatically. You can force the same behavior on any SKU with **`-SysprepOobeMode NoOobe`**. Microsoft documents that after **`/generalize /shutdown`**, the next boot still runs the **specialize** configuration pass, which is what Cloudbase’s **`Unattend.xml`** relies on. If you truly need interactive OOBE, install **Server with Desktop Experience** (or a client SKU) instead of Core.
+**What to do:** on **Windows Server Core** the script omits **`/oobe`** automatically. You can force the same behavior on any SKU with **`-SysprepOobeMode NoOobe`**. Microsoft documents that after **`/generalize /shutdown`**, the next boot still runs the **specialize** configuration pass, which is what Cloudbase’s **`Unattend.xml`** relies on. If you truly need interactive OOBE, install **Server with Desktop Experience** (or a client SKU) instead of Core.
 
 The drive letter in paths (for example **`F:\Windows\Panther\…`**) is whatever volume Windows assigned during setup or recovery; the same log files live under **`%SystemRoot%\Panther\`** on the system volume.
 
@@ -78,7 +84,7 @@ That almost always means **sysprep did not receive a valid command line**. The u
 |-------|------------|
 | `Invoke-WebRequest` + second command on one line | Separate with **newline** or **`;`**. Otherwise extra tokens bind to `Invoke-WebRequest` and fail. |
 | `Invoke-WebRequest` “positional parameter” | Use **named** parameters: `-Uri ... -OutFile ...`. |
-| `-Confirm:$false` with **`powershell.exe -File` from cmd.exe** | `Confirm` can bind as the **string** `false` → error. Prefer **running from PowerShell**: `.\Prepare-CloudbaseInitForKubeVirt.ps1 -Confirm:$false -Verbose`, or **`powershell.exe -Command "& { .\Prepare-...ps1 -Confirm:$false -Verbose }"`**, or use **`-Force`** on the script (see script help) when using `-File` from cmd after updating the script. |
+| `-Confirm:$false` with **`powershell.exe -File` from cmd.exe** | `Confirm` can bind as the **string** `false` → error. Prefer **running from PowerShell**: `.\prepare-win.ps1 -Confirm:$false -Verbose`, or **`powershell.exe -Command "& { .\prepare-win.ps1 -Confirm:$false -Verbose }"`**, or use **`-Force`** when using `-File` from cmd after updating the script. |
 
 ## 5. Day-2 VMs and AAP
 
@@ -94,17 +100,19 @@ CasC adds a second dynamic inventory **`OpenShift Virtualization | KubeVirt VMs 
 
 ### Troubleshoot WinRM from AAP
 
-Job template **OpenShift Virtualization | Troubleshoot Windows WinRM connectivity** runs **`vm_troubleshoot_windows_winrm.yml`**: `wait_for` to the VMI IP on **5985** from the execution environment (same network path as **pywinrm**), lists **NetworkPolicies** in the VM namespace and **`aap`**, then **`win_ping`**. Launch with **Limit** = the KubeVirt inventory host (usually **`<namespace>-<vmname>`**), survey **namespace / VM name**, and **prompt for your WinRM Machine credential** (`ask_credential_on_launch`).
+Job template **OpenShift Virtualization | Troubleshoot Windows WinRM connectivity** runs **`vm_troubleshoot_windows_winrm.yml`**: **`wait_for`** to the VMI IP on **5985** from the execution environment (same network path as **pywinrm**), lists **NetworkPolicies** in the VM namespace and **`aap`**, then an **HTTP POST to `/wsman`** (no **`ansible.windows`** required on the EE). Launch with **Limit** = the KubeVirt inventory host (usually **`<namespace>-<vmname>`**), extra vars **namespace / VM name**, and **prompt for your WinRM Machine credential** when **`ask_credential_on_launch`** is enabled.
 
 ### Optional NetworkPolicy (OCP egress)
 
 If namespaces use **default-deny** egress, automation pods may need an explicit allow rule to reach VM overlay IPs on **5985/5986**. See **`manifests/example-networkpolicy-aap-egress-winrm.yaml`** (edit namespaces and tighten **`podSelector`**); apply with **`oc apply`**. This is cluster-specific—use only when policy analysis shows blocked egress.
 
-### WinRM: Ansible remoting PowerShell script
+### WinRM: Ansible remoting script (also inside `prepare-win.ps1`)
 
-Cloudbase-init and a generalized golden image **do not replace** enabling **WinRM** the way Ansible expects. In practice we still ran **`ConfigureRemotingForAnsible.ps1`** from the [Ansible documentation examples](https://raw.githubusercontent.com/ansible/ansible-documentation/refs/heads/devel/examples/scripts/ConfigureRemotingForAnsible.ps1) (see [Managing Windows with WinRM](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#winrm-setup)) **once per image** (or on the installer VM before capture, if WinRM must be baked in). Run it from an **elevated** PowerShell, then create the AAP **Machine** credential with the same **Administrator** password (or the account you configured). Without that step, **`vm_post_install_windows.yml`** and ad-hoc **`win_ping`** jobs time out or fail before authentication.
+**`prepare-win.ps1`** downloads and runs **`ConfigureRemotingForAnsible.ps1`** before disabling the firewall and installing Cloudbase-Init, so a golden image is ready for **HTTP 5985** / **HTTPS 5986** and the usual Ansible variables. For air-gapped builds, copy the script from [ansible-documentation](https://raw.githubusercontent.com/ansible/ansible-documentation/refs/heads/devel/examples/scripts/ConfigureRemotingForAnsible.ps1) and pass **`-ConfigureRemotingScriptPath`**.
 
-That script turns on **PowerShell remoting / WinRM**, sets **`LocalAccountTokenFilterPolicy`** for local admin over the network, adds a **self-signed HTTPS listener on 5986** (and firewall for it), and typically leaves or creates an **HTTP listener on 5985** (via **`Enable-PSRemoting`**). It can enable **Basic** auth on the WinRM service unless you pass **`-DisableBasicAuth`**. After **sysprep / generalize**, re-run with **`-ForceNewSSLCert`** if HTTPS fails because the listener certificate no longer matches the new machine identity.
+That upstream script is intended for lab/eval (self-signed certs). Production should use CA-signed certificates and stricter auth. See [Managing Windows with WinRM](https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#winrm-setup).
+
+After **sysprep / generalize**, clones may need **`-WinRmForceNewSSLCert`** if you re-run the Ansible script and HTTPS fails because the listener certificate no longer matches the new machine identity.
 
 #### Ansible variables (`ansible.builtin.winrm`)
 
