@@ -10,8 +10,11 @@
 # Limit to the dynamic hostname (usually "<namespace>-<vmname>").
 - name: WinRM connectivity diagnostics (local modules on execution node)
   hosts: all
-  connection: local
   gather_facts: false
+  # Inventory sets ansible_connection: winrm; play-level connection: local does not override that
+  # for all cases, so force local transport here while keeping WinRM for the win_ping play below.
+  vars:
+    ansible_connection: local
   tasks:
     - name: Validate required extra vars
       ansible.builtin.assert:
