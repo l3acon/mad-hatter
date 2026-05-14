@@ -89,7 +89,7 @@ controller_templates:
     credentials:
       - Controller Credential
       - OpenShift Credential
-    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: false
     ask_limit_on_launch: true
     ask_credential_on_launch: true
@@ -99,6 +99,7 @@ controller_templates:
       description: >-
         Set Job Template Limit to the KubeVirt inventory hostname (usually "<namespace>-<vmname>").
         At launch, select your WinRM Machine credential. Optional second credential slot if your controller requires it.
+        Probes TCP then HTTP /wsman from the OpenShift Virtualization EE (no ansible.windows required).
       spec:
         - question_name: VM namespace
           type: text

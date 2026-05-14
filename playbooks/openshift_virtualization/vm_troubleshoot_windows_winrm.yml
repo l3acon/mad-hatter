@@ -1,5 +1,5 @@
 ---
-# Diagnose controller/EE → Windows guest WinRM path (KubeVirt pod network) and run win_ping.
+# Diagnose controller/EE → Windows guest WinRM path (KubeVirt pod network): TCP wait_for then HTTP /wsman.
 #
 # Extra vars / survey:
 #   ocpv_vm_namespace, ocpv_vm_name
@@ -7,12 +7,13 @@
 #   ocpv_netpol_check_namespaces (optional; default includes VM namespace and "aap")
 #
 # Job template: set Inventory to "OpenShift Virtualization | KubeVirt VMs (WinRM)" and
-# Limit to the dynamic hostname (usually "<namespace>-<vmname>").
+# Limit to the dynamic hostname (usually "<namespace>-<vmname>"). Use an EE with kubernetes.core
+# (e.g. OpenShift Virtualization EE); application probe is HTTP to /wsman, not ansible.windows.win_ping.
 - name: WinRM connectivity diagnostics (local modules on execution node)
   hosts: all
   gather_facts: false
   # Inventory sets ansible_connection: winrm; play-level connection: local does not override that
-  # for all cases, so force local transport here while keeping WinRM for the win_ping play below.
+  # for all cases, so force local transport here; play 2 also uses local + uri to the guest IP.
   vars:
     ansible_connection: local
   tasks:
@@ -100,9 +101,27 @@
           - "VMI IP={{ ocpv_tr_guest_ip }} port={{ ocpv_windows_winrm_port | default(5985) }}"
           - "TCP wait_for: {{ 'succeeded' if ocpv_tr_wait is not failed else 'FAILED (likely network path, guest firewall, or WinRM not listening)' }}"
 
-- name: WinRM application ping (uses inventory WinRM variables)
+- name: WinRM HTTP probe (from EE; does not require ansible.windows on the image)
   hosts: all
   gather_facts: false
+  vars:
+    ansible_connection: local
   tasks:
-    - name: win_ping
-      ansible.windows.win_ping:
+    # win_ping needs ansible.windows on the execution environment. mh-rosa (kubevirt EE) does not ship it;
+    # POST /wsman still exercises the same TCP path and confirms the WinRM HTTP listener responds.
+    - name: POST to WinRM /wsman (expect SOAP fault or auth challenge, not connection failure)
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ ocpv_windows_winrm_port | default(5985) }}/wsman"
+        method: POST
+        headers:
+          Content-Type: application/soap+xml;charset=UTF-8
+        body: ""
+        status_code: [200, 400, 401, 403, 404, 405, 411, 415, 500]
+        timeout: "{{ (ocpv_tr_tcp_timeout | default(30) | int) }}"
+      register: ocpv_tr_wsman
+
+    - name: Summarize WinRM HTTP probe
+      ansible.builtin.debug:
+        msg:
+          - "ansible_host={{ ansible_host }} HTTP status={{ ocpv_tr_wsman.status | default('n/a') }}"
+          - "WinRM listener responded on the EE→guest path (compare with TCP result in play 1)."
