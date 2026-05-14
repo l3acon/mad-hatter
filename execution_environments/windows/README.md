@@ -8,3 +8,14 @@ Builds **`quay.io/matferna/mh-windows:<date>`** and **`quay.io/matferna/mh-windo
 - **CI:** GitHub Actions workflow **`.github/workflows/windows-ee.yml`** (`workflow_dispatch`) — set secrets **`QUAY_IO_USERNAME`**, **`QUAY_IO_PASSWORD`**, **`AUTOMATION_HUB_TOKEN`**.
 
 After publishing, refresh the controller execution environment (or bump the image reference) so automation pulls the new digest.
+
+### Workflow jobs fail with Kubernetes `401 Unauthorized`
+
+The **OpenShift Credential** on the controller must carry a current **API URL** and **bearer token**. If your local `oc` session is valid but controller jobs are not, refresh the credential from the same machine:
+
+```bash
+oc login …   # same cluster the controller should automate
+ansible-playbook playbooks/openshift_virtualization/aap_sync_openshift_credential_from_oc.yml
+```
+
+Then re-run **OpenShift Virtualization | Provision Windows VM and install package**.
