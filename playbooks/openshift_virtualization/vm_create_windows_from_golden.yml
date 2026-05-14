@@ -14,7 +14,8 @@
 #   ocpv_windows_admin_password (optional; when ocpv_cloudinit_userdata is unset, included in
 #     default #cloud-config so cloudbase-init resets Administrator to match the workflow password)
 #   ocpv_cloudinit_userdata (optional raw #cloud-config; overrides default golden template)
-#   ocpv_cloudinit_set_hostname (optional bool, default false — set_hostname can trigger a reboot)
+#   ocpv_cloudinit_clear_clone_setup_state (optional bool, default true) — write first-boot script that clears
+#     stuck HKLM\SYSTEM\Setup / OOBE flags after a CDI clone (avoids "installation cannot proceed" mini-setup loop).
 #   ocpv_skip_rwo_dv_conflict_check (optional bool, default false — only used when ocpv_clone_golden_root is false;
 #     skip guard when you use RWX / shared storage)
 - name: Create Windows VM from DataVolume
