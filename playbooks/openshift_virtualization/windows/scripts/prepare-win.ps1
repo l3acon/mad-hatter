@@ -73,6 +73,9 @@
 .PARAMETER SysprepOobeMode
     **Auto** (default): omit /oobe on **Windows Server Core**; use /oobe on other SKUs. **Oobe** / **NoOobe** override.
 
+.PARAMETER AllowSystemContext
+    Allow **NT AUTHORITY\SYSTEM** (for example **SetupComplete.cmd** during unattended install). Default requires Administrator.
+
 .EXAMPLE
     .\prepare-win.ps1 -Verbose
 
@@ -111,7 +114,9 @@ param(
     [switch] $SkipSysprep,
 
     [ValidateSet('Auto', 'Oobe', 'NoOobe')]
-    [string] $SysprepOobeMode = 'Auto'
+    [string] $SysprepOobeMode = 'Auto',
+
+    [switch] $AllowSystemContext
 )
 
 Set-StrictMode -Version Latest
@@ -238,7 +243,12 @@ function Invoke-AnsibleConfigureRemotingScript {
 }
 
 if (-not (Test-Administrator)) {
-    throw 'Run this script from an elevated PowerShell (Run as Administrator).'
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $isSystem = ($id.User.Value -eq 'S-1-5-18')
+    if (-not ($AllowSystemContext -and $isSystem)) {
+        throw 'Run this script from an elevated PowerShell (Run as Administrator), or pass -AllowSystemContext when running as SYSTEM from SetupComplete.cmd.'
+    }
+    Write-Verbose 'Running as NT AUTHORITY\SYSTEM with -AllowSystemContext (unattended SetupComplete path).'
 }
 
 # TLS for Invoke-WebRequest against GitHub / ansible-documentation

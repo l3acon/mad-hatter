@@ -1,0 +1,372 @@
+---
+# Build a small Joliet/Rock Ridge ISO containing Autounattend.xml + helper scripts, then virtctl image-upload to a CDI DataVolume.
+# Quick XML check (no cluster): playbooks/openshift_virtualization/windows/validate_autounattend_local.yml
+# Enable with -e ocpv_win_autounattend_enabled=true (typically together with prep_windows_install_media.yml).
+# Administrator password is embedded in the ISO and Autounattend.xml — use a lab password and export from shell when possible:
+#   export OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD='...'
+#
+# Optional: -e ocpv_unattend_os_disk_id=1 if WinPE enumerates the virtio OS disk as disk 1 (ImageInstall partition errors).
+# Re-upload after a prior successful upload: by default the playbook deletes the existing autounattend DataVolume
+# (and optionally the installer VM) so virtctl is not blocked by "PVC already successfully populated".
+# Set -e ocpv_win_autounattend_replace_existing=false to skip deletion (upload will fail if DV already populated).
+- name: Build and upload autounattend answer ISO (optional)
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    ocpv_win_autounattend_enabled: false
+    ocpv_win_namespace: ocpv-aap-smoke
+    ocpv_win_autounattend_iso_dv_name: windows-autounattend-iso
+    ocpv_win_autounattend_iso_dv_size: 64Mi
+    ocpv_win_storage_class: gp3-csi
+    ocpv_win_virtctl_insecure: true
+    ocpv_win_autounattend_upload: true
+    ocpv_win_autounattend_replace_existing: true
+    ocpv_win_autounattend_delete_installer_vm_when_replace: true
+    ocpv_win_installer_vm_name: windows-server-installer
+    _ocpv_virtio_image_default: quay.io/kubevirt/virtio-container-disk:v1.2.0
+    ocpv_win_virtio_containerdisk_image: "{{ _ocpv_virtio_image_default }}"
+    ocpv_win_autounattend_admin_password: "{{ lookup('env', 'OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD') | default('', true) }}"
+    _ocpv_prepare_win_ps1_url_default: "https://raw.githubusercontent.com/l3acon/mad-hatter/main/playbooks/openshift_virtualization/windows/scripts/prepare-win.ps1"
+    ocpv_prepare_win_ps1_url_resolved: "{{ ocpv_prepare_win_ps1_url | default(_ocpv_prepare_win_ps1_url_default) }}"
+  tasks:
+    - name: Skip autounattend pipeline when disabled
+      when: not (ocpv_win_autounattend_enabled | default(false) | bool)
+      ansible.builtin.meta: end_play
+
+    - name: Require Administrator password for autounattend (baked into ISO / XML)
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_autounattend_admin_password is defined
+          - ocpv_win_autounattend_admin_password | string | length > 0
+        fail_msg: >-
+          Set OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD in the environment (or pass -e ocpv_win_autounattend_admin_password
+          for lab-only shells). This value is written into Autounattend.xml on the answer ISO.
+
+    - name: Create staging directory for autounattend ISO
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ocpv_autounattend_
+      register: ocpv_win_autoun_stage
+
+    - name: Record staging path
+      ansible.builtin.set_fact:
+        ocpv_win_autounattend_stage: "{{ ocpv_win_autoun_stage.path }}"
+
+    - name: Install VirtIO block helper script onto staging
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/autounattend/LoadVirtioDrivers.ps1"
+        dest: "{{ ocpv_win_autounattend_stage }}/LoadVirtioDrivers.ps1"
+        mode: "0644"
+
+    - name: Install WinPE virtio loader batch onto answer ISO staging
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/autounattend/WinPELoadVirtio.cmd"
+        dest: "{{ ocpv_win_autounattend_stage }}/WinPELoadVirtio.cmd"
+        mode: "0644"
+
+    - name: Render Autounattend.xml
+      ansible.builtin.template:
+        src: Autounattend.xml.j2
+        dest: "{{ ocpv_win_autounattend_stage }}/Autounattend.xml"
+        mode: "0644"
+
+    - name: Render GoldenBootstrap.ps1
+      ansible.builtin.template:
+        src: GoldenBootstrap.ps1.j2
+        dest: "{{ ocpv_win_autounattend_stage }}/GoldenBootstrap.ps1"
+        mode: "0644"
+
+    - name: Install StageGoldenSetupComplete.ps1 onto answer ISO staging
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/autounattend/StageGoldenSetupComplete.ps1"
+        dest: "{{ ocpv_win_autounattend_stage }}/StageGoldenSetupComplete.ps1"
+        mode: "0644"
+
+    # --- Extract VirtIO drivers from the containerDisk and bundle on the answer ISO ---
+    # PnpCustomizationWinPE cannot reliably read the containerDisk CD-ROM in WinPE (timing / filesystem).
+    # Bundling them on the autounattend ISO (which WinPE CAN read) lets PnpCustomization properly stage
+    # the driver for both WinPE AND the target OS install.
+    - name: Extract VirtIO drivers from containerDisk onto answer ISO
+      block:
+        - name: Create temp dir for containerDisk extraction
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: ocpv_virtio_extract_
+          register: _virtio_extract_dir
+
+        - name: Pull containerDisk image
+          ansible.builtin.command:
+            cmd: "podman pull {{ ocpv_win_virtio_containerdisk_image }}"
+          changed_when: false
+
+        - name: Create temp container from containerDisk image
+          ansible.builtin.command:
+            cmd: "podman create --name ocpv-virtio-extract {{ ocpv_win_virtio_containerdisk_image }}"
+          register: _virtio_cid
+
+        - name: Copy disk contents from container
+          ansible.builtin.command:
+            cmd: "podman cp ocpv-virtio-extract:/disk/. {{ _virtio_extract_dir.path }}/disk"
+
+        - name: Find disk image file in extracted container
+          ansible.builtin.find:
+            paths: "{{ _virtio_extract_dir.path }}/disk"
+            recurse: false
+          register: _virtio_disk_files
+
+        - name: Set disk image path
+          ansible.builtin.set_fact:
+            _virtio_disk_image: "{{ (_virtio_disk_files.files | sort(attribute='size') | last).path }}"
+
+        - name: Create drivers staging dir on answer ISO
+          ansible.builtin.file:
+            path: "{{ ocpv_win_autounattend_stage }}/drivers"
+            state: directory
+            mode: "0755"
+
+        - name: Check for 7z
+          ansible.builtin.command:
+            cmd: which 7z
+          changed_when: false
+          failed_when: false
+          register: _which_7z
+
+        - name: Extract targeted driver directories with 7z (small subset, not the full amd64 tree)
+          when: _which_7z.rc == 0
+          ansible.builtin.command:
+            cmd: >-
+              7z x -o{{ ocpv_win_autounattend_stage }}/drivers {{ _virtio_disk_image }}
+              amd64/2k22/* amd64/w11/* amd64/w10/* amd64/2k19/* -r
+          register: _virtio_7z
+          failed_when: false
+
+        - name: Fall back to xorriso extraction if 7z unavailable or failed
+          when: (_which_7z.rc != 0) or (_virtio_7z.rc | default(1) != 0)
+          block:
+            - name: Extract amd64/2k22 with xorriso
+              ansible.builtin.command:
+                cmd: >-
+                  xorriso -osirrox on -indev {{ _virtio_disk_image }}
+                  -extract /amd64/2k22 {{ ocpv_win_autounattend_stage }}/drivers/amd64/2k22
+              failed_when: false
+            - name: Extract amd64/w11 with xorriso
+              ansible.builtin.command:
+                cmd: >-
+                  xorriso -osirrox on -indev {{ _virtio_disk_image }}
+                  -extract /amd64/w11 {{ ocpv_win_autounattend_stage }}/drivers/amd64/w11
+              failed_when: false
+
+        - name: Check that drivers were extracted
+          ansible.builtin.find:
+            paths: "{{ ocpv_win_autounattend_stage }}/drivers"
+            patterns: "viostor.inf"
+            recurse: true
+          register: _virtio_inf_check
+
+        - name: Copy drivers to $WinPEDriver$ for automatic detection by Setup
+          ansible.builtin.copy:
+            src: "{{ ocpv_win_autounattend_stage }}/drivers/"
+            dest: "{{ ocpv_win_autounattend_stage }}/$WinPEDriver$/"
+            remote_src: true
+          when: _virtio_inf_check.files | length > 0
+
+        - name: Report driver extraction result
+          ansible.builtin.debug:
+            msg: >-
+              {{ 'VirtIO drivers extracted onto answer ISO (' ~ (_virtio_inf_check.files | length) ~ ' viostor.inf found).'
+                 if (_virtio_inf_check.files | length > 0)
+                 else 'WARNING: No viostor.inf found after extraction. PnpCustomizationWinPE will rely on containerDisk DriverPaths (may not stage for target OS).' }}
+
+      rescue:
+        - name: Warn that driver extraction failed (non-fatal)
+          ansible.builtin.debug:
+            msg: >-
+              Could not extract VirtIO drivers from {{ ocpv_win_virtio_containerdisk_image }}.
+              Requires podman + xorriso (or 7z). The ISO will still include WinPELoadVirtio.cmd for WinPE runtime loading,
+              but PnpCustomizationWinPE may not stage the driver for the target OS (Setup may show 'need driver' error).
+      always:
+        - name: Remove temp containerDisk container
+          ansible.builtin.command:
+            cmd: podman rm -f ocpv-virtio-extract
+          changed_when: false
+          failed_when: false
+
+        - name: Remove temp extraction directory
+          ansible.builtin.file:
+            path: "{{ _virtio_extract_dir.path | default('/nonexistent') }}"
+            state: absent
+          when: _virtio_extract_dir is defined
+
+    - name: Detect xorriso
+      ansible.builtin.command:
+        cmd: which xorriso
+      changed_when: false
+      failed_when: false
+      register: ocpv_which_xorriso
+
+    - name: Detect genisoimage
+      ansible.builtin.command:
+        cmd: which genisoimage
+      changed_when: false
+      failed_when: false
+      when: ocpv_which_xorriso.rc != 0
+      register: ocpv_which_genisoimage
+
+    - name: Require xorriso or genisoimage
+      ansible.builtin.assert:
+        that:
+          - ocpv_which_xorriso.rc == 0 or (ocpv_which_genisoimage is defined and ocpv_which_genisoimage.rc == 0)
+        fail_msg: >-
+          Install xorriso (Fedora: dnf install xorriso) or genisoimage to build the autounattend ISO.
+
+    - name: Allocate local output path for ISO
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .iso
+        prefix: ocpv_autounattend_
+      register: ocpv_autoun_iso_out
+
+    - name: Build autounattend ISO (xorriso)
+      ansible.builtin.command:
+        argv:
+          - xorriso
+          - -as
+          - mkisofs
+          - -J
+          - -joliet-long
+          - -r
+          - -V
+          - "{{ ocpv_win_autounattend_iso_volume_id | default('OCPV_AUTO') }}"
+          - -o
+          - "{{ ocpv_autoun_iso_out.path }}"
+          - "."
+        chdir: "{{ ocpv_win_autounattend_stage }}"
+      when: ocpv_which_xorriso.rc == 0
+
+    - name: Build autounattend ISO (genisoimage)
+      ansible.builtin.command:
+        argv:
+          - genisoimage
+          - -R
+          - -J
+          - -V
+          - "{{ ocpv_win_autounattend_iso_volume_id | default('OCPV_AUTO') }}"
+          - -o
+          - "{{ ocpv_autoun_iso_out.path }}"
+          - "."
+        chdir: "{{ ocpv_win_autounattend_stage }}"
+      when: ocpv_which_xorriso.rc != 0
+
+    - name: Stat built ISO
+      ansible.builtin.stat:
+        path: "{{ ocpv_autoun_iso_out.path }}"
+      register: ocpv_autoun_iso_stat
+
+    - name: Require non-empty ISO
+      ansible.builtin.assert:
+        that:
+          - ocpv_autoun_iso_stat.stat.exists | bool
+          - ocpv_autoun_iso_stat.stat.size | default(0) | int > 2048
+
+    - name: Remove installer VM when replacing autounattend ISO (releases CD-ROM mount)
+      when:
+        - ocpv_win_autounattend_upload | default(true) | bool
+        - ocpv_win_autounattend_replace_existing | default(true) | bool
+        - ocpv_win_autounattend_delete_installer_vm_when_replace | default(true) | bool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ ocpv_win_installer_vm_name | default('windows-server-installer') }}"
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 600
+      register: ocpv_autoun_delete_installer
+      failed_when: false
+
+    - name: Remove existing autounattend DataVolume so virtctl can repopulate PVC
+      when:
+        - ocpv_win_autounattend_upload | default(true) | bool
+        - ocpv_win_autounattend_replace_existing | default(true) | bool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ ocpv_win_autounattend_iso_dv_name }}"
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 600
+      register: ocpv_autoun_delete_dv
+
+    - name: Remove orphan autounattend PVC if DataVolume delete left PVC without DV
+      when:
+        - ocpv_win_autounattend_upload | default(true) | bool
+        - ocpv_win_autounattend_replace_existing | default(true) | bool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: PersistentVolumeClaim
+        name: "{{ ocpv_win_autounattend_iso_dv_name }}"
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 300
+      register: ocpv_autoun_delete_pvc
+      failed_when: false
+
+    - name: Build virtctl argv for autounattend image-upload
+      when: ocpv_win_autounattend_upload | default(true) | bool
+      ansible.builtin.set_fact:
+        ocpv_win_virtctl_autoun_argv:
+          - virtctl
+          - image-upload
+          - dv
+          - "{{ ocpv_win_autounattend_iso_dv_name }}"
+          - "--namespace={{ ocpv_win_namespace }}"
+          - "--size={{ ocpv_win_autounattend_iso_dv_size }}"
+          - "--storage-class={{ ocpv_win_storage_class }}"
+          - "--image-path={{ ocpv_autoun_iso_out.path }}"
+          - "--force-bind"
+
+    - name: Optionally allow insecure TLS to CDI upload proxy
+      when:
+        - ocpv_win_autounattend_upload | default(true) | bool
+        - ocpv_win_virtctl_insecure | bool
+      ansible.builtin.set_fact:
+        ocpv_win_virtctl_autoun_argv: "{{ ocpv_win_virtctl_autoun_argv + ['--insecure'] }}"
+
+    - name: Upload autounattend ISO with virtctl (creates DataVolume and streams image)
+      when: ocpv_win_autounattend_upload | default(true) | bool
+      ansible.builtin.command:
+        argv: "{{ ocpv_win_virtctl_autoun_argv }}"
+      async: 3600
+      poll: 30
+      register: ocpv_win_autoun_upload
+      changed_when: ocpv_win_autoun_upload.rc == 0
+      failed_when: ocpv_win_autoun_upload.rc != 0
+
+    - name: Remove staging directory
+      ansible.builtin.file:
+        path: "{{ ocpv_win_autounattend_stage }}"
+        state: absent
+
+    - name: Remove temporary ISO file on control node
+      when: ocpv_win_autounattend_upload | default(true) | bool
+      ansible.builtin.file:
+        path: "{{ ocpv_autoun_iso_out.path }}"
+        state: absent
+
+    - name: Report autounattend DataVolume
+      when: ocpv_win_autounattend_upload | default(true) | bool
+      ansible.builtin.debug:
+        msg: >-
+          Uploaded answer ISO to DataVolume {{ ocpv_win_namespace }}/{{ ocpv_win_autounattend_iso_dv_name }}.
+          Apply vm_apply_installer.yml with -e ocpv_win_autounattend_enabled=true so the installer VM mounts this DV.
+          If the installer VM was removed for replace_existing, re-run vm_apply_installer.yml to recreate it.
+
+    - name: Report local autounattend ISO (upload skipped)
+      when: not (ocpv_win_autounattend_upload | default(true) | bool)
+      ansible.builtin.debug:
+        msg: >-
+          Built answer ISO locally at {{ ocpv_autoun_iso_out.path }} (ocpv_win_autounattend_upload=false).
+          Inspect or upload manually with virtctl image-upload.

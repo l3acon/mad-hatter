@@ -56,6 +56,12 @@ controller_templates:
 
   - name: "OpenShift Virtualization | Create Windows VM from DataVolume"
     job_type: run
+    description: >-
+      Create a Windows VM from a golden root DataVolume by CDI-cloning it to a per-VM DataVolume (default).
+      By default (**ocpv_use_cloudbase_nocloud=false**) no cloudInitNoCloud volume is attached; the golden image
+      Administrator password must match the survey / WinRM credential. Set **ocpv_use_cloudbase_nocloud=true** to attach
+      NoCloud user-data for Cloudbase-Init (default template sets password + clone unstick). Optional **ocpv_cloudinit_userdata**
+      still forces a NoCloud Secret when non-empty.
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
@@ -69,6 +75,9 @@ controller_templates:
 
   - name: "OpenShift Virtualization | Post-install Chocolatey on Windows VM"
     job_type: run
+    description: >-
+      WinRM to the guest and install a Chocolatey package. By default (**ocpv_verify_cloudbase_init=false**) the job
+      does not require the Cloudbase-Init sentinel file; set **ocpv_verify_cloudbase_init=true** when using NoCloud + Cloudbase.
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
@@ -303,9 +312,10 @@ controller_workflows:
     description: >-
       Create a Windows VM from a golden root DataVolume by CDI-cloning it to a per-VM DataVolume (default), then connect
       with WinRM and install a Chocolatey package. Requires WinRM on the golden image. The create step uses the OpenShift
-      Virtualization EE (Kubernetes API only); the install step uses the Windows EE (ansible.windows + pywinrm). When you
-      do not pass custom ocpv_cloudinit_userdata, the create playbook injects default #cloud-config (sentinel file + optional
-      Administrator passwd) so cloudbase-init applies the same Administrator password as this workflow survey.
+      Virtualization EE (Kubernetes API only); the install step uses the Windows EE (ansible.windows + pywinrm). With
+      default **ocpv_use_cloudbase_nocloud=false**, the create job does not inject NoCloud user-data; the survey Administrator
+      password must match the golden image. Set **ocpv_use_cloudbase_nocloud=true** (or pass custom **ocpv_cloudinit_userdata**)
+      to attach NoCloud for Cloudbase-Init password alignment and clone unstick.
     organization: Default
     survey_enabled: true
     ask_variables_on_launch: false
@@ -332,9 +342,9 @@ controller_workflows:
       name: ""
       description: >-
         VM identity, golden source DataVolume name (CDI clone source; each run gets a dedicated clone DV by default),
-        Chocolatey package id, and Administrator password (WinRM).
-        The create job passes this password into default NoCloud user-data when ocpv_cloudinit_userdata is unset,
-        so cloudbase-init can align the guest password with WinRM before the install job runs.
+        Chocolatey package id, and Administrator password (WinRM). With default **ocpv_use_cloudbase_nocloud=false**, this
+        password must match the Administrator password baked into the generalized golden image (unattend / prepare-win path).
+        Set **ocpv_use_cloudbase_nocloud=true** (or non-empty **ocpv_cloudinit_userdata**) to inject NoCloud for Cloudbase-Init.
       spec:
         - question_name: VM name
           type: text

@@ -3,6 +3,10 @@
 # and optional cloudbase-init / cloud-config user-data on cloudInitNoCloud.
 #
 # Extra vars / survey:
+#   ocpv_use_cloudbase_nocloud (optional bool, default false) — when true, create Secret <vm>-nocloud and attach
+#     cloudInitNoCloud (default #cloud-config from windows_golden_nocloud.yaml.j2 unless ocpv_cloudinit_userdata is set).
+#     When false (default), the VM has no NoCloud volume; Administrator password must already match the golden / survey
+#     (unattend-only path). If ocpv_cloudinit_userdata is non-empty, NoCloud is still attached regardless of this flag.
 #   ocpv_vm_name, ocpv_vm_namespace, ocpv_win_root_dv_name
 #     ocpv_win_root_dv_name is the existing golden DataVolume (clone source when cloning is enabled).
 #   ocpv_clone_golden_root (optional bool, default true) — when true, create/wait for a clone DataVolume
@@ -198,25 +202,38 @@
             else ocpv_win_root_dv_name
           }}
 
+    - name: Resolve NoCloud attachment (cloudbase-init / custom userdata)
+      ansible.builtin.set_fact:
+        ocpv_use_cloudbase_nocloud_effective: "{{ ocpv_use_cloudbase_nocloud | default(false) | bool }}"
+        ocpv_nocloud_custom_userdata: >-
+          {{
+            ocpv_cloudinit_userdata is defined
+            and ((ocpv_cloudinit_userdata | string | trim) | length) > 0
+          }}
+
+    - name: Attach NoCloud when enabled or custom user-data is provided
+      ansible.builtin.set_fact:
+        ocpv_attach_nocloud_volume: "{{ ocpv_use_cloudbase_nocloud_effective or (ocpv_nocloud_custom_userdata | bool) }}"
+
     - name: Build cloudInitNoCloud user data for cloudbase-init
+      when: ocpv_attach_nocloud_volume | bool
       ansible.builtin.set_fact:
         ocpv_cloudinit_userdata_effective: >-
           {{
             (
               lookup('template', (playbook_dir | trim) ~ '/windows/templates/windows_golden_nocloud.yaml.j2')
-              if (
-                ocpv_cloudinit_userdata is not defined
-                or (ocpv_cloudinit_userdata | string | trim | length) == 0
-              )
+              if not (ocpv_nocloud_custom_userdata | bool)
               else (ocpv_cloudinit_userdata | string)
             )
           }}
 
     - name: Set NoCloud user-data Secret name (KubeVirt rejects inline userdata over 2048 bytes)
+      when: ocpv_attach_nocloud_volume | bool
       ansible.builtin.set_fact:
         ocpv_nocloud_userdata_secret_name: "{{ ocpv_vm_name }}-nocloud"
 
     - name: Ensure NoCloud user-data Secret exists
+      when: ocpv_attach_nocloud_volume | bool
       kubernetes.core.k8s:
         state: present
         definition:
@@ -231,16 +248,16 @@
           stringData:
             userdata: "{{ ocpv_cloudinit_userdata_effective }}"
 
-    - name: Build volume list (root DataVolume + NoCloud)
+    - name: Build volume list (root DataVolume, optional NoCloud)
       ansible.builtin.set_fact:
-        ocpv_vm_volumes:
-          - name: root
-            dataVolume:
-              name: "{{ ocpv_vm_root_dv_name }}"
-          - name: cloudinit
-            cloudInitNoCloud:
-              secretRef:
-                name: "{{ ocpv_nocloud_userdata_secret_name }}"
+        ocpv_vm_volumes: >-
+          {{
+            [{'name': 'root', 'dataVolume': {'name': ocpv_vm_root_dv_name}}]
+            + (
+              [{'name': 'cloudinit', 'cloudInitNoCloud': {'secretRef': {'name': ocpv_nocloud_userdata_secret_name}}}]
+              if (ocpv_attach_nocloud_volume | bool) else []
+            )
+          }}
 
     - name: Create Windows VirtualMachine
       redhat.openshift_virtualization.kubevirt_vm:

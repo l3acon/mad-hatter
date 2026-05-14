@@ -1,0 +1,114 @@
+# Golden image bootstrap: mini-setup mitigation, NetKVM, download prepare-win.ps1, sysprep.
+# Invoked from %SystemRoot%\Setup\Scripts via SetupComplete.cmd (before OOBE) or manually as Administrator.
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$log = Join-Path $env:TEMP 'ocpv-golden-bootstrap.log'
+function Log([string]$m) {
+    Add-Content -Path $log -Value ("{0} {1}" -f (Get-Date -Format o), $m) -ErrorAction SilentlyContinue
+}
+
+Log '--- GoldenBootstrap start ---'
+
+# Same patterns as cloud-init ocpv_unstick_clone_setup.ps1 (mini-setup / OOBE loop before first logon).
+$setup = 'HKLM:\SYSTEM\Setup'
+$child = 'HKLM:\SYSTEM\Setup\Status\ChildCompletion'
+if (Test-Path $child) {
+    $cv = (Get-ItemProperty -Path $child -Name 'setup.exe' -ErrorAction SilentlyContinue).'setup.exe'
+    Log ("ChildCompletion\setup.exe={0}" -f $cv)
+    if ($cv -eq 1) {
+        Set-ItemProperty -Path $child -Name 'setup.exe' -Value 3 -Type DWord -Force
+        Log 'ChildCompletion setup.exe 1 -> 3'
+    }
+}
+if (Test-Path $setup) {
+    $ssip = (Get-ItemProperty -Path $setup -Name 'SystemSetupInProgress' -ErrorAction SilentlyContinue).SystemSetupInProgress
+    $sp = (Get-ItemProperty -Path $setup -Name 'SetupPhase' -ErrorAction SilentlyContinue).SetupPhase
+    Log ("SystemSetupInProgress={0} SetupPhase={1}" -f $ssip, $sp)
+    if ($ssip -eq 1 -or $sp -in 4, 7) {
+        Set-ItemProperty -Path $setup -Name 'SetupPhase' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $setup -Name 'SetupType' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $setup -Name 'SystemSetupInProgress' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        Log 'cleared SetupPhase/SetupType/SystemSetupInProgress'
+    }
+}
+$oobePath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE'
+if (Test-Path $oobePath) {
+    $oobeProg = (Get-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -ErrorAction SilentlyContinue).OOBEInProgress
+    Log ("OOBEInProgress={0}" -f $oobeProg)
+    if ($oobeProg -eq 1) {
+        Set-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        Log 'OOBEInProgress -> 0'
+    }
+}
+
+function Find-VirtioCdRoot {
+    foreach ($v in Get-Volume | Where-Object { $_.DriveType.ToString() -eq 'CD-ROM' }) {
+        if (-not $v.DriveLetter) { continue }
+        $root = $v.DriveLetter + ':'
+        foreach ($probe in @('amd64', 'viostor', 'NetKVM', 'vioscsi')) {
+            if (Test-Path -LiteralPath (Join-Path $root $probe)) {
+                return $root
+            }
+        }
+    }
+    return $null
+}
+
+function Install-NetKvmFromVirtioCd {
+    $cd = Find-VirtioCdRoot
+    if (-not $cd) {
+        Write-Warning 'VirtIO CD not found; skipping NetKVM (prepare-win may still work if another NIC is present).'
+        Log 'NetKVM skip: no virtio CD'
+        return
+    }
+    $candidates = @(
+        (Join-Path $cd 'amd64\2k22\netkvm.inf'),
+        (Join-Path $cd 'amd64\w11\netkvm.inf'),
+        (Join-Path $cd 'amd64\w10\netkvm.inf'),
+        (Join-Path $cd 'NetKVM\w11\amd64\netkvm.inf'),
+        (Join-Path $cd 'NetKVM\w10\amd64\netkvm.inf'),
+        (Join-Path $cd 'NetKVM\2k22\amd64\netkvm.inf')
+    )
+    $pnp = Join-Path $env:WINDIR 'System32\pnputil.exe'
+    if (-not (Test-Path -LiteralPath $pnp)) {
+        $pnp = 'pnputil.exe'
+    }
+    foreach ($inf in $candidates) {
+        if (Test-Path -LiteralPath $inf) {
+            Log ("Installing NetKVM from {0}" -f $inf)
+            & $pnp /add-driver $inf /install
+            break
+        }
+    }
+    Get-NetAdapter -ErrorAction SilentlyContinue | Restart-NetAdapter -ErrorAction SilentlyContinue
+}
+
+Install-NetKvmFromVirtioCd
+Start-Sleep -Seconds 5
+
+$uri = '{{ ocpv_prepare_win_ps1_url_resolved }}'
+$dest = Join-Path $env:TEMP 'prepare-win.ps1'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+$ok = $false
+for ($i = 0; $i -lt 24; $i++) {
+    try {
+        Invoke-WebRequest -Uri $uri -OutFile $dest -UseBasicParsing -ErrorAction Stop
+        $ok = $true
+        Log ("Downloaded prepare-win.ps1 attempt {0}" -f ($i + 1))
+        break
+    }
+    catch {
+        Write-Warning "Download attempt $($i + 1) failed: $($_.Exception.Message)"
+        Log ("Download fail: {0}" -f $_.Exception.Message)
+        Start-Sleep -Seconds 15
+    }
+}
+if (-not $ok) {
+    throw "Could not download prepare-win.ps1 from $uri after retries."
+}
+
+Log 'Launching prepare-win.ps1 (AllowSystemContext for SetupComplete / SYSTEM)'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $dest -Force -Verbose -AllowSystemContext
+exit $LASTEXITCODE

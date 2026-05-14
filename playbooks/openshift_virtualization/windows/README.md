@@ -1,6 +1,6 @@
 # Windows on OpenShift Virtualization (KubeVirt)
 
-This folder supports **DataVolume-based** Windows Server eval installs, **Cloudbase-Init** sealing, and **Ansible** automation on AAP (see CasC in `roles/openshift_virtualization_aap/`).
+This folder supports **DataVolume-based** Windows Server eval installs, **unattend / SetupComplete** golden bootstrap, optional **Cloudbase-Init** (NoCloud), and **Ansible** automation on AAP (see CasC in `roles/openshift_virtualization_aap/`).
 
 ## Prerequisites
 
@@ -12,12 +12,47 @@ This folder supports **DataVolume-based** Windows Server eval installs, **Cloudb
 
 | Playbook | Purpose |
 |----------|---------|
-| `dv_create_blank_os.yml` | Creates a blank **DataVolume** (default 60 Gi) for the Windows system disk. |
+| `dv_create_blank_os.yml` | Creates a blank **DataVolume** (default 60 Gi). Set **`ocpv_win_os_blank_recreate: true`** to delete the installer VM (optional) and **remove + recreate** the blank OS DV from scratch. |
 | `dv_upload_iso.yml` | `virtctl image-upload` of the eval ISO into a **DataVolume** (large transfer; uses async + `--force-bind`). |
 | `vm_apply_installer.yml` | Creates the **installer** `VirtualMachine` (UEFI, eval ISO + virtio driver CD + blank disk). |
-| `prep_windows_install_media.yml` | Chains the three playbooks above. |
+| `prep_windows_install_media.yml` | Chains blank OS DV, eval ISO upload, optional **autounattend** build+upload, then installer VM. |
 
 Defaults (override with `-e`): `ocpv_win_namespace`, `ocpv_win_storage_class`, `ocpv_win_iso_local_path`, DataVolume names, etc.
+
+### Unattended installer / golden bootstrap (`Autounattend.xml` on a small ISO)
+
+When **`ocpv_win_autounattend_enabled=true`** (and **`export OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD=…`** matches the Administrator password you will use for WinRM / AAP surveys on the resulting golden), **`prep_windows_install_media.yml`** also runs **`autounattend_iso_pipeline.yml`**, which:
+
+1. Stages **`Autounattend.xml`**, **`StageGoldenSetupComplete.ps1`**, **`GoldenBootstrap.ps1`**, and **`LoadVirtioDrivers.ps1`** (optional / legacy on-disk helper; WinPE uses **PnpCustomizationWinPE** paths instead).
+2. Builds a small ISO with **xorriso** (preferred) or **genisoimage**.
+3. Uploads it to DataVolume **`windows-autounattend-iso`** (override with **`-e ocpv_win_autounattend_iso_dv_name=…`**). Before upload, **`autounattend_iso_pipeline.yml`** defaults to **replacing** an existing populated DV: it removes **`windows-server-installer`** (optional) and deletes the **`windows-autounattend-iso`** DataVolume/PVC so **`virtctl image-upload`** is not blocked by *PVC already successfully populated*. Disable with **`-e ocpv_win_autounattend_replace_existing=false`** (then you must delete the DV/PVC yourself before re-upload).
+
+**`vm_apply_installer.yml`** then adds a **fourth SATA CD-ROM** (no boot order) backed by that DataVolume. Windows Setup discovers **`Autounattend.xml`** on that volume. The unattend file:
+
+- In **windowsPE**, **`Microsoft-Windows-PnpCustomizationWinPE`** / **`DriverPaths`** scans **`D:`–`I:`** for both **`amd64/<release>/`** (**`quay.io/kubevirt/virtio-container-disk`** layout, e.g. **`amd64/2k22`**) and **`viostor/.../amd64`** (Fedora **virtio-win.iso** layout). Some builds still show **no fixed disks** until drivers load; the answer ISO therefore ships **`WinPELoadVirtio.cmd`**, which **`Microsoft-Windows-Setup` / `RunSynchronous`** runs **before** **`DiskConfiguration`** to **`pnputil /add-driver …\*.inf /install /subdirs`** (same as a manual fix). Disable with **`-e ocpv_unattend_winpe_load_virtio=false`**. **`DriverPaths` must not** be placed under **`Microsoft-Windows-Setup`** in **windowsPE** (invalid schema). **No PowerShell** runs in WinPE from the answer file. **`DiskConfiguration`** creates **EFI + MSR + sized primary** (**`ocpv_unattend_primary_partition_mb`**, default **55000** MB — must fit the blank disk; a **~55 GB** disk needs a smaller value than **55000**). **`ModifyPartitions`** does **not** assign **`Letter`** on the OS partition in WinPE. **`InstallTo`**: **`DiskID`** / **`PartitionID` 3**. In **specialize**, **`Microsoft-Windows-Deployment` / `RunSynchronous`** runs **`StageGoldenSetupComplete.ps1`** from the answer CD. Override path list with **`ocpv_unattend_virtio_driver_subpaths`** if your virtio CD layout differs.
+- Sets **Administrator** password in **UserAccounts** (no AutoLogon). **`GoldenBootstrap.ps1`** applies the same **mini-setup registry mitigations** as the clone unstick script, installs **NetKVM**, downloads **`prepare-win.ps1`** (override **`ocpv_prepare_win_ps1_url`** for forks/branches), and runs it with **`-AllowSystemContext`** so **WinRM** and **sysprep** can run under **SYSTEM** from SetupComplete. Guest logs: **`%TEMP%\ocpv-golden-bootstrap.log`**, **`%SystemRoot%\Setup\Scripts\golden-bootstrap.log`**.
+
+**Lab discipline:** use the **same** Administrator password for **`OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD`**, the golden build, **`OCPV_WIN_ADMIN_PASSWORD`** when validating **`controller_validate_windows_workflow.yml`**, and the AAP workflow survey.
+
+**Local validation without uploading:**  
+`ansible-playbook playbooks/openshift_virtualization/windows/autounattend_iso_pipeline.yml -e ocpv_win_autounattend_enabled=true -e ocpv_win_autounattend_upload=false -e ocpv_win_autounattend_admin_password='…'`  
+prints the temp ISO path; requires **xorriso** or **genisoimage**.
+
+**Validate `Autounattend.xml` before booting Windows:** **`validate_autounattend_local.yml`** renders **`Autounattend.xml.j2`** and runs **`xmllint`** (well‑formed XML only). Example: `ansible-playbook playbooks/openshift_virtualization/windows/validate_autounattend_local.yml -e ocpv_win_autounattend_admin_password='…'` (or export **`OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD`**). Add **`-e ocpv_validate_autounattend_copy_to=/path/Autounattend.xml`** to keep a file for **Windows SIM**. For settings that exist on **your** Windows edition / image index, install the [Windows ADK](https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install), open **Windows System Image Manager**, create a **catalog** from the same **`install.wim`** index you install, import **`Autounattend.xml`**, and resolve red validation markers—this catches unknown components and pass mismatches that **`xmllint`** cannot see.
+
+| Variable | Default / notes |
+|----------|-----------------|
+| **`ocpv_win_autounattend_enabled`** | **`false`** — set **`true`** for automated path. |
+| **`ocpv_unattend_os_disk_id`** | **`0`** — WinPE disk index for the **virtio blank OS** disk; try **`1`** if **`ImageInstall`** or **`DiskConfiguration`** still fails (enumeration order). |
+| **`ocpv_unattend_primary_partition_mb`** | **`55000`** — Windows primary partition size in MB (must be **less than** blank PVC capacity minus EFI/MSR). Increase or decrease if **`DiskConfiguration`** fails or you need more free space. |
+| **`ocpv_unattend_wim_index`** | **`1`** — index in `install.wim` for your SKU (Core vs Desktop, etc.). |
+| **`ocpv_unattend_efi_mb`** / **`ocpv_unattend_msr_mb`** | **`260`** / **`128`** — EFI and MSR sizes in MB. |
+| **`ocpv_unattend_virtio_driver_subpaths`** | Optional YAML list of path suffixes (forward slashes) appended to each **`D:`–`I:`** drive for **`DriverPaths`**; defaults cover **KubeVirt virtio container** (`amd64/2k22`, …) and **virtio-win.iso** (`viostor/w11/amd64`, …). |
+| **`ocpv_unattend_winpe_load_virtio`** | **`true`** — run **`WinPELoadVirtio.cmd`** from the answer ISO via **`RunSynchronous`** before **`DiskConfiguration`**. |
+| **`ocpv_prepare_win_ps1_url`** | Raw GitHub URL to **`prepare-win.ps1`** on your branch/fork. |
+| **`ocpv_win_autounattend_upload`** | **`true`** — set **`false`** to only build the ISO locally. |
+| **`ocpv_win_autounattend_replace_existing`** | **`true`** — delete existing autounattend DV/PVC (and by default the installer VM) before upload so re-runs succeed. |
+| **`ocpv_win_autounattend_delete_installer_vm_when_replace`** | **`true`** — set **`false`** to keep the installer VM (only if the autounattend ISO is not mounted / you handle conflicts). |
 
 ## 2. Installer VM and boot order
 
@@ -26,6 +61,7 @@ The template `templates/windows_installer_vm.yaml.j2` attaches:
 1. **Windows eval ISO** (SATA CD-ROM, **boot order 1**)
 2. **Blank virtio system disk** (boot order 2)
 3. **VirtIO guest tools container disk** (SATA CD-ROM, **boot order 99**)
+4. **Optional autounattend answer ISO** (SATA CD-ROM, **no boot order**) when **`ocpv_win_autounattend_enabled`** is **true** — DataVolume **`ocpv_win_autounattend_iso_dv_name`** (default **`windows-autounattend-iso`**). Windows Setup discovers **`Autounattend.xml`** on this volume without booting from it ahead of the eval ISO.
 
 If the **virtio driver CD** is tried before the ISO, firmware may not boot setup. **Always keep the eval ISO lowest boot order** and the virtio CD **last**.
 
@@ -90,22 +126,24 @@ That almost always means **sysprep did not receive a valid command line**. The u
 
 After you have a **golden root DataVolume** name in the same namespace:
 
-- **`../vm_create_windows_from_golden.yml`** — By default (**`ocpv_clone_golden_root`**, default **true**), creates a **CDI clone** DataVolume from the golden source (`spec.source.pvc` → existing golden DV/PVC), waits until the clone is **Succeeded**, then creates the VM with the **clone** as the root disk so the golden RWO volume is never attached to more than one launcher. Set **`ocpv_clone_golden_root: false`** only to attach the golden DV directly (legacy; subject to RWO exclusivity). Optional **`ocpv_win_clone_dv_name`** overrides the default clone DV name (`<vm_name>-win-os`, truncated if the VM name is very long). When **`ocpv_cloudinit_userdata`** is not set, the playbook renders **`windows/windows_golden_nocloud.yaml.j2`**: a **sentinel file** under `C:\Windows\Temp\.ocpv-cloudbase-init-sentinel` and an **Administrator** **`users`** entry (plaintext **`passwd`**, per [cloudbase-init cloud-config](https://cloudbase-init.readthedocs.io/en/latest/userdata.html)) so the guest password matches **`ocpv_windows_admin_password`** from the workflow survey before WinRM connects.
+- **`../vm_create_windows_from_golden.yml`** — By default (**`ocpv_clone_golden_root`**, default **true**), creates a **CDI clone** DataVolume from the golden source, waits until **Succeeded**, then creates the VM with the **clone** as the root disk. Set **`ocpv_clone_golden_root: false`** only to attach the golden DV directly (RWO: one consumer). Optional **`ocpv_win_clone_dv_name`** overrides the clone DV name (`<vm_name>-win-os`, truncated if needed).
+
+  **NoCloud / Cloudbase-Init:** **`ocpv_use_cloudbase_nocloud`** defaults to **`false`**. In that mode the VM has **no** `cloudInitNoCloud` volume; **Administrator on the generalized golden image must already match** **`ocpv_windows_admin_password`** (survey / WinRM). Set **`ocpv_use_cloudbase_nocloud: true`** to attach a NoCloud Secret and render **`windows_golden_nocloud.yaml.j2`** (sentinel + password + clone unstick **`runcmd`**). If **`ocpv_cloudinit_userdata`** is non-empty, a NoCloud volume is attached **regardless** of **`ocpv_use_cloudbase_nocloud`**.
 
 **Disk lifecycle:** each provisioned VM keeps its own clone DataVolume (default naming); deleting the VM does **not** delete the clone DV—remove it with **`oc delete datavolume <name> -n <ns>`** when reclaiming space.
 
-**KubeVirt userdata size:** inline **`cloudInitNoCloud.userData`** is capped at **2048 bytes**; **`vm_create_windows_from_golden.yml`** always writes **`userData`** into Secret **`<vm_name>-nocloud`** (key **`userdata`**) and references **`cloudInitNoCloud.secretRef`** (KubeVirt’s name for the userdata Secret; some docs call this **`userDataSecretRef`**). Delete that Secret with the VM if you remove the guest manually.
+**KubeVirt userdata size:** when NoCloud is used, **`userData`** is stored in Secret **`<vm_name>-nocloud`** (key **`userdata`**) and referenced via **`cloudInitNoCloud.secretRef`**. Inline userData is capped at **2048 bytes**.
 
-**Clone first boot — "The computer restarted unexpectedly" / "Windows installation cannot proceed":** after a **block-level clone** of a generalized disk, Windows can get stuck in mini-setup (registry under **`HKLM\SYSTEM\Setup`**, **`HKLM\SYSTEM\Setup\Status\ChildCompletion`**, and **`HKLM\...\OOBE`**). The default **`windows_golden_nocloud.yaml.j2`** runs a one-time **`runcmd`** script (disable with **`ocpv_cloudinit_clear_clone_setup_state: false`**) that: sets **`ChildCompletion\setup.exe`** from **1 → 3** when present (common fix for the blue setup loop; see [Windows OS Hub](https://woshub.com/windows-install-error-computer-restarted-unexpectedly/)), clears **`SetupPhase` / `SetupType` / `SystemSetupInProgress`**, **`OOBEInProgress`**, and removes **`Setup\CmdLine`** when those stuck patterns appear, then reboots. Check **`C:\Windows\Temp\ocpv-unstick-clone-setup.log`** in the guest (virt console / disk) to see whether the script ran and what it detected.
+**Clone first boot — "The computer restarted unexpectedly":** with **`ocpv_use_cloudbase_nocloud: true`**, the default **`windows_golden_nocloud.yaml.j2`** **`runcmd`** applies the ChildCompletion / Setup mitigations (see [Windows OS Hub](https://woshub.com/windows-install-error-computer-restarted-unexpectedly/)); check **`C:\Windows\Temp\ocpv-unstick-clone-setup.log`**. With NoCloud **off**, rely on a **clean golden** from unattend / **`GoldenBootstrap.ps1`** and matching passwords; if loops persist, fix the golden disk or use **`ocpv_use_cloudbase_nocloud: true`** temporarily.
 
-**Golden image / sysprep:** if the error **persists** after redeploying with the script above, the **golden root DataVolume** may never have reached a clean **generalized / shutdown** state (for example the VM was powered on again after sysprep, sysprep failed, or `/oobe` was wrong for Server Core). In that case **re-run `prepare-win.ps1`** on a VM booted from that disk (or rebuild the golden from installer), let **`sysprep /generalize /shutdown`** finish, and **do not boot the golden disk again** until it is captured as the DataVolume—then recreate clones. Cloning a disk that is still in “setup in progress” reproduces the blue screen on every child VM regardless of cloud-init.
+**Golden image / sysprep:** if the error **persists**, the golden DataVolume may never have reached a clean **generalized / shutdown** state. Re-run sealing or rebuild from **`dv_create_blank_os.yml`** (see **`ocpv_win_os_blank_recreate`**) plus installer media.
 
-If you use fully custom **`ocpv_cloudinit_userdata`**, replicate the ChildCompletion + Setup logic or apply the manual registry steps from the link above.
+If you use fully custom **`ocpv_cloudinit_userdata`** with NoCloud enabled, replicate the ChildCompletion + Setup logic or apply the manual registry steps from the link above.
 
-**RWO golden disk (legacy direct attach):** if **`ocpv_clone_golden_root: false`**, the usual golden root PVC is **ReadWriteOnce**—only one virt-launcher can attach it. The playbook can fail fast when another VM still references that DV (see **`ocpv_skip_rwo_dv_conflict_check`** for RWX).
+**RWO golden disk (legacy direct attach):** if **`ocpv_clone_golden_root: false`**, only one virt-launcher can attach the golden PVC. The playbook can fail fast when another VM still references that DV (see **`ocpv_skip_rwo_dv_conflict_check`** for RWX).
 
-- **`../vm_post_install_windows.yml`** — VMI IP, WinRM, optional **sentinel check** (`ocpv_verify_cloudbase_init`, default true), Chocolatey bootstrap.
-- CasC workflow **OpenShift Virtualization | Provision Windows VM and install package** chains the two job templates. The **create** job template uses the **OpenShift Virtualization EE** (`openshift_virt_aap_ee_name`, Kubernetes API only). The **post-install** job template still uses the **Windows EE** (`openshift_virt_aap_ee_windows_name`, `ansible.windows` + **pywinrm**); that image must pull successfully on the cluster or the second node fails with worker stream / pod errors even when the first node and cloudbase-init are fine.
+- **`../vm_post_install_windows.yml`** — VMI IP, WinRM, optional **sentinel check** (`ocpv_verify_cloudbase_init`, default **false**; set **true** when using Cloudbase + default NoCloud template), Chocolatey bootstrap.
+- CasC workflow **OpenShift Virtualization | Provision Windows VM and install package** chains the two job templates. The **create** job template uses the **OpenShift Virtualization EE** (`openshift_virt_aap_ee_name`, Kubernetes API only). The **post-install** job template still uses the **Windows EE** (`openshift_virt_aap_ee_windows_name`, `ansible.windows` + **pywinrm**); that image must pull successfully on the cluster or the second node fails with worker stream / pod errors even when the first node reaches WinRM.
 
 ### KubeVirt inventory with WinRM defaults (CasC)
 
@@ -149,6 +187,44 @@ Use the [winrm connection plugin](https://docs.ansible.com/ansible/latest/collec
 2. **HTTPS 5986 + NTLM** (aligns with the script’s TLS listener): **`ansible_port: 5986`**, **`ansible_winrm_scheme: https`**, **`ansible_winrm_transport: ntlm`**, **`ansible_winrm_server_cert_validation: ignore`** until you replace the cert with one your controllers trust.
 
 Pick **one** listener (5985 or 5986) consistently in **`wait_for`**, inventory host vars, and firewall/network policy.
+
+## 6. Recapturing the golden root DataVolume (`windows-server-os-work`)
+
+Use this when **every clone** still shows the blue **“installation cannot proceed”** loop after the NoCloud unstick script, or you know the golden disk was **booted again after sysprep**, **sysprep failed**, or never finished **generalize / shutdown**. Cloud-init cannot fix a golden that never reached a clean sealed state.
+
+### Before you start
+
+1. **Free the golden RWO disk** — stop/delete **every** `VirtualMachine` in the namespace that still mounts **`windows-server-os-work`** (and any stuck `virt-launcher` pods). Only **one** consumer can attach it.
+2. **Delete test clones** you no longer need (`oc delete vm …`, then `oc delete datavolume <vm>-win-os` if reclaiming space). Keep **`windows-server-eval-iso`** if you still use the installer path.
+
+### Path A — Repair in place (same DV name)
+
+Keep the existing **`windows-server-os-work`** DataVolume; you only refresh its contents from a single maintenance VM.
+
+1. Create **one** `VirtualMachine` whose **root** volume is **`windows-server-os-work`** (same namespace). Example: use **`../vm_create_windows_from_golden.yml`** with **`ocpv_clone_golden_root: false`** and a throwaway **`ocpv_vm_name`** (or apply a minimal VM template by hand). **Do not** run a second VM on that DV.
+2. **Start** the VM and open **virt console** / RDP if you have it: `virtctl console <vm> -n <ns>` (Server Core is text-only).
+3. Sign in as **Administrator** (password you set during last known-good state, or reset via your org process if unknown).
+4. Copy **`scripts/prepare-win.ps1`** into the guest (see script header for `Invoke-WebRequest` example from GitHub `raw`).
+5. From **elevated** PowerShell:
+   - First run: **`.\prepare-win.ps1 -Force -Verbose`**
+   - If this disk was **generalized before** and you are re-sealing, add **`-WinRmForceNewSSLCert`** so HTTPS listener certs are rebuilt.
+   - On **Server Core**, **`SysprepOobeMode`** defaults to **Auto** (no **`/oobe`**). Only force **`-SysprepOobeMode Oobe`** on SKUs that support the full OOBE wizard (see section 4 above).
+   - To **debug without sysprep**: **`-SkipSysprep`**, then shut down manually when satisfied; remove **`-SkipSysprep`** for the real capture run.
+6. Wait until **`sysprep` shuts the VM down** (power off is normal). Watch **`%SystemRoot%\Panther\`** logs if anything loops.
+7. **Critical:** do **not** power the maintenance VM on again if you want a clean golden—another boot can dirty setup state. **`oc delete vm <maintenance-vm> -n <ns>`** (the **DataVolume** stays; only the VM object goes).
+8. Point AAP workflows at **`ocpv_win_root_dv_name: windows-server-os-work`** (unchanged). Recreate clones with **`ocpv_clone_golden_root: true`** (default).
+
+### Path B — New golden DV name (safer rollback)
+
+1. Run **`prep_windows_install_media.yml`** (or the three DV/installer playbooks) with a **new** OS DV name, e.g. **`-e ocpv_win_os_blank_dv_name=windows-server-os-work-v2`** (and matching installer template vars if you customize names).
+2. Install Windows on the installer VM, install VirtIO/NetKVM, then run **`prepare-win.ps1`** as in Path A.
+3. After sysprep shutdown, delete the installer VM; keep **`windows-server-os-work-v2`** as the new golden.
+4. Update the controller workflow survey / extra vars so **`ocpv_win_root_dv_name`** matches the **new** DV. When confident, delete the old **`windows-server-os-work`** DV to reclaim storage.
+
+### After recapture
+
+- Re-run **`playbooks/openshift_virtualization/aap_rollout_casc.yml`** only if you changed CasC; refresh **`aap_sync_openshift_credential_from_oc.yml`** if `oc` token drifted.
+- Launch **OpenShift Virtualization | Provision Windows VM and install package** again (clone path uses the updated golden).
 
 ## Related paths
 

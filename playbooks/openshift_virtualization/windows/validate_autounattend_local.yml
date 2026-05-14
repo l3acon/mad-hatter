@@ -1,0 +1,67 @@
+---
+# Render Autounattend.xml.j2 and run xmllint (well-formed XML only).
+# Windows Setup also validates against the install image catalog; use Windows SIM + install.wim for that.
+#
+#   export OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD='…'
+#   ansible-playbook playbooks/openshift_virtualization/windows/validate_autounattend_local.yml
+#
+# Optional extra vars (same as autounattend ISO pipeline): ocpv_unattend_os_disk_id, ocpv_unattend_wim_index, etc.
+# Optional: -e ocpv_validate_autounattend_copy_to=/tmp/Autounattend.xml to keep a copy for Windows SIM import.
+- name: Validate rendered Autounattend.xml locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ocpv_win_autounattend_admin_password: "{{ lookup('env', 'OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD') | default('', true) }}"
+  tasks:
+    - name: Require Administrator password (required by template)
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_autounattend_admin_password is defined
+          - ocpv_win_autounattend_admin_password | string | length > 0
+        fail_msg: >-
+          Set OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD in the environment or pass
+          -e ocpv_win_autounattend_admin_password=… (same as autounattend_iso_pipeline.yml).
+
+    - name: Require xmllint for XML validation
+      ansible.builtin.command:
+        cmd: which xmllint
+      changed_when: false
+
+    - name: Create temp file for rendered Autounattend.xml
+      ansible.builtin.tempfile:
+        state: file
+        suffix: _Autounattend.xml
+      register: ocpv_validate_au_tmp
+
+    - name: Render Autounattend.xml from template
+      ansible.builtin.template:
+        src: Autounattend.xml.j2
+        dest: "{{ ocpv_validate_au_tmp.path }}"
+        mode: "0644"
+
+    - name: Check well-formed XML
+      ansible.builtin.command:
+        cmd: xmllint --noout "{{ ocpv_validate_au_tmp.path }}"
+      changed_when: false
+
+    - name: Copy rendered XML to fixed path (optional)
+      ansible.builtin.copy:
+        src: "{{ ocpv_validate_au_tmp.path }}"
+        dest: "{{ ocpv_validate_autounattend_copy_to }}"
+        mode: "0644"
+        remote_src: true
+      when: ocpv_validate_autounattend_copy_to | default('') | string | length > 0
+
+    - name: Remove temp rendered file
+      ansible.builtin.file:
+        path: "{{ ocpv_validate_au_tmp.path }}"
+        state: absent
+
+    - name: Result
+      ansible.builtin.debug:
+        msg:
+          - "xmllint: OK (well-formed XML)."
+          - >-
+            For SKU-specific validation (unknown settings / passes), open this same template output in
+            Windows System Image Manager with a catalog built from your install.wim index (Windows ADK).

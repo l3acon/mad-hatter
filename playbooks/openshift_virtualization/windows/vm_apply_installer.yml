@@ -15,6 +15,8 @@
     ocpv_win_virtio_containerdisk_image: quay.io/kubevirt/virtio-container-disk:v1.2.0
     ocpv_win_installer_cpu_cores: 4
     ocpv_win_installer_memory: 8Gi
+    ocpv_win_autounattend_enabled: false
+    ocpv_win_autounattend_iso_dv_name: windows-autounattend-iso
   tasks:
     - name: Assert required names
       ansible.builtin.assert:

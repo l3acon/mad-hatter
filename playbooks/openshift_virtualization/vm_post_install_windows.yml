@@ -3,7 +3,7 @@
 # Expects: ocpv_vm_name, ocpv_vm_namespace, ocpv_post_package_name, ocpv_windows_admin_password
 #
 # Optional extra vars:
-#   ocpv_verify_cloudbase_init (default true) — assert cloudInitNoCloud sentinel exists (default path below).
+#   ocpv_verify_cloudbase_init (default false) — when true, assert cloudInitNoCloud sentinel exists (default path below).
 #   ocpv_cloudbase_sentinel_path (default C:\Windows\Temp\.ocpv-cloudbase-init-sentinel)
 #
 # Job template should use the Windows execution environment (ansible.windows + pywinrm).
@@ -90,7 +90,7 @@
       ansible.windows.win_ping:
 
     - name: Verify cloudbase-init applied default NoCloud user-data (sentinel file)
-      when: ocpv_verify_cloudbase_init | default(true) | bool
+      when: ocpv_verify_cloudbase_init | default(false) | bool
       block:
         - name: Stat cloudbase-init sentinel from golden NoCloud template
           ansible.windows.win_stat:

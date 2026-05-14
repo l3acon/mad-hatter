@@ -1,7 +1,7 @@
 ---
 # Launch "OpenShift Virtualization | Provision Windows VM and install package" and wait for success.
 # Requires: oc logged in; CasC applied (aap_rollout_casc.yml); OpenShift credential synced (aap_sync_openshift_credential_from_oc.yml).
-# Required: export OCPV_WIN_ADMIN_PASSWORD (WinRM; matches golden / cloudbase-init). Do not pass via -e on shared shells.
+# Required: export OCPV_WIN_ADMIN_PASSWORD (WinRM; must match Administrator password on the golden image). Do not pass via -e on shared shells.
 # Optional: -e smoke_vm_namespace=ocpv-aap-smoke -e ocpv_win_root_dv_name=windows-server-os-work
 #           -e ocpv_post_package_name=7zip -e smoke_vm_name=my-vm
 - name: Validate Windows provision + Chocolatey workflow on controller

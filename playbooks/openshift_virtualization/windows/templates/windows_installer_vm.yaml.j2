@@ -42,6 +42,11 @@ spec:
               cdrom:
                 bus: sata
               bootOrder: 99
+{% if ocpv_win_autounattend_enabled | default(false) | bool %}
+            - name: autounattend
+              cdrom:
+                bus: sata
+{% endif %}
           interfaces:
             - name: default
               masquerade: {}
@@ -69,3 +74,8 @@ spec:
         - name: virtioscsi
           containerDisk:
             image: "{{ ocpv_win_virtio_containerdisk_image }}"
+{% if ocpv_win_autounattend_enabled | default(false) | bool %}
+        - name: autounattend
+          dataVolume:
+            name: "{{ ocpv_win_autounattend_iso_dv_name }}"
+{% endif %}
