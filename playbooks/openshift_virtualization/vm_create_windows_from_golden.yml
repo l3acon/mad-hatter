@@ -9,6 +9,7 @@
 #     default #cloud-config so cloudbase-init resets Administrator to match the workflow password)
 #   ocpv_cloudinit_userdata (optional raw #cloud-config; overrides default golden template)
 #   ocpv_cloudinit_set_hostname (optional bool, default false — set_hostname can trigger a reboot)
+#   ocpv_skip_rwo_dv_conflict_check (optional bool, default false — skip guard when you use RWX / clones)
 - name: Create Windows VM from DataVolume
   hosts: localhost
   connection: local
@@ -22,6 +23,44 @@
           - ocpv_win_root_dv_name is defined and ocpv_win_root_dv_name | length > 0
         fail_msg: >-
           Set ocpv_vm_name, ocpv_vm_namespace, and ocpv_win_root_dv_name (existing DataVolume for C:).
+
+    - name: List VirtualMachines in namespace (RWO root DataVolume guard)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: ocpv_vm_list
+      when: not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
+
+    - name: Find other VMs already referencing the same root DataVolume
+      ansible.builtin.set_fact:
+        ocpv_rwo_dv_conflict_names: "{{ (ocpv_rwo_dv_conflict_names | default([])) + [item.metadata.name] }}"
+      loop: "{{ ocpv_vm_list.resources | default([]) }}"
+      when:
+        - not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
+        - item.metadata.name != ocpv_vm_name
+        - >-
+            (
+              item.spec.template.spec.volumes | default([])
+              | selectattr('dataVolume', 'defined')
+              | map(attribute='dataVolume')
+              | map(attribute='name')
+              | intersect([ocpv_win_root_dv_name])
+              | length > 0
+            )
+
+    - name: Fail when another VM already uses this RWO root DataVolume
+      ansible.builtin.assert:
+        that:
+          - (ocpv_rwo_dv_conflict_names | default([]) | length) == 0
+        fail_msg: >-
+          Root DataVolume "{{ ocpv_win_root_dv_name }}" is already referenced by other VM(s):
+          {{ ocpv_rwo_dv_conflict_names | join(', ') }}.
+          A typical golden PVC is ReadWriteOnce — only one workload can attach it.
+          Stop or delete those VMs (`virtctl stop`, `oc delete vm`, or set `spec.running: false`),
+          or give each VM its own cloned DataVolume. To skip this check (e.g. RWX storage), set
+          ocpv_skip_rwo_dv_conflict_check: true.
+      when: not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
 
     - name: Build cloudInitNoCloud user data for cloudbase-init
       ansible.builtin.set_fact:
