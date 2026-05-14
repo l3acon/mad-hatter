@@ -13,6 +13,7 @@ try {
   $sp = (Get-ItemProperty -Path $setup -Name SetupPhase -ErrorAction SilentlyContinue).SetupPhase
   $st = (Get-ItemProperty -Path $setup -Name SetupType -ErrorAction SilentlyContinue).SetupType
   $ssip = (Get-ItemProperty -Path $setup -Name SystemSetupInProgress -ErrorAction SilentlyContinue).SystemSetupInProgress
+  $cmdLine = (Get-ItemProperty -Path $setup -Name CmdLine -ErrorAction SilentlyContinue).CmdLine
   Log ("SetupPhase={0} SetupType={1} SystemSetupInProgress={2}" -f $sp, $st, $ssip)
   $oobePath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE'
   $oobeProg = $null
@@ -20,22 +21,38 @@ try {
     $oobeProg = (Get-ItemProperty -Path $oobePath -Name OOBEInProgress -ErrorAction SilentlyContinue).OOBEInProgress
     Log ("OOBEInProgress={0}" -f $oobeProg)
   }
-  $stuck = ($ssip -eq 1) -or ($oobeProg -eq 1) -or ($sp -eq 4)
-  if (-not $stuck) {
-    Log 'not stuck (skip)'
+  # Common loop for "computer restarted unexpectedly / installation cannot proceed":
+  # HKLM\SYSTEM\Setup\Status\ChildCompletion "setup.exe" = 1 -> set 3 (forces next setup stage).
+  # Ref: https://woshub.com/windows-install-error-computer-restarted-unexpectedly/
+  $child = 'HKLM:\SYSTEM\Setup\Status\ChildCompletion'
+  $childSetup = $null
+  if (Test-Path $child) {
+    $childSetup = (Get-ItemProperty -Path $child -Name 'setup.exe' -ErrorAction SilentlyContinue).'setup.exe'
+    Log ("ChildCompletion\setup.exe={0}" -f $childSetup)
+  }
+  $fixChild = ($childSetup -eq 1)
+  $fixSetupKeys = ($ssip -eq 1) -or ($oobeProg -eq 1) -or ($sp -in 4, 7)
+  if (-not ($fixChild -or $fixSetupKeys)) {
+    Log 'no known stuck mini-setup pattern (skip)'
     exit 0
   }
-  Log 'clearing stuck mini-setup / clone setup flags'
-  Set-ItemProperty -Path $setup -Name 'SetupPhase' -Value 0 -Type DWord -Force
-  Set-ItemProperty -Path $setup -Name 'SetupType' -Value 0 -Type DWord -Force
-  Set-ItemProperty -Path $setup -Name 'SystemSetupInProgress' -Value 0 -Type DWord -Force
-  if (Test-Path $oobePath) {
-    New-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
-    Set-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+  Log 'applying clone / mini-setup recovery registry fixes'
+  if ($fixChild) {
+    Set-ItemProperty -Path $child -Name 'setup.exe' -Value 3 -Type DWord -Force
+    Log 'ChildCompletion setup.exe -> 3'
   }
-  $state = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\State'
-  if (Test-Path $state) {
-    Set-ItemProperty -Path $state -Name 'ImageState' -Value 'IMAGE_STATE_COMPLETE' -Force -ErrorAction SilentlyContinue
+  if ($fixSetupKeys) {
+    Set-ItemProperty -Path $setup -Name 'SetupPhase' -Value 0 -Type DWord -Force
+    Set-ItemProperty -Path $setup -Name 'SetupType' -Value 0 -Type DWord -Force
+    Set-ItemProperty -Path $setup -Name 'SystemSetupInProgress' -Value 0 -Type DWord -Force
+    if (Test-Path $oobePath) {
+      New-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
+      Set-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+    }
+    if ($cmdLine) {
+      Remove-ItemProperty -Path $setup -Name 'CmdLine' -Force -ErrorAction SilentlyContinue
+      Log 'removed Setup CmdLine'
+    }
   }
   Log 'scheduling reboot'
   & (Join-Path $env:SystemRoot 'System32\shutdown.exe') /r /t 45 /c 'OpenShift virt: cleared stuck Windows setup state after clone; rebooting.'
