@@ -13,9 +13,9 @@
 #   ocpv_instancetype_name (default u1.medium), ocpv_preference_name (default windows.2k22)
 #   ocpv_windows_admin_password (optional; when ocpv_cloudinit_userdata is unset, included in
 #     default #cloud-config so cloudbase-init resets Administrator to match the workflow password)
-#   ocpv_cloudinit_userdata (optional raw #cloud-config; overrides default golden template)
-#     KubeVirt limits inline cloudInitNoCloud userData to 2048 bytes; this playbook always stores userdata in a
-#     Secret (<vm_name>-nocloud, key userdata) and uses userDataSecretRef on the VM volume.
+#   ocpv_cloudinit_clear_clone_setup_state (optional bool, default true) — golden template includes clone unstick script.
+#     KubeVirt limits inline cloudInitNoCloud userData to 2048 bytes; userdata is stored in Secret <vm_name>-nocloud
+#     (key userdata) and the VM uses cloudInitNoCloud.secretRef.name (KubeVirt field; some docs say userDataSecretRef).
 #   ocpv_skip_rwo_dv_conflict_check (optional bool, default false — only used when ocpv_clone_golden_root is false;
 #     skip guard when you use RWX / shared storage)
 - name: Create Windows VM from DataVolume
@@ -239,7 +239,7 @@
               name: "{{ ocpv_vm_root_dv_name }}"
           - name: cloudinit
             cloudInitNoCloud:
-              userDataSecretRef:
+              secretRef:
                 name: "{{ ocpv_nocloud_userdata_secret_name }}"
 
     - name: Create Windows VirtualMachine
