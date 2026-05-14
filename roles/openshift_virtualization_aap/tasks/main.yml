@@ -137,7 +137,6 @@
 # Skip controller_inventories in dispatch (inventory ensured by the task above).
 - name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
   ansible.builtin.set_fact:
-    aap_organizations: "{{ aap_organizations }}"
     controller_execution_environments: "{{ controller_execution_environments }}"
     controller_projects: "{{ controller_projects }}"
     controller_inventories: []

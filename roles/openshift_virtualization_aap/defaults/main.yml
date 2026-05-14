@@ -127,11 +127,9 @@ openshift_virt_aap_openshift_credential:
       host: "{{ openshift_api_url }}"
       bearer_token: "{{ openshift_bearer_token }}"
 
-aap_organizations:
-  - name: Default
-    galaxy_credentials:
-      - Ansible Galaxy
-      - Automation Hub
+# Omit aap_organizations so infra.aap_configuration.dispatch skips gateway_organizations (ansible.platform.organization
+# hits api/gateway/v1 and 404s on Automation Controller installs without Platform Gateway). To manage orgs via Gateway,
+# pass -e 'aap_organizations=[{name: Default, galaxy_credentials: [...]}]' when your deployment supports it.
 
 controller_execution_environments:
   - name: "{{ openshift_virt_aap_ee_name }}"

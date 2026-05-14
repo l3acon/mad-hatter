@@ -1,0 +1,120 @@
+---
+# Launch "OpenShift Virtualization | Provision Windows VM and install package" and wait for success.
+# Requires: oc logged in; CasC applied (aap_rollout_casc.yml); OpenShift credential synced (aap_sync_openshift_credential_from_oc.yml).
+# Required: export OCPV_WIN_ADMIN_PASSWORD (WinRM; matches golden / cloudbase-init). Do not pass via -e on shared shells.
+# Optional: -e smoke_vm_namespace=ocpv-aap-smoke -e ocpv_win_root_dv_name=windows-server-os-work
+#           -e ocpv_post_package_name=7zip -e smoke_vm_name=my-vm
+- name: Validate Windows provision + Chocolatey workflow on controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_username: admin
+    aap_casc_aap_namespace: "{{ aap_operator_project | default('aap') }}"
+    aap_casc_route_name: "{{ aap_operator_app_name | default('aap') }}"
+    smoke_vm_namespace: ocpv-aap-smoke
+    ocpv_win_root_dv_name: windows-server-os-work
+    ocpv_post_package_name: 7zip
+  tasks:
+    - name: Resolve WinRM password from environment (avoid shell history / logs)
+      ansible.builtin.set_fact:
+        ocpv_windows_admin_password: "{{ lookup('env', 'OCPV_WIN_ADMIN_PASSWORD') | trim }}"
+
+    - name: Require OCPV_WIN_ADMIN_PASSWORD for workflow survey
+      ansible.builtin.assert:
+        that:
+          - ocpv_windows_admin_password | length > 0
+        fail_msg: >-
+          Export OCPV_WIN_ADMIN_PASSWORD to the Administrator password used on the golden image (same value as workflow survey).
+
+    - name: Discover AAP and OpenShift API from oc context
+      ansible.builtin.include_tasks: tasks/discover_aap_from_oc.yml
+
+    - name: Timestamp for default VM name
+      ansible.builtin.command: date +%s
+      changed_when: false
+      register: ocpv_win_wf_epoch
+
+    - name: Default workflow test VM name
+      ansible.builtin.set_fact:
+        smoke_vm_name: "{{ smoke_vm_name | default('ocpv-wf-val-' ~ ocpv_win_wf_epoch.stdout) }}"
+
+    - name: Ensure smoke namespace exists
+      ansible.builtin.command: oc create namespace "{{ smoke_vm_namespace }}"
+      register: ocpv_win_wf_create_ns
+      changed_when: ocpv_win_wf_create_ns.rc == 0
+      failed_when: >
+        ocpv_win_wf_create_ns.rc != 0
+        and ('AlreadyExists' not in (ocpv_win_wf_create_ns.stderr | default('')))
+        and ('already exists' not in (ocpv_win_wf_create_ns.stderr | default('')))
+
+    - name: Launch workflow, assert success, verify VM in cluster
+      block:
+        - name: Launch Windows workflow on controller
+          ansible.controller.workflow_launch:
+            workflow_template: "OpenShift Virtualization | Provision Windows VM and install package"
+            organization: Default
+            controller_host: "{{ aap_hostname }}"
+            controller_username: "{{ aap_username }}"
+            controller_password: "{{ aap_password }}"
+            validate_certs: false
+            extra_vars:
+              ocpv_vm_name: "{{ smoke_vm_name }}"
+              ocpv_vm_namespace: "{{ smoke_vm_namespace }}"
+              ocpv_win_root_dv_name: "{{ ocpv_win_root_dv_name }}"
+              ocpv_instancetype_name: "{{ ocpv_instancetype_name | default('u1.medium') }}"
+              ocpv_preference_name: "{{ ocpv_preference_name | default('windows.2k22') }}"
+              ocpv_windows_admin_password: "{{ ocpv_windows_admin_password }}"
+              ocpv_post_package_name: "{{ ocpv_post_package_name }}"
+            wait: true
+            timeout: "{{ ocpv_windows_workflow_timeout | default(7200) }}"
+          register: ocpv_win_wf_launch
+          no_log: true
+
+        - name: Assert workflow job succeeded
+          ansible.builtin.assert:
+            that:
+              - ocpv_win_wf_launch.status | default('') == 'successful'
+            fail_msg: "Workflow status was {{ ocpv_win_wf_launch.status | default('unknown') }}, id {{ ocpv_win_wf_launch.id | default('?') }}"
+
+        - name: Assert VirtualMachine exists
+          ansible.builtin.command: >-
+            oc get vm {{ smoke_vm_name }} -n {{ smoke_vm_namespace }}
+            -o jsonpath={.metadata.name}
+          changed_when: false
+          register: ocpv_win_wf_get_vm
+          failed_when: ocpv_win_wf_get_vm.stdout | trim | length == 0
+
+        - name: Report workflow validation
+          ansible.builtin.debug:
+            msg:
+              - "Workflow job id {{ ocpv_win_wf_launch.id }} status {{ ocpv_win_wf_launch.status }}"
+              - "VirtualMachine {{ smoke_vm_namespace }}/{{ ocpv_win_wf_get_vm.stdout | trim }}"
+      rescue:
+        - name: Query latest workflow job for this template (diagnostics)
+          ansible.builtin.uri:
+            url: "{{ aap_hostname }}/api/v2/workflow_jobs/?workflow_job_template__name=OpenShift+Virtualization+%7C+Provision+Windows+VM+and+install+package&order_by=-id&page_size=1"
+            method: GET
+            user: "{{ aap_username }}"
+            password: "{{ aap_password }}"
+            force_basic_auth: true
+            validate_certs: false
+            return_content: true
+          register: ocpv_win_wf_diag
+          no_log: true
+
+        - name: Show latest workflow job id and status (no survey secrets)
+          ansible.builtin.debug:
+            msg: >-
+              Latest workflow job id={{ (ocpv_win_wf_diag.json.results[0].id | default('?')) }}
+              status={{ (ocpv_win_wf_diag.json.results[0].status | default('?')) }} —
+              inspect nodes in the controller UI or GET
+              {{ aap_hostname }}/api/v2/workflow_jobs/{{ ocpv_win_wf_diag.json.results[0].id | default('') }}/workflow_nodes/
+
+        - name: Fail with troubleshooting hints
+          ansible.builtin.fail:
+            msg: >-
+              Workflow did not complete successfully. Common cause: the post-install job uses the Windows execution
+              environment; execution nodes that cannot pull openshift_virt_aap_ee_windows_image show ImagePullBackOff
+              (see execution_environments/windows/README.md). Ensure Quay/registry credentials on the mesh or override
+              openshift_virt_aap_ee_windows_image to a pullable image, then re-run CasC and this playbook.

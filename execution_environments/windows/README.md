@@ -19,3 +19,9 @@ ansible-playbook playbooks/openshift_virtualization/aap_sync_openshift_credentia
 ```
 
 Then re-run **OpenShift Virtualization | Provision Windows VM and install package**.
+
+### Post-install job: `ImagePullBackOff` / `Error creating pod` on the execution node
+
+The **Chocolatey** job template uses the **Windows EE** (`quay.io/matferna/mh-windows:latest` by default). If that image is **private** on Quay or your mesh nodes have **no pull secret**, the receptor/worker fails before Ansible runs (controller shows `Unexpected empty line encountered during worker stream` and `ImagePullBackOff` in the job traceback).
+
+**Mitigations:** publish `mh-windows` as a **public** Quay repo, **podman login** / **imagePullSecret** on the automation execution namespace (or hybrid cloud credentials per your platform docs), or override **`openshift_virt_aap_ee_windows_image`** in extra vars before CasC to an image your cluster can pull, then re-run **`aap_rollout_casc.yml`**.
