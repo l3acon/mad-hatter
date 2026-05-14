@@ -1,15 +1,22 @@
 ---
-# Create a Windows VirtualMachine booting from an existing root DataVolume (golden image)
+# Create a Windows VirtualMachine booting from a golden root DataVolume (or a per-VM CDI clone of it)
 # and optional cloudbase-init / cloud-config user-data on cloudInitNoCloud.
 #
 # Extra vars / survey:
 #   ocpv_vm_name, ocpv_vm_namespace, ocpv_win_root_dv_name
+#     ocpv_win_root_dv_name is the existing golden DataVolume (clone source when cloning is enabled).
+#   ocpv_clone_golden_root (optional bool, default true) — when true, create/wait for a clone DataVolume
+#     and attach that to the VM so the golden RWO disk is never shared by multiple launchers.
+#   ocpv_win_clone_dv_name (optional) — clone DataVolume metadata name; default "{{ ocpv_vm_name }}-win-os"
+#     (truncated to 253 chars if needed). Must be DNS-1123 compatible.
+#   ocpv_clone_wait_retries / ocpv_clone_wait_delay (optional) — wait loop for clone completion (default 120 x 15s ≈ 30 min).
 #   ocpv_instancetype_name (default u1.medium), ocpv_preference_name (default windows.2k22)
 #   ocpv_windows_admin_password (optional; when ocpv_cloudinit_userdata is unset, included in
 #     default #cloud-config so cloudbase-init resets Administrator to match the workflow password)
 #   ocpv_cloudinit_userdata (optional raw #cloud-config; overrides default golden template)
 #   ocpv_cloudinit_set_hostname (optional bool, default false — set_hostname can trigger a reboot)
-#   ocpv_skip_rwo_dv_conflict_check (optional bool, default false — skip guard when you use RWX / clones)
+#   ocpv_skip_rwo_dv_conflict_check (optional bool, default false — only used when ocpv_clone_golden_root is false;
+#     skip guard when you use RWX / shared storage)
 - name: Create Windows VM from DataVolume
   hosts: localhost
   connection: local
@@ -22,21 +29,53 @@
           - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
           - ocpv_win_root_dv_name is defined and ocpv_win_root_dv_name | length > 0
         fail_msg: >-
-          Set ocpv_vm_name, ocpv_vm_namespace, and ocpv_win_root_dv_name (existing DataVolume for C:).
+          Set ocpv_vm_name, ocpv_vm_namespace, and ocpv_win_root_dv_name (golden DataVolume / clone source).
 
-    - name: List VirtualMachines in namespace (RWO root DataVolume guard)
+    - name: Resolve clone behavior and effective clone DataVolume name
+      ansible.builtin.set_fact:
+        ocpv_clone_golden_root_effective: "{{ ocpv_clone_golden_root | default(true) | bool }}"
+        ocpv_win_clone_dv_name_effective: >-
+          {{
+            (
+              ocpv_win_clone_dv_name
+              if (
+                ocpv_win_clone_dv_name is defined
+                and (ocpv_win_clone_dv_name | string | trim | length) > 0
+              )
+              else (
+                ((ocpv_vm_name | string | lower)[0:240] ~ '-win-os')
+                if ((ocpv_vm_name | string | length) + 7) > 253
+                else (ocpv_vm_name | string | lower ~ '-win-os')
+              )
+            )
+          }}
+
+    - name: Assert clone DataVolume name length
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_clone_dv_name_effective | length <= 253
+          - ocpv_win_clone_dv_name_effective | length > 0
+        fail_msg: >-
+          Clone DataVolume name must be non-empty and at most 253 characters (got {{ ocpv_win_clone_dv_name_effective | length }}).
+          Set ocpv_win_clone_dv_name explicitly if the default from VM name is invalid.
+      when: ocpv_clone_golden_root_effective
+
+    - name: List VirtualMachines in namespace (RWO guard when not cloning)
       kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
         kind: VirtualMachine
         namespace: "{{ ocpv_vm_namespace }}"
       register: ocpv_vm_list
-      when: not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
+      when:
+        - not ocpv_clone_golden_root_effective
+        - not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
 
     - name: Find other VMs already referencing the same root DataVolume
       ansible.builtin.set_fact:
         ocpv_rwo_dv_conflict_names: "{{ (ocpv_rwo_dv_conflict_names | default([])) + [item.metadata.name] }}"
       loop: "{{ ocpv_vm_list.resources | default([]) }}"
       when:
+        - not ocpv_clone_golden_root_effective
         - not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
         - item.metadata.name != ocpv_vm_name
         - >-
@@ -57,10 +96,106 @@
           Root DataVolume "{{ ocpv_win_root_dv_name }}" is already referenced by other VM(s):
           {{ ocpv_rwo_dv_conflict_names | join(', ') }}.
           A typical golden PVC is ReadWriteOnce — only one workload can attach it.
-          Stop or delete those VMs (`virtctl stop`, `oc delete vm`, or set `spec.running: false`),
-          or give each VM its own cloned DataVolume. To skip this check (e.g. RWX storage), set
-          ocpv_skip_rwo_dv_conflict_check: true.
-      when: not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
+          Enable cloning (ocpv_clone_golden_root, default true), stop or delete those VMs, or set
+          ocpv_skip_rwo_dv_conflict_check: true for RWX storage.
+      when:
+        - not ocpv_clone_golden_root_effective
+        - not (ocpv_skip_rwo_dv_conflict_check | default(false) | bool)
+
+    - name: Read golden source DataVolume (clone sizing and storage class)
+      kubernetes.core.k8s_info:
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ ocpv_win_root_dv_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: ocpv_golden_dv_info
+      when: ocpv_clone_golden_root_effective
+
+    - name: Require golden DataVolume to exist for clone
+      ansible.builtin.assert:
+        that:
+          - ocpv_golden_dv_info.resources | default([]) | length > 0
+          - ocpv_golden_dv_info.resources[0].spec.pvc is defined
+        fail_msg: >-
+          Golden DataVolume "{{ ocpv_win_root_dv_name }}" was not found in namespace "{{ ocpv_vm_namespace }}"
+          or has no spec.pvc (cannot derive clone PVC fields).
+      when: ocpv_clone_golden_root_effective
+
+    - name: Derive clone PVC spec from golden DataVolume
+      ansible.builtin.set_fact:
+        ocpv_clone_dv_pvc_spec: >-
+          {{
+            {
+              'accessModes': ocpv_golden_dv_info.resources[0].spec.pvc.accessModes | default(['ReadWriteOnce']),
+              'resources': {
+                'requests': {
+                  'storage': ocpv_golden_dv_info.resources[0].spec.pvc.resources.requests.storage,
+                },
+              },
+              'volumeMode': ocpv_golden_dv_info.resources[0].spec.pvc.volumeMode | default('Filesystem'),
+            }
+            | combine(
+              {'storageClassName': ocpv_golden_dv_info.resources[0].spec.pvc.storageClassName}
+              if (
+                ocpv_golden_dv_info.resources[0].spec.pvc.storageClassName is defined
+                and (ocpv_golden_dv_info.resources[0].spec.pvc.storageClassName | string | length) > 0
+              )
+              else {}
+            )
+          }}
+      when: ocpv_clone_golden_root_effective
+
+    - name: Ensure clone DataVolume exists (CDI clone from golden PVC)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: "{{ ocpv_win_clone_dv_name_effective }}"
+            namespace: "{{ ocpv_vm_namespace }}"
+            annotations:
+              cdi.kubevirt.io/storage.bind.immediate.requested: "true"
+          spec:
+            source:
+              pvc:
+                name: "{{ ocpv_win_root_dv_name }}"
+                namespace: "{{ ocpv_vm_namespace }}"
+            pvc: "{{ ocpv_clone_dv_pvc_spec }}"
+        wait: false
+      when: ocpv_clone_golden_root_effective
+
+    - name: Wait for clone DataVolume to finish
+      kubernetes.core.k8s_info:
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ ocpv_win_clone_dv_name_effective }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: ocpv_clone_dv_wait
+      until: >-
+        ocpv_clone_dv_wait.resources | length > 0
+        and (
+          ocpv_clone_dv_wait.resources[0].status.phase | default('')
+          == 'Succeeded'
+        )
+      retries: "{{ ocpv_clone_wait_retries | default(120) }}"
+      delay: "{{ ocpv_clone_wait_delay | default(15) }}"
+      failed_when: >-
+        ocpv_clone_dv_wait.resources | length > 0
+        and (
+          ocpv_clone_dv_wait.resources[0].status.phase | default('')
+          in ['Failed', 'ImportFailed', 'CloneFailed', 'Expired', 'Error']
+        )
+      when: ocpv_clone_golden_root_effective
+
+    - name: Set effective root DataVolume for the VirtualMachine
+      ansible.builtin.set_fact:
+        ocpv_vm_root_dv_name: >-
+          {{
+            ocpv_win_clone_dv_name_effective
+            if ocpv_clone_golden_root_effective
+            else ocpv_win_root_dv_name
+          }}
 
     - name: Build cloudInitNoCloud user data for cloudbase-init
       ansible.builtin.set_fact:
@@ -81,7 +216,7 @@
         ocpv_vm_volumes:
           - name: root
             dataVolume:
-              name: "{{ ocpv_win_root_dv_name }}"
+              name: "{{ ocpv_vm_root_dv_name }}"
           - name: cloudinit
             cloudInitNoCloud:
               userData: "{{ ocpv_cloudinit_userdata_effective }}"

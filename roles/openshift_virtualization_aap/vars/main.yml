@@ -301,10 +301,10 @@ controller_workflows:
 
   - name: "OpenShift Virtualization | Provision Windows VM and install package"
     description: >-
-      Create a Windows VM from an existing golden root DataVolume, then connect with WinRM and install a Chocolatey package.
-      Requires WinRM on the golden image. The create step uses the OpenShift Virtualization EE (Kubernetes API only);
-      the install step uses the Windows EE (ansible.windows + pywinrm). When you do not pass custom
-      ocpv_cloudinit_userdata, the create playbook injects default #cloud-config (sentinel file + optional
+      Create a Windows VM from a golden root DataVolume by CDI-cloning it to a per-VM DataVolume (default), then connect
+      with WinRM and install a Chocolatey package. Requires WinRM on the golden image. The create step uses the OpenShift
+      Virtualization EE (Kubernetes API only); the install step uses the Windows EE (ansible.windows + pywinrm). When you
+      do not pass custom ocpv_cloudinit_userdata, the create playbook injects default #cloud-config (sentinel file + optional
       Administrator passwd) so cloudbase-init applies the same Administrator password as this workflow survey.
     organization: Default
     survey_enabled: true
@@ -331,7 +331,8 @@ controller_workflows:
     survey_spec:
       name: ""
       description: >-
-        VM identity, golden root DataVolume name, Chocolatey package id, and Administrator password (WinRM).
+        VM identity, golden source DataVolume name (CDI clone source; each run gets a dedicated clone DV by default),
+        Chocolatey package id, and Administrator password (WinRM).
         The create job passes this password into default NoCloud user-data when ocpv_cloudinit_userdata is unset,
         so cloudbase-init can align the guest password with WinRM before the install job runs.
       spec:
@@ -347,9 +348,12 @@ controller_workflows:
           required: true
           min: 1
           max: 63
-        - question_name: Root DataVolume name
+        - question_name: Golden source DataVolume name
           question_description: >-
-            Existing DataVolume in the same namespace containing the Windows system disk (golden image).
+            Existing DataVolume in the same namespace whose PVC will be CDI-cloned to a per-VM root disk (default).
+            The golden volume stays read-only for the clone; the VM boots from "<VM name>-win-os" unless you pass
+            ocpv_win_clone_dv_name. Set ocpv_clone_golden_root false on the create job only if you intentionally attach
+            the golden DV directly (RWO: one consumer at a time).
           type: text
           variable: ocpv_win_root_dv_name
           required: true
