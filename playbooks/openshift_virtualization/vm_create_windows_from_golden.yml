@@ -14,8 +14,8 @@
 #   ocpv_windows_admin_password (optional; when ocpv_cloudinit_userdata is unset, included in
 #     default #cloud-config so cloudbase-init resets Administrator to match the workflow password)
 #   ocpv_cloudinit_userdata (optional raw #cloud-config; overrides default golden template)
-#   ocpv_cloudinit_clear_clone_setup_state (optional bool, default true) — write first-boot script that clears
-#     stuck HKLM\SYSTEM\Setup / OOBE flags after a CDI clone (avoids "installation cannot proceed" mini-setup loop).
+#     KubeVirt limits inline cloudInitNoCloud userData to 2048 bytes; this playbook always stores userdata in a
+#     Secret (<vm_name>-nocloud, key userdata) and uses userDataSecretRef on the VM volume.
 #   ocpv_skip_rwo_dv_conflict_check (optional bool, default false — only used when ocpv_clone_golden_root is false;
 #     skip guard when you use RWX / shared storage)
 - name: Create Windows VM from DataVolume
@@ -212,6 +212,25 @@
             )
           }}
 
+    - name: Set NoCloud user-data Secret name (KubeVirt rejects inline userdata over 2048 bytes)
+      ansible.builtin.set_fact:
+        ocpv_nocloud_userdata_secret_name: "{{ ocpv_vm_name }}-nocloud"
+
+    - name: Ensure NoCloud user-data Secret exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ ocpv_nocloud_userdata_secret_name }}"
+            namespace: "{{ ocpv_vm_namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: mad-hatter-ocpv
+          type: Opaque
+          stringData:
+            userdata: "{{ ocpv_cloudinit_userdata_effective }}"
+
     - name: Build volume list (root DataVolume + NoCloud)
       ansible.builtin.set_fact:
         ocpv_vm_volumes:
@@ -220,7 +239,8 @@
               name: "{{ ocpv_vm_root_dv_name }}"
           - name: cloudinit
             cloudInitNoCloud:
-              userData: "{{ ocpv_cloudinit_userdata_effective }}"
+              userDataSecretRef:
+                name: "{{ ocpv_nocloud_userdata_secret_name }}"
 
     - name: Create Windows VirtualMachine
       redhat.openshift_virtualization.kubevirt_vm:

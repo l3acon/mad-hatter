@@ -94,6 +94,8 @@ After you have a **golden root DataVolume** name in the same namespace:
 
 **Disk lifecycle:** each provisioned VM keeps its own clone DataVolume (default naming); deleting the VM does **not** delete the clone DV—remove it with **`oc delete datavolume <name> -n <ns>`** when reclaiming space.
 
+**KubeVirt userdata size:** inline **`cloudInitNoCloud.userData`** is capped at **2048 bytes**; **`vm_create_windows_from_golden.yml`** always writes **`userData`** into Secret **`<vm_name>-nocloud`** (key **`userdata`**) and references **`userDataSecretRef`** so larger cloud-config (clone unstick script + password) is valid. Delete that Secret with the VM if you remove the guest manually.
+
 **Clone first boot — "The computer restarted unexpectedly" / "Windows installation cannot proceed":** after a **block-level clone** of a generalized disk, Windows sometimes leaves **`SystemSetupInProgress`** or **`OOBEInProgress`** set so mini-setup shows that blue recovery screen. The default **`windows_golden_nocloud.yaml.j2`** ships a one-time **`runcmd`** script (disable with **`ocpv_cloudinit_clear_clone_setup_state: false`**) that clears those registry values, sets **`ImageState`** to **`IMAGE_STATE_COMPLETE`**, and reboots once when stuck. If you use fully custom **`ocpv_cloudinit_userdata`**, replicate that logic or apply the manual registry fix from Microsoft’s guidance for stuck OOBE/mini-setup.
 
 **RWO golden disk (legacy direct attach):** if **`ocpv_clone_golden_root: false`**, the usual golden root PVC is **ReadWriteOnce**—only one virt-launcher can attach it. The playbook can fail fast when another VM still references that DV (see **`ocpv_skip_rwo_dv_conflict_check`** for RWX).
