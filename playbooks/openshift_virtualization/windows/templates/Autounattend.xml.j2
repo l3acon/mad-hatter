@@ -143,6 +143,16 @@
           <PlainText>true</PlainText>
         </AdministratorPassword>
       </UserAccounts>
+{% if ocpv_unattend_disable_firewall | default(true) | bool %}
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <RequiresUserInput>false</RequiresUserInput>
+          <Description>Disable Windows Firewall so WinRM (5985/5986) is reachable from automation EE</Description>
+          <CommandLine>powershell.exe -NoProfile -Command "Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False"</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+{% endif %}
     </component>
   </settings>
 </unattend>

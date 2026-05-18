@@ -271,6 +271,26 @@ else {
 
 if (-not $SkipFirewallDisable) {
     Disable-WindowsFirewallAllProfiles -Force:$Force
+
+    # Sysprep re-enables the firewall when generalizing.  Register a startup
+    # scheduled task so every boot (including clones from this golden image)
+    # disables the firewall before any automation EE attempts to reach WinRM.
+    $taskName = 'OCPV-DisableFirewall'
+    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        Write-Verbose "Registering startup scheduled task '$taskName' (survives sysprep)."
+        $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
+            -Argument '-NoProfile -Command "Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False"'
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest -LogonType ServiceAccount
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+            -Principal $principal -Settings $settings -Force | Out-Null
+        Write-Host "Scheduled task '$taskName' registered (runs at every startup as SYSTEM)."
+    }
+    else {
+        Write-Verbose "Scheduled task '$taskName' already exists; skipping creation."
+    }
 }
 else {
     Write-Warning 'SkipFirewallDisable: Windows Firewall left unchanged. AAP/EE may not reach WinRM if profiles block inbound.'
