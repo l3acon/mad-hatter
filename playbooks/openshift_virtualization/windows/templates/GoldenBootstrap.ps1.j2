@@ -14,7 +14,7 @@ Log '--- GoldenBootstrap start ---'
 $setup = 'HKLM:\SYSTEM\Setup'
 $child = 'HKLM:\SYSTEM\Setup\Status\ChildCompletion'
 if (Test-Path $child) {
-    $cv = (Get-ItemProperty -Path $child -Name 'setup.exe' -ErrorAction SilentlyContinue).'setup.exe'
+    try { $cv = (Get-ItemProperty -Path $child -Name 'setup.exe' -ErrorAction Stop).'setup.exe' } catch { $cv = $null }
     Log ("ChildCompletion\setup.exe={0}" -f $cv)
     if ($cv -eq 1) {
         Set-ItemProperty -Path $child -Name 'setup.exe' -Value 3 -Type DWord -Force
@@ -22,8 +22,8 @@ if (Test-Path $child) {
     }
 }
 if (Test-Path $setup) {
-    $ssip = (Get-ItemProperty -Path $setup -Name 'SystemSetupInProgress' -ErrorAction SilentlyContinue).SystemSetupInProgress
-    $sp = (Get-ItemProperty -Path $setup -Name 'SetupPhase' -ErrorAction SilentlyContinue).SetupPhase
+    try { $ssip = (Get-ItemProperty -Path $setup -Name 'SystemSetupInProgress' -ErrorAction Stop).SystemSetupInProgress } catch { $ssip = $null }
+    try { $sp = (Get-ItemProperty -Path $setup -Name 'SetupPhase' -ErrorAction Stop).SetupPhase } catch { $sp = $null }
     Log ("SystemSetupInProgress={0} SetupPhase={1}" -f $ssip, $sp)
     if ($ssip -eq 1 -or $sp -in 4, 7) {
         Set-ItemProperty -Path $setup -Name 'SetupPhase' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
@@ -34,7 +34,7 @@ if (Test-Path $setup) {
 }
 $oobePath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE'
 if (Test-Path $oobePath) {
-    $oobeProg = (Get-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -ErrorAction SilentlyContinue).OOBEInProgress
+    try { $oobeProg = (Get-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -ErrorAction Stop).OOBEInProgress } catch { $oobeProg = $null }
     Log ("OOBEInProgress={0}" -f $oobeProg)
     if ($oobeProg -eq 1) {
         Set-ItemProperty -Path $oobePath -Name 'OOBEInProgress' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
