@@ -1,0 +1,8 @@
+p, role:default/win-vm-operators, catalog-entity, read, allow
+p, role:default/win-vm-operators, scaffolder.template.parameter.read, read, allow
+p, role:default/win-vm-operators, scaffolder.template.step.read, read, allow
+p, role:default/win-vm-operators, scaffolder.action.execute, use, allow
+p, role:default/win-vm-operators, scaffolder.task.create, create, allow
+p, role:default/win-vm-operators, scaffolder.task.read, read, allow
+p, role:default/win-vm-operators, scaffolder.task.cancel, use, allow
+g, user:default/win-vm-user, role:default/win-vm-operators

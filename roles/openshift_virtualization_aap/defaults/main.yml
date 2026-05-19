@@ -119,6 +119,11 @@ openshift_virt_aap_controller_credentials:
 
 openshift_virt_aap_verify_ssl: false
 
+# Self-service portal non-admin user (created by gateway_users dispatch).
+openshift_virt_aap_ssp_user_enabled: true
+openshift_virt_aap_ssp_user_name: win-vm-user
+openshift_virt_aap_ssp_user_password: "{{ lookup('env', 'OCPV_SSP_USER_PASSWORD') | default('ChangeMe123!', true) }}"
+
 openshift_virt_aap_openshift_credential:
   - name: OpenShift Credential
     credential_type: OpenShift or Kubernetes API Bearer Token
@@ -130,6 +135,21 @@ openshift_virt_aap_openshift_credential:
 # Omit aap_organizations so infra.aap_configuration.dispatch skips gateway_organizations (ansible.platform.organization
 # hits api/gateway/v1 and 404s on Automation Controller installs without Platform Gateway). To manage orgs via Gateway,
 # pass -e 'aap_organizations=[{name: Default, galaxy_credentials: [...]}]' when your deployment supports it.
+
+# RBAC: grant the SSP user execute-only access to the self-service JT.
+controller_roles: >-
+  {{
+    [
+      {
+        'user': openshift_virt_aap_ssp_user_name,
+        'role': 'execute',
+        'job_template': 'OpenShift Virtualization | Provision Windows VM (self-service)',
+        'state': 'present',
+      },
+    ]
+    if (openshift_virt_aap_ssp_user_enabled | default(true) | bool)
+    else []
+  }}
 
 controller_execution_environments:
   - name: "{{ openshift_virt_aap_ee_name }}"

@@ -23,6 +23,10 @@
     - create_rhaap_secret
     - create_scm_secret
 
+- name: Apply RBAC policies ConfigMap
+  import_tasks: rbac_configmap.yml
+  tags: [rbac]
+
 - name: Build plugin registry
   import_tasks: plugins.yml
   tags: [build_plugin]

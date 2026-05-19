@@ -135,6 +135,20 @@
 # infra.aap_configuration subroles ship empty defaults (e.g. controller_projects: [], aap_organizations: [])
 # that override this role's defaults while dispatch runs. Host facts survive nested include_role.
 # Skip controller_inventories in dispatch (inventory ensured by the task above).
+- name: Create self-service portal user on the controller
+  when: openshift_virt_aap_ssp_user_enabled | bool
+  ansible.controller.user:
+    username: "{{ openshift_virt_aap_ssp_user_name }}"
+    password: "{{ openshift_virt_aap_ssp_user_password }}"
+    first_name: Windows VM
+    last_name: Operator
+    is_superuser: false
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
 - name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
   ansible.builtin.set_fact:
     controller_execution_environments: "{{ controller_execution_environments }}"
@@ -143,6 +157,7 @@
     controller_inventory_sources: "{{ openshift_virt_aap_controller_inventory_sources_for_dispatch }}"
     controller_hosts: "{{ controller_hosts }}"
     controller_workflows: "{{ controller_workflows }}"
+    controller_roles: "{{ controller_roles }}"
 
 - name: Apply Automation Controller configuration (OpenShift Virtualization CasC)
   ansible.builtin.include_role:
