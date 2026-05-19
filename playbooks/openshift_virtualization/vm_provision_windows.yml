@@ -356,6 +356,8 @@
         ansible_winrm_transport: "{{ ocpv_windows_winrm_transport | default('ntlm') }}"
         ansible_winrm_scheme: http
         ansible_winrm_server_cert_validation: ignore
+        ansible_winrm_operation_timeout_sec: 120
+        ansible_winrm_read_timeout_sec: 150
 
 ############################################################################
 # Play 2 — Install Chocolatey package on the guest (WinRM)
@@ -366,6 +368,11 @@
   tasks:
     - name: Wait for WinRM session
       ansible.windows.win_ping:
+
+    - name: Increase WinRM MaxEnvelopeSizekb for large command output
+      ansible.windows.win_shell: |
+        Set-Item -Path WSMan:\localhost\MaxEnvelopeSizekb -Value 8192
+      changed_when: false
 
     - name: Install Chocolatey when missing
       ansible.windows.win_shell: |
