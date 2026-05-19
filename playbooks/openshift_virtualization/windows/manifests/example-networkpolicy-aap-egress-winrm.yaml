@@ -1,0 +1,29 @@
+# Example only — tune selectors and namespaces for your cluster.
+# NetworkPolicy is namespace-scoped: this manifest applies to pods IN namespace `aap`.
+# It allows those pods to open TCP 5985 (and optionally 5986) to pods in another namespace
+# (where KubeVirt VMIs run). Your automation job pods must match `spec.podSelector`.
+#
+# Apply: oc apply -f example-networkpolicy-aap-egress-winrm.yaml
+#
+# If your cluster uses the default OpenShift SDN without namespace NetworkPolicies,
+# connectivity issues are more often host firewalls, secondary networks, or execution placement.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-automation-egress-to-kubevirt-winrm
+  namespace: aap
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ocpv-aap-smoke
+      ports:
+        - protocol: TCP
+          port: 5985
+        - protocol: TCP
+          port: 5986

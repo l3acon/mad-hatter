@@ -22,7 +22,7 @@
 
 - name: Add Openshift repository
   kubernetes.core.helm_repository:
-    name: openshift
+    name: "{{ helm_repo_name }}"
     repo_url: "{{ helm_repo_url }}"
 
 - name: Install RHAAP chart from openshift repo

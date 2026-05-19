@@ -1,0 +1,181 @@
+---
+# Override in job template extra vars or playbook -e if needed.
+# ee-minimal does not ship redhat.openshift_virtualization; build from execution_environments/rosa/ (publishes quay.io/matferna/mh-rosa).
+openshift_virt_aap_ee_image: quay.io/matferna/mh-rosa:latest
+openshift_virt_aap_ee_name: OpenShift Virtualization EE
+
+# Windows automation EE (build from execution_environments/windows/ and push before CasC references the image).
+openshift_virt_aap_ee_windows_image: quay.io/matferna/mh-windows:latest
+openshift_virt_aap_ee_windows_name: OpenShift Virtualization Windows EE
+
+# Optional second Machine credential for Windows guests (e.g. OpenSSH as Administrator). Off by default.
+openshift_virt_aap_windows_vm_ssh_machine_cred_enabled: false
+openshift_virt_aap_windows_vm_ssh_machine_cred_name: "OpenShift Virtualization | Windows VM SSH"
+openshift_virt_aap_windows_vm_ssh_username: Administrator
+openshift_virt_aap_windows_vm_ssh_private_key_file: "{{ openshift_virt_aap_vm_ssh_private_key_file }}"
+
+openshift_virt_aap_project_scm_url: https://github.com/l3acon/mad-hatter
+# When CasC is applied via playbooks/openshift_virtualization/aap_rollout_casc.yml, the playbook sets this from
+# `git rev-parse --abbrev-ref HEAD` if unset so the controller project tracks your checkout branch.
+openshift_virt_aap_project_scm_branch: main
+openshift_virt_aap_project_name: OpenShift Virtualization (mad-hatter)
+
+openshift_virt_aap_inventory_name: OpenShift Virtualization Runtime
+
+# Dynamic inventory for OpenShift Virtualization VMs (Controller source: openshift_virtualization / redhat.openshift_virtualization).
+# List every namespace where job templates or workflows create VMs so sync discovers them.
+openshift_virt_aap_kubevirt_inventory_name: "OpenShift Virtualization | KubeVirt VMs"
+openshift_virt_aap_kubevirt_inventory_source_name: "OpenShift Virtualization | KubeVirt inventory sync"
+openshift_virt_aap_kubevirt_inventory_namespaces:
+  - ocpv-aap-smoke
+
+# Constructed inventory: same KubeVirt hosts plus WinRM connection variables (see template).
+openshift_virt_aap_kubevirt_winrm_inventory_enabled: true
+openshift_virt_aap_kubevirt_winrm_inventory_name: "OpenShift Virtualization | KubeVirt VMs (WinRM)"
+openshift_virt_aap_kubevirt_winrm_inventory_source_name: "OpenShift Virtualization | KubeVirt inventory sync (WinRM)"
+# Applied to the WinRM inventory object in Tower (merged with per-host facts from the sync).
+openshift_virt_aap_kubevirt_winrm_inventory_variables:
+  ansible_connection: winrm
+  ansible_winrm_scheme: http
+  ansible_winrm_transport: ntlm
+  ansible_winrm_server_cert_validation: ignore
+  ansible_port: 5985
+
+# Second openshift_virtualization source targeting the WinRM inventory (same namespaces as primary).
+openshift_virt_aap_kubevirt_winrm_inventory_sources:
+  - name: "{{ openshift_virt_aap_kubevirt_winrm_inventory_source_name }}"
+    inventory: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
+    organization: Default
+    description: >-
+      Same OpenShift Virtualization sync as the primary KubeVirt inventory; inventory variables
+      (openshift_virt_aap_kubevirt_winrm_inventory_variables) default ansible_connection to WinRM for Windows.
+    source: openshift_virtualization
+    credential: OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    overwrite: true
+    update_on_launch: true
+    update_cache_timeout: 0
+    timeout: 600
+    verbosity: 1
+    source_vars:
+      namespaces: "{{ openshift_virt_aap_kubevirt_inventory_namespaces }}"
+
+# Dispatched to infra.aap_configuration.controller_inventory_sources (Runtime inventory stays module-managed only).
+openshift_virt_aap_controller_inventory_sources:
+  - name: "{{ openshift_virt_aap_kubevirt_inventory_source_name }}"
+    inventory: "{{ openshift_virt_aap_kubevirt_inventory_name }}"
+    organization: Default
+    description: >-
+      OpenShift Virtualization dynamic inventory (redhat.openshift_virtualization). Namespace list:
+      openshift_virt_aap_kubevirt_inventory_namespaces.
+    source: openshift_virtualization
+    credential: OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    overwrite: true
+    # Re-sync when the post-install job runs so inventory matches the API even if the workflow sync raced.
+    update_on_launch: true
+    update_cache_timeout: 0
+    timeout: 600
+    verbosity: 1
+    source_vars:
+      namespaces: "{{ openshift_virt_aap_kubevirt_inventory_namespaces }}"
+
+controller_validate_certs: false
+controller_configuration_async_delay: 3
+
+# Appended in tasks/main.yml after OpenShift token credential (and with openshift_virt_aap_extra_controller_credentials)
+openshift_virt_aap_extra_controller_credentials: []
+
+# Optional extra Machine credential names (private keys must match workflow survey SSH public keys).
+# Appended after Controller/OpenShift and the optional Fedora VM SSH credential below.
+openshift_virt_aap_post_install_jt_credentials_suffix: []
+
+# Machine credential for SSH to Fedora KubeVirt guests (workflow post-install). Reads local key files during CasC.
+openshift_virt_aap_vm_ssh_machine_cred_enabled: true
+openshift_virt_aap_vm_ssh_machine_cred_name: "OpenShift Virtualization | Fedora VM SSH"
+openshift_virt_aap_vm_ssh_username: fedora
+openshift_virt_aap_vm_ssh_private_key_file: /home/matt/keys/id_rsa
+openshift_virt_aap_vm_ssh_public_key_file: /home/matt/keys/id_rsa.pub
+
+openshift_virt_aap_controller_credentials:
+  - name: Automation Hub
+    organization: Default
+    credential_type: Ansible Galaxy/Automation Hub API Token
+    update_secrets: false
+    inputs:
+      url: https://console.redhat.com/api/automation-hub/
+      auth_url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+
+  - name: Controller Credential
+    organization: Default
+    credential_type: Red Hat Ansible Automation Platform
+    update_secrets: false
+    state: exists
+    inputs:
+      host: "{{ aap_hostname }}"
+      username: "{{ aap_username }}"
+      password: "{{ aap_password }}"
+      verify_ssl: "{{ openshift_virt_aap_verify_ssl }}"
+
+openshift_virt_aap_verify_ssl: false
+
+# Self-service portal non-admin user (created by gateway_users dispatch).
+openshift_virt_aap_ssp_user_enabled: true
+openshift_virt_aap_ssp_user_name: win-vm-user
+openshift_virt_aap_ssp_user_password: "{{ lookup('env', 'OCPV_SSP_USER_PASSWORD') | default('ChangeMe123!', true) }}"
+
+openshift_virt_aap_openshift_credential:
+  - name: OpenShift Credential
+    credential_type: OpenShift or Kubernetes API Bearer Token
+    organization: Default
+    inputs:
+      host: "{{ openshift_api_url }}"
+      bearer_token: "{{ openshift_bearer_token }}"
+
+# Omit aap_organizations so infra.aap_configuration.dispatch skips gateway_organizations (ansible.platform.organization
+# hits api/gateway/v1 and 404s on Automation Controller installs without Platform Gateway). To manage orgs via Gateway,
+# pass -e 'aap_organizations=[{name: Default, galaxy_credentials: [...]}]' when your deployment supports it.
+
+# RBAC: grant the SSP user execute-only access to the self-service JT.
+controller_roles: >-
+  {{
+    [
+      {
+        'user': openshift_virt_aap_ssp_user_name,
+        'role': 'execute',
+        'job_template': 'OpenShift Virtualization | Provision Windows VM (self-service)',
+        'state': 'present',
+      },
+    ]
+    if (openshift_virt_aap_ssp_user_enabled | default(true) | bool)
+    else []
+  }}
+
+controller_execution_environments:
+  - name: "{{ openshift_virt_aap_ee_name }}"
+    image: "{{ openshift_virt_aap_ee_image }}"
+    pull: always
+  - name: "{{ openshift_virt_aap_ee_windows_name }}"
+    image: "{{ openshift_virt_aap_ee_windows_image }}"
+    pull: always
+
+controller_inventories:
+  - name: "{{ openshift_virt_aap_inventory_name }}"
+    organization: Default
+
+controller_hosts:
+  - name: localhost
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    variables:
+      ansible_connection: local
+
+controller_projects:
+  - name: "{{ openshift_virt_aap_project_name }}"
+    organization: Default
+    scm_type: git
+    scm_url: "{{ openshift_virt_aap_project_scm_url }}"
+    scm_branch: "{{ openshift_virt_aap_project_scm_branch }}"
+    default_environment: "{{ openshift_virt_aap_ee_name }}"
+    allow_override: true
+    scm_update_on_launch: true
+    wait: true

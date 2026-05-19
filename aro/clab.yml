@@ -35,7 +35,6 @@
         aap_operator_controller_admin_password: "{{ aap_admin_password }}"
         aap_operator_inject_manifest: true
         aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
-        aap_operator_catalog_snapshot_image_tag: "v4.19_2025_07_21"
 
     - name: Show bearer token
       ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when

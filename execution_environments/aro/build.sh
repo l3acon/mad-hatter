@@ -1,25 +1,37 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-IMAGE=quay.io/matferna/mh-$(basename $(pwd))
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../utils/ee_build_prep.sh"
+
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+fill_galaxy_build_tokens_from_system_ansible_cfg || true
+
+if [[ -z ${ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN:-} || -z ${ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN:-} ]]; then
+  echo "A valid Automation Hub token is required. Either:"
+  echo "  export ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN=<token>"
+  echo "  export ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN=<token>"
+  echo "or place a token under a [galaxy_server.*] section in \${SYSTEM_ANSIBLE_CFG:-/etc/ansible/ansible.cfg}"
+  exit 1
+fi
+
+ensure_podman_redhat_registry_login
+ensure_podman_quay_io_login
+
+if [[ "${MERGE_REPO_ANSIBLE_CFG:-}" == 1 ]]; then
+  _ee_ans_restore=$(mktemp)
+  cp "${SCRIPT_DIR}/ansible.cfg" "${_ee_ans_restore}"
+  trap 'mv -f "${_ee_ans_restore}" "${SCRIPT_DIR}/ansible.cfg"' EXIT
+  merge_repo_defaults_into_ee_ansible_cfg "${SCRIPT_DIR}" "${REPO_ROOT}/ansible.cfg" "${_ee_ans_restore}"
+fi
+
+cd "${SCRIPT_DIR}"
+
+IMAGE=quay.io/matferna/mh-$(basename "${SCRIPT_DIR}")
 _tag=$(date +%Y%m%d)
 IMAGE_TAG="${IMAGE}:${_tag}"
-
-
-if [[ -z $ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN || -z $ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN ]]
-then
-    echo "A valid Automation Hub token is required, Set the following environment variables before continuing"
-    echo "export ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN=<token>"
-    echo "export ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN=<token>"
-    exit 1
-fi
-
-# log in to pull the base EE image
-if ! podman login --get-login registry.redhat.io > /dev/null
-then
-    echo "Run 'podman login registry.redhat.io' before continuing"
-    exit 1
-fi
 
 echo "Begin EE definition creation"
 rm -rf ./context/*
@@ -28,44 +40,28 @@ ansible-builder create \
     --context ./context \
     -v 3 | tee ansible-builder.log
 
-echo "Remove existing manifest if present"
-podman manifest rm ${IMAGE_TAG} || true
-
-echo "Begin manifest creation ${IMAGE_TAG}"
-# create manifest for EE image
-podman manifest create ${IMAGE_TAG}
-
-# for the openshift-clients RPM, microdnf doesn't support URL-based installs
-# and HTTP doesn't support file globs for GETs, use multiple steps to determine
-# the correct RPM URL for each machine architecture
-for arch in amd64 #arm64
+for arch in amd64 # arm64: add a second build + manifest workflow if needed
 do
     _baseurl=https://mirror.openshift.com/pub/openshift-v4/${arch}/dependencies/rpms/4.18-el9-beta/
-    _rpm=$(curl -s ${_baseurl} | grep openshift-clients-4 | grep href | cut -d\" -f2)
+    _rpm=$(curl -s "${_baseurl}" | grep openshift-clients-4 | grep href | cut -d\" -f2)
 
-    # build EE for multiple architectures from the EE context
     pushd ./context/ > /dev/null
     echo "Begin podman build ${IMAGE_TAG} for ${arch}"
-    podman build --platform linux/${arch} \
+    podman build --platform linux/"${arch}" \
       --build-arg ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN \
       --build-arg ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN \
       --build-arg OPENSHIFT_CLIENT_RPM="${_baseurl}${_rpm}" \
-      --manifest ${IMAGE_TAG} . \
-      | tee podman-build-${arch}.log
+      -t "${IMAGE_TAG}" . \
+      | tee "podman-build-${arch}.log"
     popd > /dev/null
-    echo "Finish podman build for ${arch} after $SECONDS seconds"
+    echo "Finish podman build for ${arch} after ${SECONDS} seconds"
 done
 
-echo "Built ${IMAGE_TAG}"
+podman tag "${IMAGE_TAG}" "${IMAGE}:latest"
 
-# inspect manifest content
-podman manifest inspect ${IMAGE_TAG}
+echo "Built ${IMAGE_TAG} and tagged ${IMAGE}:latest"
+podman inspect "${IMAGE_TAG}" --format 'Architecture={{.Architecture}} OS={{.Os}}'
 
-# tag manifest as latest
-podman tag ${IMAGE_TAG} ${IMAGE}:latest
-
-# push all manifest content to repository
-# using --all is important here, it pushes all content and not
-# just the native platform content
-podman manifest push --all ${IMAGE_TAG}
-podman manifest push --all ${IMAGE}:latest
+echo "Pushing ${IMAGE_TAG} and ${IMAGE}:latest"
+podman push "${IMAGE_TAG}"
+podman push "${IMAGE}:latest"

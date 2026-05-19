@@ -1,0 +1,164 @@
+---
+- name: Assert required variables and credentials
+  ansible.builtin.assert:
+    that:
+      - aap_hostname is defined
+      - aap_username is defined
+      - aap_password is defined
+      - openshift_api_url is defined
+      - openshift_bearer_token is defined
+      - openshift_bearer_token | length > 0
+
+- name: Verify Fedora VM SSH key files exist (when auto Machine credential enabled)
+  when: openshift_virt_aap_vm_ssh_machine_cred_enabled | bool
+  block:
+    - name: Stat Fedora VM SSH private key
+      ansible.builtin.stat:
+        path: "{{ openshift_virt_aap_vm_ssh_private_key_file }}"
+      register: openshift_virt_aap_vm_ssh_priv_stat
+
+    - name: Stat Fedora VM SSH public key
+      ansible.builtin.stat:
+        path: "{{ openshift_virt_aap_vm_ssh_public_key_file }}"
+      register: openshift_virt_aap_vm_ssh_pub_stat
+
+    - name: Assert keypair files exist for Machine credential lookup
+      ansible.builtin.assert:
+        that:
+          - openshift_virt_aap_vm_ssh_priv_stat.stat.exists | bool
+          - openshift_virt_aap_vm_ssh_priv_stat.stat.isreg | bool
+          - openshift_virt_aap_vm_ssh_pub_stat.stat.exists | bool
+          - openshift_virt_aap_vm_ssh_pub_stat.stat.isreg | bool
+        fail_msg: >-
+          openshift_virt_aap_vm_ssh_machine_cred_enabled is true but a key path is missing or not a file.
+          Set openshift_virt_aap_vm_ssh_private_key_file / openshift_virt_aap_vm_ssh_public_key_file,
+          or disable with openshift_virt_aap_vm_ssh_machine_cred_enabled: false.
+
+- name: Verify Windows VM SSH key file exists (when Windows Machine credential enabled)
+  when: openshift_virt_aap_windows_vm_ssh_machine_cred_enabled | bool
+  block:
+    - name: Stat Windows VM SSH private key
+      ansible.builtin.stat:
+        path: "{{ openshift_virt_aap_windows_vm_ssh_private_key_file }}"
+      register: openshift_virt_aap_win_ssh_priv_stat
+
+    - name: Assert Windows VM SSH private key exists
+      ansible.builtin.assert:
+        that:
+          - openshift_virt_aap_win_ssh_priv_stat.stat.exists | bool
+          - openshift_virt_aap_win_ssh_priv_stat.stat.isreg | bool
+        fail_msg: >-
+          openshift_virt_aap_windows_vm_ssh_machine_cred_enabled is true but the private key file is missing.
+          Set openshift_virt_aap_windows_vm_ssh_private_key_file or disable with openshift_virt_aap_windows_vm_ssh_machine_cred_enabled: false.
+
+- name: Build merged controller credentials for dispatch # noqa: var-naming[no-role-prefix]
+  ansible.builtin.set_fact:
+    controller_credentials: >-
+      {{
+        openshift_virt_aap_controller_credentials
+        + (openshift_virt_aap_extra_controller_credentials | default([]))
+        + (
+            [
+              {
+                'name': openshift_virt_aap_vm_ssh_machine_cred_name,
+                'credential_type': 'Machine',
+                'organization': 'Default',
+                'update_secrets': true,
+                'inputs': {
+                  'username': openshift_virt_aap_vm_ssh_username,
+                  'ssh_key_data': lookup('file', openshift_virt_aap_vm_ssh_private_key_file),
+                },
+              },
+            ]
+            if openshift_virt_aap_vm_ssh_machine_cred_enabled | bool else []
+          )
+        + (
+            [
+              {
+                'name': openshift_virt_aap_windows_vm_ssh_machine_cred_name,
+                'credential_type': 'Machine',
+                'organization': 'Default',
+                'update_secrets': true,
+                'inputs': {
+                  'username': openshift_virt_aap_windows_vm_ssh_username,
+                  'ssh_key_data': lookup('file', openshift_virt_aap_windows_vm_ssh_private_key_file),
+                },
+              },
+            ]
+            if openshift_virt_aap_windows_vm_ssh_machine_cred_enabled | bool else []
+          )
+        + openshift_virt_aap_openshift_credential
+      }}
+  no_log: true
+
+# controller_inventories role passes `variables` through a regex_replace chain that breaks omit/empty dict on Ansible 2.20+.
+- name: Ensure controller inventory exists
+  ansible.controller.inventory:
+    name: "{{ openshift_virt_aap_inventory_name }}"
+    organization: Default
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
+- name: Ensure KubeVirt dynamic inventory exists
+  ansible.controller.inventory:
+    name: "{{ openshift_virt_aap_kubevirt_inventory_name }}"
+    organization: Default
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
+- name: Ensure KubeVirt WinRM inventory exists (inventory-level WinRM defaults for synced hosts)
+  when: openshift_virt_aap_kubevirt_winrm_inventory_enabled | bool
+  ansible.controller.inventory:
+    name: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
+    organization: Default
+    state: present
+    variables: "{{ openshift_virt_aap_kubevirt_winrm_inventory_variables }}"
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
+- name: Merge optional WinRM inventory source into CasC inventory source list
+  ansible.builtin.set_fact:
+    openshift_virt_aap_controller_inventory_sources_for_dispatch: >-
+      {{
+        openshift_virt_aap_controller_inventory_sources
+        + (openshift_virt_aap_kubevirt_winrm_inventory_sources | default([]) if openshift_virt_aap_kubevirt_winrm_inventory_enabled | bool else [])
+      }}
+
+# infra.aap_configuration subroles ship empty defaults (e.g. controller_projects: [], aap_organizations: [])
+# that override this role's defaults while dispatch runs. Host facts survive nested include_role.
+# Skip controller_inventories in dispatch (inventory ensured by the task above).
+- name: Create self-service portal user on the controller
+  when: openshift_virt_aap_ssp_user_enabled | bool
+  ansible.controller.user:
+    username: "{{ openshift_virt_aap_ssp_user_name }}"
+    password: "{{ openshift_virt_aap_ssp_user_password }}"
+    first_name: Windows VM
+    last_name: Operator
+    is_superuser: false
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
+- name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
+  ansible.builtin.set_fact:
+    controller_execution_environments: "{{ controller_execution_environments }}"
+    controller_projects: "{{ controller_projects }}"
+    controller_inventories: []
+    controller_inventory_sources: "{{ openshift_virt_aap_controller_inventory_sources_for_dispatch }}"
+    controller_hosts: "{{ controller_hosts }}"
+    controller_workflows: "{{ controller_workflows }}"
+    controller_roles: "{{ controller_roles }}"
+
+- name: Apply Automation Controller configuration (OpenShift Virtualization CasC)
+  ansible.builtin.include_role:
+    name: infra.aap_configuration.dispatch

@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: openshift_virtualization_aap
+  author: l3acon
+  description: Configuration as Code for AAP job templates around OpenShift Virtualization.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms: []
+  galaxy_tags:
+    - openshift
+    - virtualization
+    - aap
+dependencies: []

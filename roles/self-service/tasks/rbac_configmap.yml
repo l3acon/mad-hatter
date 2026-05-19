@@ -1,0 +1,13 @@
+---
+- name: Create RBAC policies ConfigMap
+  tags: [rbac]
+  kubernetes.core.k8s:
+    state: present
+    resource_definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: rbac-policies
+        namespace: "{{ openshift_namespace }}"
+      data:
+        rbac-policies.csv: "{{ lookup('file', role_path + '/files/rbac-policies.csv') }}"

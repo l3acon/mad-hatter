@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+  {# WinPE: PnpCustomizationWinPE DriverPaths (best-effort) + RunSynchronous pnputil via WinPELoadVirtio.cmd on the answer ISO (KubeVirt CD layout often needs this). #}
+  {# quay.io/kubevirt/virtio-container-disk uses amd64/<release>/ (e.g. amd64/2k22); Fedora virtio-win.iso uses viostor/w11/amd64 — include both. #}
+  {# Disk: EFI + MSR + sized primary (Extend is flaky on some virtio sizes). No drive letter on OS partition during ModifyPartitions (often breaks apply). #}
+{% set _disk = ocpv_unattend_os_disk_id | default(0) | int %}
+{% set _efi = ocpv_unattend_efi_mb | default(260) | int %}
+{% set _msr = ocpv_unattend_msr_mb | default(128) | int %}
+{% set _primary = ocpv_unattend_primary_partition_mb | default(55000) | int %}
+{% set virtio_driver_subpaths = ocpv_unattend_virtio_driver_subpaths | default([
+  'drivers/amd64/2k22', 'drivers/amd64/w11', 'drivers/amd64/w10', 'drivers/amd64/2k19', 'drivers/amd64/2k16',
+  'amd64/2k22', 'amd64/w11', 'amd64/w10', 'amd64/2k19', 'amd64/2k16',
+  'viostor/w11/amd64', 'viostor/w10/amd64', 'viostor/2k22/amd64',
+  'vioscsi/w11/amd64', 'vioscsi/w10/amd64', 'vioscsi/2k22/amd64'
+]) %}
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <SetupUILanguage>
+        <UILanguage>{{ ocpv_unattend_ui_language | default('en-US') }}</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>{{ ocpv_unattend_input_locale | default('en-US') }}</InputLocale>
+      <SystemLocale>{{ ocpv_unattend_system_locale | default('en-US') }}</SystemLocale>
+      <UILanguage>{{ ocpv_unattend_ui_language | default('en-US') }}</UILanguage>
+      <UserLocale>{{ ocpv_unattend_user_locale | default('en-US') }}</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-PnpCustomizationsWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <DriverPaths>
+{% for letter in ['D', 'E', 'F', 'G', 'H', 'I'] %}
+{% set outer = loop %}
+{% for sub in virtio_driver_subpaths %}
+        <PathAndCredentials wcm:action="add" wcm:keyValue="{{ (outer.index0 * virtio_driver_subpaths | length) + loop.index }}">
+          <Path>{{ letter }}:/{{ sub }}</Path>
+        </PathAndCredentials>
+{% endfor %}
+{% endfor %}
+      </DriverPaths>
+    </component>
+    <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+{% if ocpv_unattend_product_key is defined and ocpv_unattend_product_key | string | length > 0 %}
+        <ProductKey>
+          <Key>{{ ocpv_unattend_product_key }}</Key>
+          <WillShowUI>OnError</WillShowUI>
+        </ProductKey>
+{% endif %}
+      </UserData>
+{% if ocpv_unattend_winpe_load_virtio | default(true) | bool %}
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>OCPV: load viostor from virtio CD (WinPELoadVirtio.cmd on answer ISO) before DiskConfiguration</Description>
+          <Path>cmd.exe /c for %L in (D E F G H I J K L M N O P Q R S T U V W) do @if exist %L:\WinPELoadVirtio.cmd call %L:\WinPELoadVirtio.cmd</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+{% endif %}
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>{{ _disk }}</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Type>EFI</Type>
+              <Size>{{ _efi }}</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Type>MSR</Type>
+              <Size>{{ _msr }}</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>3</Order>
+              <Type>Primary</Type>
+              <Size>{{ _primary }}</Size>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Label>System</Label>
+              <Format>FAT32</Format>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>2</PartitionID>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>3</Order>
+              <PartitionID>3</PartitionID>
+              <Label>Windows</Label>
+              <Format>NTFS</Format>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+      <ImageInstall>
+        <OSImage>
+          <InstallFrom>
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/INDEX</Key>
+              <Value>{{ ocpv_unattend_wim_index | default(1) | string }}</Value>
+            </MetaData>
+          </InstallFrom>
+          <InstallTo>
+            <DiskID>{{ _disk }}</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+          <WillShowUI>OnError</WillShowUI>
+        </OSImage>
+      </ImageInstall>
+    </component>
+  </settings>
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <ComputerName>{{ (ocpv_unattend_computer_name | default('WIN-GOLDEN'))[0:15] }}</ComputerName>
+    </component>
+    <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>OCPV: register SetupComplete.cmd (GoldenBootstrap before OOBE)</Description>
+          <Path>cmd.exe /c for %L in (D E F G H I J K L M N O P Q R S T U V W) do @if exist %L:\StageGoldenSetupComplete.ps1 powershell.exe -NoProfile -ExecutionPolicy Bypass -File %L:\StageGoldenSetupComplete.ps1</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+    </component>
+  </settings>
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <NetworkLocation>Work</NetworkLocation>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value><![CDATA[{{ ocpv_win_autounattend_admin_password }}]]></Value>
+          <PlainText>true</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
+{% if ocpv_unattend_disable_firewall | default(true) | bool %}
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <RequiresUserInput>false</RequiresUserInput>
+          <Description>Disable Windows Firewall so WinRM (5985/5986) is reachable from automation EE</Description>
+          <CommandLine>powershell.exe -NoProfile -Command "Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False"</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+{% endif %}
+    </component>
+  </settings>
+</unattend>

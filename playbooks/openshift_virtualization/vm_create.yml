@@ -1,0 +1,60 @@
+---
+# Create a VirtualMachine using redhat.openshift_virtualization.kubevirt_vm
+# Attach an OpenShift/Kubernetes bearer token credential on the job template so
+# K8S_AUTH_* is injected (same pattern as infra.openshift_virtualization_ops playbooks).
+- name: Create OpenShift Virtualization VM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Validate required job variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_vm_name is defined and ocpv_vm_name | length > 0
+          - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
+        fail_msg: >-
+          Set ocpv_vm_name and ocpv_vm_namespace (for example via job template survey).
+
+    - name: Optionally build cloud-init with SSH public key for fedora user
+      when:
+        - ocpv_cloudinit_userdata is not defined
+        - ocpv_ssh_public_key | default('') | trim | length > 0
+      ansible.builtin.set_fact:
+        ocpv_cloudinit_userdata: |
+          #cloud-config
+          ssh_authorized_keys:
+            - "{{ ocpv_ssh_public_key | trim }}"
+
+    - name: Create VirtualMachine
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+        state: present
+        labels: "{{ ocpv_vm_labels | default(omit) }}"
+        instancetype:
+          name: "{{ ocpv_instancetype_name | default('u1.medium') }}"
+        preference:
+          name: "{{ ocpv_preference_name | default('fedora') }}"
+        spec:
+          domain:
+            devices:
+              interfaces:
+                - name: default
+                  masquerade: {}
+          networks:
+            - name: default
+              pod: {}
+          volumes: "{{ ocpv_vm_volumes | default(_ocpv_default_volumes) }}"
+        wait: "{{ ocpv_vm_wait | default(true) }}"
+        wait_timeout: "{{ ocpv_vm_wait_timeout | default(600) }}"
+      vars:
+        _ocpv_default_volumes:
+          - name: containerdisk
+            containerDisk:
+              image: "{{ ocpv_containerdisk_image | default('quay.io/containerdisks/fedora:latest') }}"
+          - name: cloudinit
+            cloudInitNoCloud:
+              userData: "{{ ocpv_cloudinit_userdata | default(_ocpv_default_cloudinit) }}"
+        _ocpv_default_cloudinit: |
+          #cloud-config
+          # Default username for fedora containerdisk is: fedora

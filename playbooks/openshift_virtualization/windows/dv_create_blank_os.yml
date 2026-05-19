@@ -1,0 +1,82 @@
+---
+# Create a blank DataVolume for Windows installation target (virtio system disk).
+# Run before vm_apply_installer.yml. Size should fit a full Windows Server + updates.
+#
+# Optional recreate (wipe and recreate the DV):
+#   -e ocpv_win_os_blank_recreate=true
+# When true, deletes the installer VM in this namespace first (see ocpv_win_installer_vm_name) so the RWO DV can
+# be released, then deletes and recreates the blank OS DataVolume.
+#
+# With storage classes that use WaitForFirstConsumer (e.g. gp3-csi on ROSA), the PVC often stays Pending
+# until a VirtualMachine references this DataVolume; that is expected.
+#
+# Required extra vars: none if defaults suffice.
+#   -e ocpv_win_namespace=ocpv-aap-smoke
+#   -e ocpv_win_os_blank_dv_name=windows-server-os-work
+#   -e ocpv_win_os_disk_size=60Gi
+#   -e ocpv_win_storage_class=gp3-csi
+- name: Create blank DataVolume for Windows OS disk
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ocpv_win_namespace: ocpv-aap-smoke
+    ocpv_win_os_blank_dv_name: windows-server-os-work
+    ocpv_win_os_disk_size: 60Gi
+    ocpv_win_storage_class: gp3-csi
+    ocpv_win_os_blank_recreate: false
+    ocpv_win_delete_installer_vm_when_recreate: true
+    ocpv_win_installer_vm_name: windows-server-installer
+  tasks:
+    - name: Assert namespace is set
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_namespace is defined and ocpv_win_namespace | length > 0
+          - ocpv_win_os_blank_dv_name is defined and ocpv_win_os_blank_dv_name | length > 0
+
+    - name: Delete installer VirtualMachine when recreating blank OS DV
+      when:
+        - ocpv_win_os_blank_recreate | default(false) | bool
+        - ocpv_win_delete_installer_vm_when_recreate | default(true) | bool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ ocpv_win_installer_vm_name | default('windows-server-installer') }}"
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 600
+
+    - name: Remove blank OS DataVolume for full recreate
+      when: ocpv_win_os_blank_recreate | default(false) | bool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ ocpv_win_os_blank_dv_name }}"
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 600
+
+    - name: Ensure blank OS DataVolume exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: "{{ ocpv_win_os_blank_dv_name }}"
+            namespace: "{{ ocpv_win_namespace }}"
+            annotations:
+              cdi.kubevirt.io/storage.bind.immediate.requested: "true"
+          spec:
+            source:
+              blank: {}
+            pvc:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: "{{ ocpv_win_os_disk_size }}"
+              storageClassName: "{{ ocpv_win_storage_class }}"
+        wait: false

@@ -1,5 +1,9 @@
 #SPDX-License-Identifier: MIT-0
 ---
+- name: Preflight checks
+  import_tasks: preflight.yml
+  tags: [preflight]
+
 - name: Create OAuth2 application in AAP
   import_tasks: oauth.yml
   tags: [create_oauth]
@@ -18,6 +22,10 @@
     - create_secrets
     - create_rhaap_secret
     - create_scm_secret
+
+- name: Apply RBAC policies ConfigMap
+  import_tasks: rbac_configmap.yml
+  tags: [rbac]
 
 - name: Build plugin registry
   import_tasks: plugins.yml

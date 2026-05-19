@@ -4,7 +4,7 @@ galaxy_info:
   author: Wolfgang Kulhanek (wkulhane@redhat.com)
   description: |
     Set up an Operator on OpenShift Container Platform.
-    Optionally using a Catalog Snapshot.
+    Optionally using a custom CatalogSource (grpc catalog index image).
     Does no operator configuration after install.
     This is a utility role with common logic to be called
     from other operator installation roles.

@@ -1,0 +1,67 @@
+---
+# Upload a local Windows Server ISO into a new CDI DataVolume (CD-ROM source for installer VM).
+# Requires: virtctl, oc logged in, CDI upload proxy reachable from this host.
+#
+# Example:
+#   ansible-playbook playbooks/openshift_virtualization/windows/dv_upload_iso.yml \
+#     -e ocpv_win_iso_local_path=/home/matt/Downloads/SERVER_EVAL_x64FRE_en-us.iso \
+#     -e ocpv_win_iso_dv_name=windows-server-eval-iso \
+#     -e ocpv_win_iso_dv_size=8Gi
+#
+# Size must exceed the ISO file size (padding for CDI overhead).
+- name: Upload Windows eval ISO to cluster DataVolume
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ocpv_win_namespace: ocpv-aap-smoke
+    ocpv_win_iso_dv_name: windows-server-eval-iso
+    ocpv_win_iso_dv_size: 8Gi
+    ocpv_win_storage_class: gp3-csi
+    ocpv_win_iso_local_path: /home/matt/Downloads/SERVER_EVAL_x64FRE_en-us.iso
+    ocpv_win_virtctl_insecure: true
+  tasks:
+    - name: Assert ISO path and DataVolume name
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_iso_local_path is defined and ocpv_win_iso_local_path | length > 0
+          - ocpv_win_iso_dv_name is defined and ocpv_win_iso_dv_name | length > 0
+
+    - name: Stat local ISO
+      ansible.builtin.stat:
+        path: "{{ ocpv_win_iso_local_path }}"
+      register: ocpv_win_iso_stat
+
+    - name: Require readable ISO file
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_iso_stat.stat.exists | bool
+          - ocpv_win_iso_stat.stat.isreg | bool
+        fail_msg: "ISO not found or not a file: {{ ocpv_win_iso_local_path }}"
+
+    - name: Build virtctl argv for image-upload
+      ansible.builtin.set_fact:
+        ocpv_win_virtctl_argv:
+          - virtctl
+          - image-upload
+          - dv
+          - "{{ ocpv_win_iso_dv_name }}"
+          - "--namespace={{ ocpv_win_namespace }}"
+          - "--size={{ ocpv_win_iso_dv_size }}"
+          - "--storage-class={{ ocpv_win_storage_class }}"
+          - "--image-path={{ ocpv_win_iso_local_path }}"
+          - "--force-bind"
+
+    - name: Optionally allow insecure TLS to CDI upload proxy
+      when: ocpv_win_virtctl_insecure | bool
+      ansible.builtin.set_fact:
+        ocpv_win_virtctl_argv: "{{ ocpv_win_virtctl_argv + ['--insecure'] }}"
+
+    - name: Upload ISO with virtctl (creates DataVolume and streams image)
+      ansible.builtin.command:
+        argv: "{{ ocpv_win_virtctl_argv }}"
+      async: 7200
+      poll: 60
+      register: ocpv_win_upload
+      changed_when: ocpv_win_upload.rc == 0
+      failed_when: ocpv_win_upload.rc != 0

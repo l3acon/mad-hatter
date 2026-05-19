@@ -1,3 +1,4 @@
+.env
 *.swp
 *.creds
 *.creds.yml
@@ -7,4 +8,6 @@ podman-build*
 ansible-navigator.log
 execution_environments/aro/context
 execution_environments/rosa/context
+execution_environments/windows/context
 roles/self-service/files/plugins/
+gemini-code-*.txt

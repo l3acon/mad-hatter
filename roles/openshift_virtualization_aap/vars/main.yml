@@ -1,0 +1,463 @@
+---
+# Job templates: attach "OpenShift Credential" for API access (K8S_AUTH_* injectors).
+controller_templates:
+  - name: "OpenShift Virtualization | Create VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_create.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "OpenShift Virtualization | Delete VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_delete.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: ""
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+
+  - name: "OpenShift Virtualization | Post-install package on VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_post_install_package.yml
+    credentials: >-
+      {{
+        ['Controller Credential', 'OpenShift Credential']
+        + ([openshift_virt_aap_vm_ssh_machine_cred_name] if openshift_virt_aap_vm_ssh_machine_cred_enabled else [])
+        + (openshift_virt_aap_post_install_jt_credentials_suffix | default([]))
+      }}
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "OpenShift Virtualization | Create Windows VM from DataVolume"
+    job_type: run
+    description: >-
+      Create a Windows VM from a golden root DataVolume by CDI-cloning it to a per-VM DataVolume (default).
+      By default (**ocpv_use_cloudbase_nocloud=false**) no cloudInitNoCloud volume is attached; the golden image
+      Administrator password must match the survey / WinRM credential. Set **ocpv_use_cloudbase_nocloud=true** to attach
+      NoCloud user-data for Cloudbase-Init (default template sets password + clone unstick). Optional **ocpv_cloudinit_userdata**
+      still forces a NoCloud Secret when non-empty.
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_create_windows_from_golden.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "OpenShift Virtualization | Post-install Chocolatey on Windows VM"
+    job_type: run
+    description: >-
+      WinRM to the guest and install a Chocolatey package. By default (**ocpv_verify_cloudbase_init=false**) the job
+      does not require the Cloudbase-Init sentinel file; set **ocpv_verify_cloudbase_init=true** when using NoCloud + Cloudbase.
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_post_install_windows.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "OpenShift Virtualization | Troubleshoot Windows WinRM connectivity"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_troubleshoot_windows_winrm.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: false
+    ask_limit_on_launch: true
+    ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Set Job Template Limit to the KubeVirt inventory hostname (usually "<namespace>-<vmname>").
+        At launch, select your WinRM Machine credential. Optional second credential slot if your controller requires it.
+        Probes TCP then HTTP /wsman from the OpenShift Virtualization EE (no ansible.windows required).
+      spec:
+        - question_name: VM namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+        - question_name: WinRM TCP port
+          type: text
+          variable: ocpv_windows_winrm_port
+          required: false
+          default: "5985"
+        - question_name: TCP probe timeout (seconds)
+          type: text
+          variable: ocpv_tr_tcp_timeout
+          required: false
+          default: "30"
+
+  - name: "OpenShift Virtualization | VM lifecycle (simple)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_operations_simple.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Start, stop, or restart a single VM by name.
+      spec:
+        - question_name: Operation
+          type: multiplechoice
+          variable: ocpv_vm_operation
+          required: true
+          choices:
+            - start
+            - stop
+            - restart
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+
+  - name: "OpenShift Virtualization | Snapshot VM (simple)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_backup_snapshot.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Create a VirtualMachineSnapshot for one VM.
+      spec:
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+
+  - name: "OpenShift Virtualization | VM operations (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_operations.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "OpenShift Virtualization | VM backup (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_backup.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "OpenShift Virtualization | VM restore (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_restore.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "OpenShift Virtualization | VM hot plug (collection)"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/import_vm_hot_plug.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "OpenShift Virtualization | Provision Windows VM (self-service)"
+    job_type: run
+    description: >-
+      Self-contained: clone a Windows golden image, create the VM, wait for WinRM, and install a
+      Chocolatey package — all in a single job template. Designed for the self-service portal which
+      cannot launch workflows. Runs on the Windows EE (kubernetes.core + ansible.windows + pywinrm).
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_provision_windows.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Provision a Windows VM from a golden DataVolume and install a Chocolatey package.
+        The golden DV is CDI-cloned so the source stays reusable. Administrator password
+        must match the golden image (unattend / prepare-win path) unless using cloudbase-init.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+          min: 1
+          max: 63
+        - question_name: Golden source DataVolume name
+          question_description: >-
+            Existing DataVolume in the same namespace whose PVC will be CDI-cloned.
+          type: text
+          variable: ocpv_win_root_dv_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: windows.2k22
+        - question_name: Local Administrator password
+          type: password
+          variable: ocpv_windows_admin_password
+          required: true
+          min: 1
+          max: 256
+        - question_name: Chocolatey package id
+          question_description: >-
+            Package name as used with choco install (for example notepadplusplus, firefox).
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 128
+
+controller_workflows:
+  - name: "OpenShift Virtualization | Provision VM and install package"
+    description: >-
+      Create a Fedora-based VM, then SSH as fedora to install a package with dnf.
+      The post-install job looks up the guest IP from the VirtualMachineInstance and connects directly (no inventory sync in the workflow).
+      When openshift_virt_aap_vm_ssh_machine_cred_enabled, paste the same public key used at CasC
+      (openshift_virt_aap_vm_ssh_public_key_file, default id_rsa.pub) into the survey so it matches the Machine
+      credential "{{ openshift_virt_aap_vm_ssh_machine_cred_name }}".
+      Optional extra Machine credentials: openshift_virt_aap_post_install_jt_credentials_suffix.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: false
+    allow_simultaneous: false
+    ask_inventory_on_launch: false
+    ask_scm_branch_on_launch: false
+    ask_limit_on_launch: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Provision VM
+        unified_job_template: "OpenShift Virtualization | Create VM"
+        all_parents_must_converge: false
+        success_nodes:
+          - Install packages
+        failure_nodes: []
+        always_nodes: []
+      - identifier: Install packages
+        unified_job_template: "OpenShift Virtualization | Post-install package on VM"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+    survey_spec:
+      name: ""
+      description: >-
+        VM parameters, SSH public key for the fedora user (paste id_ed25519.pub or rsa),
+        optional instancetype/preference, and a package name to install after the guest has an IP (discovered from the API).
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+          min: 1
+          max: 63
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: fedora
+        - question_name: SSH public key for fedora user
+          question_description: >-
+            Must match the private key in the "{{ openshift_virt_aap_vm_ssh_machine_cred_name }}" Machine credential
+            when openshift_virt_aap_vm_ssh_machine_cred_enabled (default id_rsa / id_rsa.pub paths).
+          type: text
+          variable: ocpv_ssh_public_key
+          required: true
+          min: 1
+          max: 8192
+        - question_name: Package to install
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 256
+
+  - name: "OpenShift Virtualization | Provision Windows VM and install package"
+    description: >-
+      Create a Windows VM from a golden root DataVolume by CDI-cloning it to a per-VM DataVolume (default), then connect
+      with WinRM and install a Chocolatey package. Requires WinRM on the golden image. The create step uses the OpenShift
+      Virtualization EE (Kubernetes API only); the install step uses the Windows EE (ansible.windows + pywinrm). With
+      default **ocpv_use_cloudbase_nocloud=false**, the create job does not inject NoCloud user-data; the survey Administrator
+      password must match the golden image. Set **ocpv_use_cloudbase_nocloud=true** (or pass custom **ocpv_cloudinit_userdata**)
+      to attach NoCloud for Cloudbase-Init password alignment and clone unstick.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: false
+    allow_simultaneous: false
+    ask_inventory_on_launch: false
+    ask_scm_branch_on_launch: false
+    ask_limit_on_launch: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Provision Windows VM
+        unified_job_template: "OpenShift Virtualization | Create Windows VM from DataVolume"
+        all_parents_must_converge: false
+        success_nodes:
+          - Install Windows packages
+        failure_nodes: []
+        always_nodes: []
+      - identifier: Install Windows packages
+        unified_job_template: "OpenShift Virtualization | Post-install Chocolatey on Windows VM"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+    survey_spec:
+      name: ""
+      description: >-
+        VM identity, golden source DataVolume name (CDI clone source; each run gets a dedicated clone DV by default),
+        Chocolatey package id, and Administrator password (WinRM). With default **ocpv_use_cloudbase_nocloud=false**, this
+        password must match the Administrator password baked into the generalized golden image (unattend / prepare-win path).
+        Set **ocpv_use_cloudbase_nocloud=true** (or non-empty **ocpv_cloudinit_userdata**) to inject NoCloud for Cloudbase-Init.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+          min: 1
+          max: 63
+        - question_name: Golden source DataVolume name
+          question_description: >-
+            Existing DataVolume in the same namespace whose PVC will be CDI-cloned to a per-VM root disk (default).
+            The golden volume stays read-only for the clone; the VM boots from "<VM name>-win-os" unless you pass
+            ocpv_win_clone_dv_name. Set ocpv_clone_golden_root false on the create job only if you intentionally attach
+            the golden DV directly (RWO: one consumer at a time).
+          type: text
+          variable: ocpv_win_root_dv_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: windows.2k22
+        - question_name: Local Administrator password
+          type: password
+          variable: ocpv_windows_admin_password
+          required: true
+          min: 1
+          max: 256
+        - question_name: Chocolatey package id
+          question_description: >-
+            Package name as used with choco install (for example notepadplusplus, firefox).
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 128

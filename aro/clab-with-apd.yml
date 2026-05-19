@@ -1,5 +1,5 @@
 ---
-- name: Configure 'Azure with ARO Open Environment (Subscription Based)' with Ansible Product-Demos and ContainerLab
+- name: Configure 'Azure with ARO Open Environment (Subscription Based)' with OpenShift Virtualization AAP content and ContainerLab
   hosts: localhost
   vars:
     aap_operator_disable_lightspeed: false
@@ -32,7 +32,6 @@
         aap_operator_controller_admin_password: "{{ aap_admin_password }}"
         aap_operator_inject_manifest: true
         aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
-        aap_operator_catalog_snapshot_image_tag: "v4.19_2025_07_21"
 
     - name: Show bearer token
       ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when
@@ -47,21 +46,11 @@
       ansible.builtin.include_role:
         name: clab
 
-    - name: Ansible Product-Demos Bootstrap
+    - name: OpenShift Virtualization AAP configuration as code # noqa: var-naming[no-role-prefix]
       ansible.builtin.include_role:
-        name: 'apd'
-
-    - name: Configure credentials we are aware of
-      ansible.builtin.include_role:
-        name: infra.aap_configuration.dispatch
+        name: openshift_virtualization_aap
       vars:
-        controller_launch_jobs:
-          - name: "Product Demos | Single demo setup"
-            wait: true
-            extra_vars:
-              demo: "network"
-
-        controller_credentials:
+        openshift_virt_aap_extra_controller_credentials:
           - name: Demo Credential
             credential_type: Machine
             update_secrets: true
@@ -80,13 +69,6 @@
               secret: "{{ azure_password }}" # seems redundant but maybe works?
               tenant: "{{ azure_tenant }}"
               client: "{{ azure_client_id }}"
-
-          - name: OpenShift Credential
-            credential_type: "OpenShift or Kubernetes API Bearer Token"
-            organization: Default
-            inputs:
-              host: "{{ openshift_api_url }}"
-              bearer_token: "{{ openshift_bearer_token }}"
 
 
     - name: (Re-)Display Access info

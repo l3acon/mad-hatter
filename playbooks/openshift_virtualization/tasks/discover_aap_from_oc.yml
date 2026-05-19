@@ -1,0 +1,52 @@
+---
+# Expect play vars: aap_username, aap_casc_aap_namespace, aap_casc_route_name
+# Sets: openshift_api_url, openshift_bearer_token, aap_hostname, aap_password (unless already defined)
+- name: Discover OpenShift API URL from current context
+  when: openshift_api_url is not defined
+  ansible.builtin.command: oc whoami --show-server=true
+  changed_when: false
+  register: aap_rollout_oc_server
+
+- name: Set openshift_api_url from oc
+  when: openshift_api_url is not defined
+  ansible.builtin.set_fact:
+    openshift_api_url: "{{ aap_rollout_oc_server.stdout | trim }}"
+
+- name: Discover bearer token from current oc session
+  when: openshift_bearer_token is not defined
+  ansible.builtin.command: oc whoami --show-token
+  changed_when: false
+  register: aap_rollout_oc_token
+
+- name: Set openshift_bearer_token from oc
+  when: openshift_bearer_token is not defined
+  ansible.builtin.set_fact:
+    openshift_bearer_token: "{{ aap_rollout_oc_token.stdout | trim }}"
+
+- name: Discover controller hostname from route
+  when: aap_hostname is not defined
+  ansible.builtin.command: >-
+    oc get route {{ aap_casc_controller_route_name | default('aap-controller') }} -n {{ aap_casc_aap_namespace }}
+    -o jsonpath={.spec.host}
+  changed_when: false
+  register: aap_rollout_route
+
+- name: Set aap_hostname from route
+  when: aap_hostname is not defined
+  ansible.builtin.set_fact:
+    aap_hostname: "https://{{ aap_rollout_route.stdout | trim }}"
+
+- name: Discover admin password from cluster secret
+  when: aap_password is not defined
+  ansible.builtin.command: >-
+    oc get secret {{ aap_casc_admin_secret_name | default('aap-controller-admin-password') }} -n {{ aap_casc_aap_namespace }}
+    -o jsonpath={.data.password}
+  changed_when: false
+  register: aap_rollout_secret_b64
+  no_log: true
+
+- name: Set aap_password from decoded secret
+  when: aap_password is not defined
+  ansible.builtin.set_fact:
+    aap_password: "{{ aap_rollout_secret_b64.stdout | b64decode }}"
+  no_log: true

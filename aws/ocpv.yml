@@ -1,9 +1,10 @@
 ---
-- name: Configure 'AWS with ROSA Open Environment' for Ansible Product-Demos with OCP-V
+- name: Configure 'AWS with ROSA Open Environment' for OpenShift Virtualization with AAP
   hosts: localhost
   vars:
-    aap_operator_operator_channel: "stable-2.5"
+    aap_operator_operator_channel: "stable-2.6"
     aap_operator_disable_lightspeed: false
+    rosa_creds_file_path: "{{ playbook_dir }}/../rosa.creds.yml"
   tasks:
     - name: Warning this may incur high costs
       ansible.builtin.pause:
@@ -113,7 +114,7 @@
           --instance-type m5zn.metal  --name rosa-virt" # noqa: no-changed-when
           when: machinepools.stdout | from_json | length < 2
 
-    - name: Deploy AAP 2.5+ Operator
+    - name: Deploy AAP 2.6 Operator
       ansible.builtin.include_role:
         name: 'aap_operator'
         tasks_from: workload
@@ -121,13 +122,8 @@
         aap_operator_controller_admin_password: "{{ aap_admin_password }}"
         aap_operator_inject_manifest: true
         aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
-        aap_operator_catalog_snapshot_image_tag: "{{ olm_tag | default('v4.19_2025_08_25') }}"
 
-    - name: Ansible Product-Demos Bootstrap
-      ansible.builtin.include_role:
-        name: 'apd'
-
-    - name: Show bearer token
+    - name: Show bearer token for AAP OpenShift credential
       ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when
       register: oc_whoami
       ignore_errors: true
@@ -136,11 +132,11 @@
       ansible.builtin.set_fact:
         openshift_bearer_token: "{{ oc_whoami.stdout }}"
 
-    - name: Configure credentials we are aware of
+    - name: OpenShift Virtualization AAP configuration as code # noqa: var-naming[no-role-prefix]
       ansible.builtin.include_role:
-        name: infra.aap_configuration.dispatch
+        name: openshift_virtualization_aap
       vars:
-        controller_credentials:
+        openshift_virt_aap_extra_controller_credentials:
           - name: Demo Credential
             credential_type: Machine
             update_secrets: true
@@ -155,22 +151,6 @@
             inputs:
               username: "{{ aws_access_key }}"
               password: "{{ aws_secret_key }}"
-
-          - name: OpenShift Credential
-            credential_type: "OpenShift or Kubernetes API Bearer Token"
-            organization: Default
-            inputs:
-              host: "{{ openshift_api_url }}"
-              bearer_token: "{{ openshift_bearer_token }}"
-
-        controller_launch_jobs:
-          - name: "Product Demos | Single demo setup"
-            wait: true
-            extra_vars:
-              demo: "openshift"
-
-          - name: "OpenShift / CNV / Install Operator"
-            wait: true
 
     - name: Wait if metal node is still coming up
       delegate_to: "{{ groups['rosa'] | first }}"

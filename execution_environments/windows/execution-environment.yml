@@ -1,0 +1,32 @@
+---
+version: 3
+images:
+  base_image:
+    # Public pull (no registry.redhat.io login required for local/CI builds). Same stack as mh-rosa EE;
+    # ansible-builder layers Windows collections and pywinrm on top.
+    name: quay.io/matferna/mh-rosa:latest
+dependencies:
+  galaxy: requirements.yml
+  python: requirements.txt
+  system:
+    - python3.12-devel [platform:rpm]
+    - systemd-devel [platform:rpm]
+    - gcc [platform:rpm]
+    - pkg-config [platform:rpm]
+  python_interpreter:
+    python_path: /usr/bin/python3.12
+
+additional_build_files:
+  - src: ansible.cfg
+    dest: configs
+
+options:
+  package_manager_path: /usr/bin/microdnf
+
+additional_build_steps:
+  prepend_base:
+    - RUN $PKGMGR -y update && $PKGMGR install -y bash-completion && $PKGMGR clean all
+  prepend_galaxy:
+    - ADD _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+    - ARG ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN
+    - ARG ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN
