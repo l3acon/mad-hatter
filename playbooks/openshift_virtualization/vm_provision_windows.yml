@@ -368,22 +368,53 @@
   tasks:
     - name: Wait for WinRM session
       ansible.windows.win_ping:
+      retries: 5
+      delay: 15
+      register: _winrm_ping
+      until: _winrm_ping is not failed and _winrm_ping is not unreachable
 
-    - name: Increase WinRM MaxEnvelopeSizekb for large command output
+    - name: Increase WinRM MaxEnvelopeSizekb and restart WinRM service
       ansible.windows.win_shell: |
-        Set-Item -Path WSMan:\localhost\MaxEnvelopeSizekb -Value 8192
+        Set-Item -Path WSMan:\localhost\MaxEnvelopeSizekb -Value 16384
+        Restart-Service WinRM -Force
+        Start-Sleep -Seconds 2
       changed_when: false
+      retries: 3
+      delay: 10
+      register: _winrm_resize
+      until: _winrm_resize is not failed
+
+    - name: Wait for WinRM to come back after service restart
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ ansible_port | default(5985) }}"
+        delay: 3
+        timeout: 60
+        state: started
+      connection: local
 
     - name: Install Chocolatey when missing
       ansible.windows.win_shell: |
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
           Set-ExecutionPolicy Bypass -Scope Process -Force
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) | Out-Null
         }
-      changed_when: false
+        Write-Output 'choco_available'
+      register: _choco_bootstrap
+      changed_when: "'choco_available' in _choco_bootstrap.stdout"
+      retries: 3
+      delay: 30
+      until: _choco_bootstrap is not failed
 
     - name: Install package with Chocolatey
-      ansible.windows.win_shell: "choco install -y '{{ ocpv_post_package_name }}'"
+      ansible.windows.win_shell: |
+        $out = choco install -y '{{ ocpv_post_package_name }}' --limit-output 2>&1
+        $exitCode = $LASTEXITCODE
+        $out | Select-Object -Last 5 | Write-Output
+        exit $exitCode
       register: ocpv_choco
       changed_when: ocpv_choco.rc == 0
+      retries: 2
+      delay: 30
+      until: ocpv_choco is not failed
