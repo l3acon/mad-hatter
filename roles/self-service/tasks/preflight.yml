@@ -1,0 +1,165 @@
+#SPDX-License-Identifier: MIT-0
+---
+# Preflight checks: fail fast with actionable messages before touching the cluster.
+
+# -- Required variables -------------------------------------------------------
+- name: Require controller_host
+  ansible.builtin.assert:
+    that:
+      - controller_host is defined
+      - controller_host | string | trim | length > 0
+    fail_msg: >-
+      controller_host is not set.
+      Pass -e controller_host=https://your-aap-controller.example.com
+
+- name: Require controller_username
+  ansible.builtin.assert:
+    that:
+      - controller_username is defined
+      - controller_username | string | trim | length > 0
+    fail_msg: >-
+      controller_username is not set.
+      Pass -e controller_username=admin
+
+- name: Require controller_password
+  ansible.builtin.assert:
+    that:
+      - controller_password is defined
+      - controller_password | string | trim | length > 0
+    fail_msg: >-
+      controller_password is not set.
+      Pass -e controller_password='YourPassword'
+
+# -- CLI tools ----------------------------------------------------------------
+- name: Check that helm is installed
+  ansible.builtin.command:
+    cmd: helm version --short
+  changed_when: false
+  failed_when: false
+  register: _preflight_helm
+
+- name: Fail if helm is not available
+  ansible.builtin.assert:
+    that: _preflight_helm.rc == 0
+    fail_msg: >-
+      helm CLI not found. Install it before running this role.
+      See https://helm.sh/docs/intro/install/
+
+- name: Check that oc is installed
+  ansible.builtin.command:
+    cmd: oc whoami
+  changed_when: false
+  failed_when: false
+  register: _preflight_oc
+
+- name: Fail if not logged into an OpenShift cluster
+  ansible.builtin.assert:
+    that: _preflight_oc.rc == 0
+    fail_msg: >-
+      Not logged into an OpenShift cluster (oc whoami failed).
+      Run 'oc login' first, e.g.:
+        oc login --server=https://api.your-cluster.example.com:6443 -u kubeadmin -p '<password>'
+
+# -- Plugin files -------------------------------------------------------------
+- name: Define expected plugin tarballs
+  ansible.builtin.set_fact:
+    _preflight_expected_plugins:
+      - ansible-plugin-scaffolder-backend-module-backstage-rhaap-dynamic
+      - ansible-backstage-plugin-catalog-backend-module-rhaap-dynamic
+      - ansible-plugin-backstage-self-service-dynamic
+      - ansible-backstage-plugin-auth-backend-module-rhaap-provider-dynamic
+
+- name: Look for plugin tarballs in {{ plugin_root_dir }}
+  ansible.builtin.find:
+    paths: "{{ plugin_root_dir }}"
+    patterns: "*.tgz"
+    file_type: file
+  register: _preflight_plugin_files
+
+- name: Build list of found plugin basenames
+  ansible.builtin.set_fact:
+    _preflight_found_basenames: >-
+      {{ _preflight_plugin_files.files | map(attribute='path') | map('basename') | list }}
+
+- name: Check each required plugin tarball is present
+  ansible.builtin.assert:
+    that: >-
+      _preflight_found_basenames | select('match', '^' ~ item ~ '-[0-9].*\.tgz$') | list | length > 0
+    fail_msg: >-
+      Required plugin tarball not found: {{ item }}-<version>.tgz
+      Download the AAP self-service portal plugins from the Red Hat Customer Portal:
+        https://access.redhat.com/downloads/content/480
+      Place the .tgz files in {{ plugin_root_dir }}/
+  loop: "{{ _preflight_expected_plugins }}"
+
+# -- Plugin / chart version alignment -----------------------------------------
+- name: Extract plugin version from scaffolder tarball filename
+  ansible.builtin.set_fact:
+    _preflight_plugin_version: >-
+      {{
+        (_preflight_found_basenames
+         | select('match', '^ansible-plugin-scaffolder-backend-module-backstage-rhaap-dynamic-[0-9].*\.tgz$')
+         | first
+        )
+        | regex_replace('^ansible-plugin-scaffolder-backend-module-backstage-rhaap-dynamic-', '')
+        | regex_replace('\.tgz$', '')
+      }}
+
+- name: Query chart appVersion for {{ helm_chart_name }} {{ helm_chart_version }}
+  ansible.builtin.command:
+    cmd: >-
+      helm show chart {{ helm_repo_name }}/{{ helm_chart_name }}
+      --version {{ helm_chart_version }}
+  changed_when: false
+  failed_when: false
+  register: _preflight_chart_info
+
+- name: Extract appVersion from chart metadata
+  ansible.builtin.set_fact:
+    _preflight_chart_app_version: >-
+      {{ (_preflight_chart_info.stdout_lines
+          | select('match', '^appVersion:')
+          | first
+          | default('appVersion: UNKNOWN'))
+         | regex_replace('^appVersion:\s*', '')
+      }}
+  when: _preflight_chart_info.rc == 0
+
+- name: Fail if chart metadata could not be fetched
+  ansible.builtin.assert:
+    that: _preflight_chart_info.rc == 0
+    fail_msg: >-
+      Could not fetch chart {{ helm_repo_name }}/{{ helm_chart_name }} version {{ helm_chart_version }}.
+      Run 'helm repo add {{ helm_repo_name }} {{ helm_repo_url }} && helm repo update' and retry.
+
+- name: Assert plugin version ({{ _preflight_plugin_version }}) matches chart appVersion ({{ _preflight_chart_app_version }})
+  ansible.builtin.assert:
+    that: _preflight_plugin_version == _preflight_chart_app_version
+    fail_msg: >-
+      Version mismatch! Plugin tarballs are version {{ _preflight_plugin_version }}
+      but Helm chart {{ helm_chart_name }} {{ helm_chart_version }} has appVersion {{ _preflight_chart_app_version }}.
+      The chart templates embed the appVersion into plugin registry URLs, so the init container
+      will 404 on the mismatched filenames.
+
+      Fix: set helm_chart_version to a chart whose appVersion is {{ _preflight_plugin_version }}, or
+      download matching plugin tarballs from https://access.redhat.com/downloads/content/480
+
+- name: Verify all plugin tarballs match the same version ({{ _preflight_plugin_version }})
+  ansible.builtin.assert:
+    that: >-
+      _preflight_found_basenames
+      | select('match', '^' ~ item ~ '-' ~ _preflight_plugin_version ~ '\.tgz$')
+      | list | length > 0
+    fail_msg: >-
+      Plugin {{ item }} does not have a tarball matching version {{ _preflight_plugin_version }}.
+      All plugin tarballs must be the same version. Download the correct set from:
+        https://access.redhat.com/downloads/content/480
+  loop: "{{ _preflight_expected_plugins }}"
+
+- name: Preflight passed
+  ansible.builtin.debug:
+    msg: >-
+      All checks passed: helm={{ _preflight_helm.stdout | trim }},
+      cluster user={{ _preflight_oc.stdout | trim }},
+      plugin version={{ _preflight_plugin_version }},
+      chart={{ helm_chart_name }} {{ helm_chart_version }} (appVersion={{ _preflight_chart_app_version }})

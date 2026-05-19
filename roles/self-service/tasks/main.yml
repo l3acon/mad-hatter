@@ -1,5 +1,9 @@
 #SPDX-License-Identifier: MIT-0
 ---
+- name: Preflight checks
+  import_tasks: preflight.yml
+  tags: [preflight]
+
 - name: Create OAuth2 application in AAP
   import_tasks: oauth.yml
   tags: [create_oauth]
