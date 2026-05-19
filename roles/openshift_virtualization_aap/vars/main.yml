@@ -233,6 +233,74 @@ controller_templates:
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
 
+  - name: "OpenShift Virtualization | Provision Windows VM (self-service)"
+    job_type: run
+    description: >-
+      Self-contained: clone a Windows golden image, create the VM, wait for WinRM, and install a
+      Chocolatey package — all in a single job template. Designed for the self-service portal which
+      cannot launch workflows. Runs on the Windows EE (kubernetes.core + ansible.windows + pywinrm).
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/vm_provision_windows.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Provision a Windows VM from a golden DataVolume and install a Chocolatey package.
+        The golden DV is CDI-cloned so the source stays reusable. Administrator password
+        must match the golden image (unattend / prepare-win path) unless using cloudbase-init.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+          min: 1
+          max: 63
+        - question_name: Golden source DataVolume name
+          question_description: >-
+            Existing DataVolume in the same namespace whose PVC will be CDI-cloned.
+          type: text
+          variable: ocpv_win_root_dv_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: windows.2k22
+        - question_name: Local Administrator password
+          type: password
+          variable: ocpv_windows_admin_password
+          required: true
+          min: 1
+          max: 256
+        - question_name: Chocolatey package id
+          question_description: >-
+            Package name as used with choco install (for example notepadplusplus, firefox).
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 128
+
 controller_workflows:
   - name: "OpenShift Virtualization | Provision VM and install package"
     description: >-

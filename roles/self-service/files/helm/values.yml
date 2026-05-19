@@ -95,6 +95,7 @@ redhat-developer-hub:
                     - resolver: allowNewAAPUserSignIn
           signInPage: rhaap
         backend:
+          trustProxy: true
           reading:
             allow:
               - host: gitlab.com
@@ -335,5 +336,4 @@ redhat-developer-hub:
       image:
         registry: registry.redhat.io
         repository: rhdh/rhdh-hub-rhel9
-        tag: 1.6.3
     nameOverride: rhaap-portal
