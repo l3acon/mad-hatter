@@ -107,23 +107,60 @@
       ansible.builtin.debug:
         msg: "Restoring {{ _saved_vms | length }} VM(s): {{ _saved_vms | map(attribute='name') | list }}"
 
-    - name: Start each previously-running VM
+    - name: Read VM specs to determine start method (running vs runStrategy)
       when:
         - ocpv_cost_opt_restore_vms | bool
         - _saved_vms | default([]) | length > 0
-      kubernetes.core.k8s:
+      kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
         kind: VirtualMachine
         name: "{{ item.name }}"
         namespace: "{{ item.namespace }}"
+      loop: "{{ _saved_vms }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+      register: _vm_specs
+
+    - name: Start VMs that use spec.running
+      when:
+        - ocpv_cost_opt_restore_vms | bool
+        - _saved_vms | default([]) | length > 0
+        - item.resources | default([]) | length > 0
+        - item.resources[0].spec.running is defined
+      kubernetes.core.k8s:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ item.item.name }}"
+        namespace: "{{ item.item.namespace }}"
         state: present
         merge_type: merge
         definition:
           spec:
             running: true
-      loop: "{{ _saved_vms }}"
+      loop: "{{ _vm_specs.results | default([]) }}"
       loop_control:
-        label: "{{ item.namespace }}/{{ item.name }}"
+        label: "{{ item.item.namespace }}/{{ item.item.name }}"
+
+    - name: Start VMs that use spec.runStrategy
+      when:
+        - ocpv_cost_opt_restore_vms | bool
+        - _saved_vms | default([]) | length > 0
+        - item.resources | default([]) | length > 0
+        - item.resources[0].spec.runStrategy is defined
+        - item.resources[0].spec.running is not defined
+      kubernetes.core.k8s:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ item.item.name }}"
+        namespace: "{{ item.item.namespace }}"
+        state: present
+        merge_type: merge
+        definition:
+          spec:
+            runStrategy: Always
+      loop: "{{ _vm_specs.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.namespace }}/{{ item.item.name }}"
 
     - name: Wait for restored VMs to reach Running
       when:

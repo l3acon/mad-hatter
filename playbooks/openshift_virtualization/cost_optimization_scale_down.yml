@@ -44,13 +44,14 @@
       loop: "{{ ocpv_cost_opt_namespaces }}"
       register: _vmi_results
 
-    - name: Build list of running VMs to stop
+    - name: Build list of running VMs to stop (filter to phase==Running only)
       ansible.builtin.set_fact:
         _running_vms: >-
           {{
             _vmi_results.results
             | map(attribute='resources')
             | flatten
+            | selectattr('status.phase', 'equalto', 'Running')
             | map(attribute='metadata')
             | map('dict2items')
             | map('selectattr', 'key', 'in', ['name', 'namespace'])
@@ -78,21 +79,56 @@
             timestamp: "{{ now(utc=true) | string }}"
       when: _running_vms | length > 0
 
-    - name: Gracefully stop each running VM
-      kubernetes.core.k8s:
+    - name: Read VM spec to determine stop method (running vs runStrategy)
+      kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
         kind: VirtualMachine
         name: "{{ item.name }}"
         namespace: "{{ item.namespace }}"
+      loop: "{{ _running_vms }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+      register: _vm_specs
+      when: _running_vms | length > 0
+
+    - name: Stop VMs that use spec.running
+      kubernetes.core.k8s:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ item.item.name }}"
+        namespace: "{{ item.item.namespace }}"
         state: present
         merge_type: merge
         definition:
           spec:
             running: false
-      loop: "{{ _running_vms }}"
+      loop: "{{ _vm_specs.results | default([]) }}"
       loop_control:
-        label: "{{ item.namespace }}/{{ item.name }}"
-      when: _running_vms | length > 0
+        label: "{{ item.item.namespace }}/{{ item.item.name }}"
+      when:
+        - _running_vms | length > 0
+        - item.resources | default([]) | length > 0
+        - item.resources[0].spec.running is defined
+
+    - name: Stop VMs that use spec.runStrategy
+      kubernetes.core.k8s:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ item.item.name }}"
+        namespace: "{{ item.item.namespace }}"
+        state: present
+        merge_type: merge
+        definition:
+          spec:
+            runStrategy: Halted
+      loop: "{{ _vm_specs.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.namespace }}/{{ item.item.name }}"
+      when:
+        - _running_vms | length > 0
+        - item.resources | default([]) | length > 0
+        - item.resources[0].spec.runStrategy is defined
+        - item.resources[0].spec.running is not defined
 
     - name: Wait for VMIs to terminate (guest shutdown complete)
       kubernetes.core.k8s_info:
@@ -101,7 +137,9 @@
         name: "{{ item.name }}"
         namespace: "{{ item.namespace }}"
       register: _vmi_check
-      until: (_vmi_check.resources | default([])) | length == 0
+      until: >-
+        (_vmi_check.resources | default([]) | length == 0)
+        or (_vmi_check.resources[0].status.phase | default('') not in ['Running', 'Scheduling', 'Scheduled'])
       retries: 40
       delay: 15
       loop: "{{ _running_vms }}"
