@@ -175,6 +175,7 @@
     controller_workflows: "{{ controller_workflows }}"
     controller_roles: "{{ controller_roles }}"
     controller_schedules: "{{ controller_schedules }}"
+    controller_instance_groups: "{{ controller_instance_groups }}"
 
 - name: Apply Automation Controller configuration (OpenShift Virtualization CasC)
   ansible.builtin.include_role:

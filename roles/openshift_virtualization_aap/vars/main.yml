@@ -315,6 +315,8 @@ controller_templates:
       - Controller Credential
       - OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    instance_groups:
+      - "{{ openshift_virt_aap_no_baremetal_ig_name }}"
     ask_variables_on_launch: true
     survey_enabled: true
     survey_spec:
@@ -357,6 +359,8 @@ controller_templates:
       SSH to the ROSA bastion and scale the bare-metal machinepool back to 1 replica, wait for the
       node to become ready, then restore VMs that were running before the last Scale Down.
     organization: Default
+    instance_groups:
+      - "{{ openshift_virt_aap_no_baremetal_ig_name }}"
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
     playbook: playbooks/openshift_virtualization/cost_optimization_scale_up.yml

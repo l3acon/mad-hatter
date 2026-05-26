@@ -125,6 +125,34 @@ openshift_virt_aap_bastion_cred_name: "ROSA Bastion SSH"
 openshift_virt_aap_bastion_user: rosa
 openshift_virt_aap_bastion_password: "{{ lookup('env', 'ROSA_BASTION_PASSWORD') | default('', true) }}"
 
+# Container group that avoids scheduling on bare-metal nodes.
+# Cost optimization jobs must NOT run on the node they are scaling down.
+openshift_virt_aap_no_baremetal_ig_name: "no-bare-metal"
+openshift_virt_aap_no_baremetal_pod_spec: |
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    namespace: aap
+  spec:
+    serviceAccountName: default
+    automountServiceAccountToken: false
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: beta.kubernetes.io/instance-type
+              operator: NotIn
+              values:
+              - m5zn.metal
+    containers:
+    - image: quay.io/matferna/mh-rosa:latest
+      name: worker
+      args:
+      - ansible-runner
+      - worker
+      - --private-data-dir=/runner
+
 # Cost optimization defaults.
 openshift_virt_aap_cost_opt_cluster_name: rosa-tdnkz
 openshift_virt_aap_cost_opt_machinepool: rosa-virt
@@ -196,6 +224,12 @@ controller_projects:
     allow_override: true
     scm_update_on_launch: true
     wait: true
+
+# Container instance group — avoids bare-metal nodes for cost-opt jobs.
+controller_instance_groups:
+  - name: "{{ openshift_virt_aap_no_baremetal_ig_name }}"
+    is_container_group: true
+    pod_spec_override: "{{ openshift_virt_aap_no_baremetal_pod_spec }}"
 
 # AAP schedules for cost optimization (RRULE uses America/New_York).
 # "daily" = weekdays Mon-Fri; "weekend" = Fri scale-down + Mon scale-up.
