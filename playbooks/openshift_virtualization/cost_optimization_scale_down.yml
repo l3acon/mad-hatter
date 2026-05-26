@@ -19,7 +19,7 @@
     openshift_verify_ssl: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_VERIFY_SSL', default='') | default(false) | bool }}"
     ocpv_cost_opt_cluster_name: "{{ ocpv_cost_opt_cluster_name | default('rosa-tdnkz') }}"
     ocpv_cost_opt_machinepool: "{{ ocpv_cost_opt_machinepool | default('rosa-virt') }}"
-    ocpv_cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"
+    _cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"
     ocpv_cost_opt_bastion_host: >-
       {{ ocpv_cost_opt_bastion_host
          | default(lookup('ansible.builtin.env', 'ROSA_BASTION_HOST', default=''))
@@ -33,7 +33,7 @@
         that:
           - ocpv_cost_opt_cluster_name | length > 0
           - ocpv_cost_opt_machinepool | length > 0
-          - ocpv_cost_opt_namespaces | length > 0
+          - _cost_opt_namespaces | length > 0
           - ocpv_cost_opt_bastion_host | length > 0
 
     - name: Discover running VMs across target namespaces
@@ -41,7 +41,7 @@
         api_version: kubevirt.io/v1
         kind: VirtualMachineInstance
         namespace: "{{ item }}"
-      loop: "{{ ocpv_cost_opt_namespaces }}"
+      loop: "{{ _cost_opt_namespaces }}"
       register: _vmi_results
 
     - name: Build list of running VMs to stop (filter to phase==Running only)
@@ -71,7 +71,7 @@
           kind: ConfigMap
           metadata:
             name: "{{ ocpv_cost_opt_state_configmap }}"
-            namespace: "{{ ocpv_cost_opt_namespaces | first }}"
+            namespace: "{{ _cost_opt_namespaces | first }}"
             labels:
               app.kubernetes.io/managed-by: mad-hatter-cost-opt
           data:

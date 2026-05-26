@@ -22,7 +22,6 @@
          | default(lookup('ansible.builtin.env', 'ROSA_BASTION_HOST', default=''))
          | default('bastion.tdnkz.sandbox5192.opentlc.com', true) }}
     ocpv_cost_opt_state_configmap: ocpv-cost-opt-state
-    ocpv_cost_opt_restore_vms: "{{ ocpv_cost_opt_restore_vms | default(true) | bool }}"
 
   tasks:
     - name: Validate required variables
@@ -80,36 +79,36 @@
     openshift_host: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_HOST', default=Undefined) | default('', true) }}"
     openshift_api_key: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY', default=Undefined) | default('', true) }}"
     openshift_verify_ssl: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_VERIFY_SSL', default='') | default(false) | bool }}"
-    ocpv_cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"
+    _cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"
     ocpv_cost_opt_state_configmap: ocpv-cost-opt-state
-    ocpv_cost_opt_restore_vms: "{{ ocpv_cost_opt_restore_vms | default(true) | bool }}"
+    _restore_vms: "{{ ocpv_cost_opt_restore_vms | default(true) | bool }}"
   tasks:
     - name: Read saved VM state ConfigMap
-      when: ocpv_cost_opt_restore_vms | bool
+      when: _restore_vms | bool
       kubernetes.core.k8s_info:
         api_version: v1
         kind: ConfigMap
         name: "{{ ocpv_cost_opt_state_configmap }}"
-        namespace: "{{ ocpv_cost_opt_namespaces | first }}"
+        namespace: "{{ _cost_opt_namespaces | first }}"
       register: _state_cm
 
     - name: Parse saved running VM list
       when:
-        - ocpv_cost_opt_restore_vms | bool
+        - _restore_vms | bool
         - _state_cm.resources | default([]) | length > 0
       ansible.builtin.set_fact:
         _saved_vms: "{{ (_state_cm.resources[0].data.running_vms | default('[]')) | from_json }}"
 
     - name: Show VMs to restore
       when:
-        - ocpv_cost_opt_restore_vms | bool
+        - _restore_vms | bool
         - _saved_vms | default([]) | length > 0
       ansible.builtin.debug:
         msg: "Restoring {{ _saved_vms | length }} VM(s): {{ _saved_vms | map(attribute='name') | list }}"
 
     - name: Read VM specs to determine start method (running vs runStrategy)
       when:
-        - ocpv_cost_opt_restore_vms | bool
+        - _restore_vms | bool
         - _saved_vms | default([]) | length > 0
       kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
@@ -123,7 +122,7 @@
 
     - name: Start VMs that use spec.running
       when:
-        - ocpv_cost_opt_restore_vms | bool
+        - _restore_vms | bool
         - _saved_vms | default([]) | length > 0
         - item.resources | default([]) | length > 0
         - item.resources[0].spec.running is defined
@@ -143,7 +142,7 @@
 
     - name: Start VMs that use spec.runStrategy
       when:
-        - ocpv_cost_opt_restore_vms | bool
+        - _restore_vms | bool
         - _saved_vms | default([]) | length > 0
         - item.resources | default([]) | length > 0
         - item.resources[0].spec.runStrategy is defined
@@ -164,7 +163,7 @@
 
     - name: Wait for restored VMs to reach Running
       when:
-        - ocpv_cost_opt_restore_vms | bool
+        - _restore_vms | bool
         - _saved_vms | default([]) | length > 0
       kubernetes.core.k8s_info:
         api_version: kubevirt.io/v1
@@ -183,11 +182,11 @@
 
     - name: Clean up state ConfigMap
       when:
-        - ocpv_cost_opt_restore_vms | bool
+        - _restore_vms | bool
         - _state_cm.resources | default([]) | length > 0
       kubernetes.core.k8s:
         api_version: v1
         kind: ConfigMap
         name: "{{ ocpv_cost_opt_state_configmap }}"
-        namespace: "{{ ocpv_cost_opt_namespaces | first }}"
+        namespace: "{{ _cost_opt_namespaces | first }}"
         state: absent
