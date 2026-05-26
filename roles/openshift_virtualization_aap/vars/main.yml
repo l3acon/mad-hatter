@@ -314,7 +314,6 @@ controller_templates:
     credentials:
       - Controller Credential
       - OpenShift Credential
-      - "{{ openshift_virt_aap_bastion_cred_name }}"
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
     survey_enabled: true
@@ -345,6 +344,12 @@ controller_templates:
           default: "{{ openshift_virt_aap_cost_opt_bastion_host }}"
           min: 1
           max: 253
+        - question_name: Bastion SSH password
+          type: password
+          variable: ocpv_cost_opt_bastion_password
+          required: true
+          min: 1
+          max: 256
 
   - name: "OpenShift Virtualization | Cost Optimization - Scale Up"
     job_type: run
@@ -358,7 +363,6 @@ controller_templates:
     credentials:
       - Controller Credential
       - OpenShift Credential
-      - "{{ openshift_virt_aap_bastion_cred_name }}"
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
     survey_enabled: true
@@ -389,6 +393,12 @@ controller_templates:
           default: "{{ openshift_virt_aap_cost_opt_bastion_host }}"
           min: 1
           max: 253
+        - question_name: Bastion SSH password
+          type: password
+          variable: ocpv_cost_opt_bastion_password
+          required: true
+          min: 1
+          max: 256
 
 controller_workflows:
   - name: "OpenShift Virtualization | Provision VM and install package"

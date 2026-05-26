@@ -36,8 +36,8 @@
       ansible.builtin.add_host:
         name: "{{ ocpv_cost_opt_bastion_host }}"
         groups: rosa_bastion
-        ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_NET_USERNAME', default='') | default('rosa', true) }}"
-        ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_NET_PASSWORD', default='') | default(omit) }}"
+        ansible_user: "{{ ocpv_cost_opt_bastion_user | default('rosa') }}"
+        ansible_password: "{{ ocpv_cost_opt_bastion_password }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 
 - name: "Cost Optimization — Scale machinepool to 1"
