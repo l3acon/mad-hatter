@@ -119,6 +119,23 @@ openshift_virt_aap_controller_credentials:
 
 openshift_virt_aap_verify_ssl: false
 
+# ROSA bastion Machine credential (SSH password auth for rosa CLI commands).
+openshift_virt_aap_bastion_cred_enabled: true
+openshift_virt_aap_bastion_cred_name: "ROSA Bastion SSH"
+openshift_virt_aap_bastion_user: rosa
+openshift_virt_aap_bastion_password: "{{ lookup('env', 'ROSA_BASTION_PASSWORD') | default('', true) }}"
+
+# Cost optimization defaults.
+openshift_virt_aap_cost_opt_cluster_name: rosa-tdnkz
+openshift_virt_aap_cost_opt_machinepool: rosa-virt
+openshift_virt_aap_cost_opt_bastion_host: "{{ lookup('env', 'ROSA_BASTION_HOST') | default('bastion.tdnkz.sandbox5192.opentlc.com', true) }}"
+openshift_virt_aap_cost_opt_namespaces:
+  - ocpv-aap-smoke
+
+# Schedule toggle: "daily" runs every weekday, "weekend" runs Fri evening / Mon morning only.
+openshift_virt_aap_cost_opt_schedule_mode: daily
+openshift_virt_aap_cost_opt_schedule_enabled: true
+
 # Self-service portal non-admin user (created by gateway_users dispatch).
 openshift_virt_aap_ssp_user_enabled: true
 openshift_virt_aap_ssp_user_name: win-vm-user
@@ -179,3 +196,67 @@ controller_projects:
     allow_override: true
     scm_update_on_launch: true
     wait: true
+
+# AAP schedules for cost optimization (RRULE uses America/New_York).
+# "daily" = weekdays Mon-Fri; "weekend" = Fri scale-down + Mon scale-up.
+controller_schedules: >-
+  {{
+    (
+      [
+        {
+          'name': 'Cost Optimization | Scale Down (daily 5 PM ET)',
+          'unified_job_template': 'OpenShift Virtualization | Cost Optimization - Scale Down',
+          'rrule': 'DTSTART;TZID=America/New_York:20260101T170000 RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR',
+          'enabled': openshift_virt_aap_cost_opt_schedule_enabled | bool,
+          'extra_data': {
+            'ocpv_cost_opt_cluster_name': openshift_virt_aap_cost_opt_cluster_name,
+            'ocpv_cost_opt_machinepool': openshift_virt_aap_cost_opt_machinepool,
+            'ocpv_cost_opt_bastion_host': openshift_virt_aap_cost_opt_bastion_host,
+            'ocpv_cost_opt_namespaces': openshift_virt_aap_cost_opt_namespaces,
+          },
+        },
+        {
+          'name': 'Cost Optimization | Scale Up (daily 5 AM ET)',
+          'unified_job_template': 'OpenShift Virtualization | Cost Optimization - Scale Up',
+          'rrule': 'DTSTART;TZID=America/New_York:20260101T050000 RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR',
+          'enabled': openshift_virt_aap_cost_opt_schedule_enabled | bool,
+          'extra_data': {
+            'ocpv_cost_opt_cluster_name': openshift_virt_aap_cost_opt_cluster_name,
+            'ocpv_cost_opt_machinepool': openshift_virt_aap_cost_opt_machinepool,
+            'ocpv_cost_opt_bastion_host': openshift_virt_aap_cost_opt_bastion_host,
+            'ocpv_cost_opt_namespaces': openshift_virt_aap_cost_opt_namespaces,
+          },
+        },
+      ]
+      if openshift_virt_aap_cost_opt_schedule_mode == 'daily'
+      else
+      [
+        {
+          'name': 'Cost Optimization | Scale Down (Fri 5 PM ET)',
+          'unified_job_template': 'OpenShift Virtualization | Cost Optimization - Scale Down',
+          'rrule': 'DTSTART;TZID=America/New_York:20260101T170000 RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=FR',
+          'enabled': openshift_virt_aap_cost_opt_schedule_enabled | bool,
+          'extra_data': {
+            'ocpv_cost_opt_cluster_name': openshift_virt_aap_cost_opt_cluster_name,
+            'ocpv_cost_opt_machinepool': openshift_virt_aap_cost_opt_machinepool,
+            'ocpv_cost_opt_bastion_host': openshift_virt_aap_cost_opt_bastion_host,
+            'ocpv_cost_opt_namespaces': openshift_virt_aap_cost_opt_namespaces,
+          },
+        },
+        {
+          'name': 'Cost Optimization | Scale Up (Mon 5 AM ET)',
+          'unified_job_template': 'OpenShift Virtualization | Cost Optimization - Scale Up',
+          'rrule': 'DTSTART;TZID=America/New_York:20260101T050000 RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO',
+          'enabled': openshift_virt_aap_cost_opt_schedule_enabled | bool,
+          'extra_data': {
+            'ocpv_cost_opt_cluster_name': openshift_virt_aap_cost_opt_cluster_name,
+            'ocpv_cost_opt_machinepool': openshift_virt_aap_cost_opt_machinepool,
+            'ocpv_cost_opt_bastion_host': openshift_virt_aap_cost_opt_bastion_host,
+            'ocpv_cost_opt_namespaces': openshift_virt_aap_cost_opt_namespaces,
+          },
+        },
+      ]
+    )
+    if (openshift_virt_aap_cost_opt_schedule_enabled | default(true) | bool)
+    else []
+  }}

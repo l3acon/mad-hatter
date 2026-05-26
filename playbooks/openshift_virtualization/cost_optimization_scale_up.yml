@@ -1,0 +1,156 @@
+---
+# Scale the bare-metal machinepool back to 1 via the ROSA bastion, wait for the node,
+# then restore VMs that were running before the last scale-down.
+#
+# Extra vars / survey:
+#   ocpv_cost_opt_cluster_name   — ROSA cluster name (default rosa-tdnkz)
+#   ocpv_cost_opt_machinepool    — machinepool id  (default rosa-virt)
+#   ocpv_cost_opt_namespaces     — YAML list of namespaces (default [ocpv-aap-smoke])
+#   ocpv_cost_opt_bastion_host   — bastion FQDN (default from env ROSA_BASTION_HOST)
+#   ocpv_cost_opt_restore_vms    — start VMs that were running before shutdown (default true)
+
+- name: "Cost Optimization — Scale up metal node"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ocpv_cost_opt_cluster_name: "{{ ocpv_cost_opt_cluster_name | default('rosa-tdnkz') }}"
+    ocpv_cost_opt_machinepool: "{{ ocpv_cost_opt_machinepool | default('rosa-virt') }}"
+    ocpv_cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"
+    ocpv_cost_opt_bastion_host: >-
+      {{ ocpv_cost_opt_bastion_host
+         | default(lookup('ansible.builtin.env', 'ROSA_BASTION_HOST', default=''))
+         | default('bastion.tdnkz.sandbox5192.opentlc.com', true) }}
+    ocpv_cost_opt_state_configmap: ocpv-cost-opt-state
+    ocpv_cost_opt_restore_vms: "{{ ocpv_cost_opt_restore_vms | default(true) | bool }}"
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_cost_opt_cluster_name | length > 0
+          - ocpv_cost_opt_machinepool | length > 0
+          - ocpv_cost_opt_bastion_host | length > 0
+
+    - name: Add ROSA bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ ocpv_cost_opt_bastion_host }}"
+        groups: rosa_bastion
+        ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_NET_USERNAME', default='') | default('rosa', true) }}"
+        ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_NET_PASSWORD', default='') | default(omit) }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+- name: "Cost Optimization — Scale machinepool to 1"
+  hosts: rosa_bastion
+  gather_facts: false
+  vars:
+    ocpv_cost_opt_cluster_name: "{{ hostvars['localhost']['ocpv_cost_opt_cluster_name'] }}"
+    ocpv_cost_opt_machinepool: "{{ hostvars['localhost']['ocpv_cost_opt_machinepool'] }}"
+  tasks:
+    - name: Scale machinepool to 1 replica
+      ansible.builtin.command: >-
+        rosa edit machinepool {{ ocpv_cost_opt_machinepool }}
+        --cluster={{ ocpv_cost_opt_cluster_name }}
+        --replicas=1
+      changed_when: true
+
+    - name: Wait for machinepool current_replicas to reach 1
+      ansible.builtin.command: >-
+        rosa list machinepool --cluster={{ ocpv_cost_opt_cluster_name }} -o json
+      changed_when: false
+      register: _mp_status
+      until: >-
+        (_mp_status.stdout | from_json
+         | selectattr('id', 'equalto', ocpv_cost_opt_machinepool)
+         | list)[0].status.current_replicas | default(0) == 1
+      retries: 75
+      delay: 20
+
+    - name: Report scale-up complete
+      ansible.builtin.debug:
+        msg: >-
+          Machinepool '{{ ocpv_cost_opt_machinepool }}' on cluster '{{ ocpv_cost_opt_cluster_name }}'
+          scaled to 1 replica and node is ready.
+
+- name: "Cost Optimization — Restore previously-running VMs"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    openshift_host: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_HOST', default=Undefined) | default('', true) }}"
+    openshift_api_key: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY', default=Undefined) | default('', true) }}"
+    openshift_verify_ssl: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_VERIFY_SSL', default='') | default(false) | bool }}"
+    ocpv_cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"
+    ocpv_cost_opt_state_configmap: ocpv-cost-opt-state
+    ocpv_cost_opt_restore_vms: "{{ ocpv_cost_opt_restore_vms | default(true) | bool }}"
+  tasks:
+    - name: Read saved VM state ConfigMap
+      when: ocpv_cost_opt_restore_vms | bool
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: ConfigMap
+        name: "{{ ocpv_cost_opt_state_configmap }}"
+        namespace: "{{ ocpv_cost_opt_namespaces | first }}"
+      register: _state_cm
+
+    - name: Parse saved running VM list
+      when:
+        - ocpv_cost_opt_restore_vms | bool
+        - _state_cm.resources | default([]) | length > 0
+      ansible.builtin.set_fact:
+        _saved_vms: "{{ (_state_cm.resources[0].data.running_vms | default('[]')) | from_json }}"
+
+    - name: Show VMs to restore
+      when:
+        - ocpv_cost_opt_restore_vms | bool
+        - _saved_vms | default([]) | length > 0
+      ansible.builtin.debug:
+        msg: "Restoring {{ _saved_vms | length }} VM(s): {{ _saved_vms | map(attribute='name') | list }}"
+
+    - name: Start each previously-running VM
+      when:
+        - ocpv_cost_opt_restore_vms | bool
+        - _saved_vms | default([]) | length > 0
+      kubernetes.core.k8s:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ item.name }}"
+        namespace: "{{ item.namespace }}"
+        state: present
+        merge_type: merge
+        definition:
+          spec:
+            running: true
+      loop: "{{ _saved_vms }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+
+    - name: Wait for restored VMs to reach Running
+      when:
+        - ocpv_cost_opt_restore_vms | bool
+        - _saved_vms | default([]) | length > 0
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ item.name }}"
+        namespace: "{{ item.namespace }}"
+      register: _vmi_up
+      until: >-
+        (_vmi_up.resources | default([]) | length > 0)
+        and (_vmi_up.resources[0].status.phase | default('') == 'Running')
+      retries: 40
+      delay: 15
+      loop: "{{ _saved_vms }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+
+    - name: Clean up state ConfigMap
+      when:
+        - ocpv_cost_opt_restore_vms | bool
+        - _state_cm.resources | default([]) | length > 0
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: ConfigMap
+        name: "{{ ocpv_cost_opt_state_configmap }}"
+        namespace: "{{ ocpv_cost_opt_namespaces | first }}"
+        state: absent

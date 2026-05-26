@@ -301,6 +301,95 @@ controller_templates:
           min: 1
           max: 128
 
+  - name: "OpenShift Virtualization | Cost Optimization - Scale Down"
+    job_type: run
+    description: >-
+      Gracefully stop all running VMs across configured namespaces, save their names to a ConfigMap
+      for later restore, then SSH to the ROSA bastion and scale the bare-metal machinepool to 0 replicas.
+      Pair with the Scale Up job template on a schedule for cost optimization.
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/cost_optimization_scale_down.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+      - "{{ openshift_virt_aap_bastion_cred_name }}"
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Scale down the OCP-V bare-metal machinepool to save costs. VMs are gracefully stopped first
+        and their names recorded so the Scale Up job can restore them.
+      spec:
+        - question_name: ROSA cluster name
+          type: text
+          variable: ocpv_cost_opt_cluster_name
+          required: true
+          default: "{{ openshift_virt_aap_cost_opt_cluster_name }}"
+          min: 1
+          max: 63
+        - question_name: Machinepool name
+          type: text
+          variable: ocpv_cost_opt_machinepool
+          required: true
+          default: "{{ openshift_virt_aap_cost_opt_machinepool }}"
+          min: 1
+          max: 63
+        - question_name: Bastion hostname
+          type: text
+          variable: ocpv_cost_opt_bastion_host
+          required: true
+          default: "{{ openshift_virt_aap_cost_opt_bastion_host }}"
+          min: 1
+          max: 253
+
+  - name: "OpenShift Virtualization | Cost Optimization - Scale Up"
+    job_type: run
+    description: >-
+      SSH to the ROSA bastion and scale the bare-metal machinepool back to 1 replica, wait for the
+      node to become ready, then restore VMs that were running before the last Scale Down.
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: playbooks/openshift_virtualization/cost_optimization_scale_up.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+      - "{{ openshift_virt_aap_bastion_cred_name }}"
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Scale up the OCP-V bare-metal machinepool and restore VMs that were running before the last
+        Scale Down. The ConfigMap saved by the Scale Down job is read to determine which VMs to start.
+      spec:
+        - question_name: ROSA cluster name
+          type: text
+          variable: ocpv_cost_opt_cluster_name
+          required: true
+          default: "{{ openshift_virt_aap_cost_opt_cluster_name }}"
+          min: 1
+          max: 63
+        - question_name: Machinepool name
+          type: text
+          variable: ocpv_cost_opt_machinepool
+          required: true
+          default: "{{ openshift_virt_aap_cost_opt_machinepool }}"
+          min: 1
+          max: 63
+        - question_name: Bastion hostname
+          type: text
+          variable: ocpv_cost_opt_bastion_host
+          required: true
+          default: "{{ openshift_virt_aap_cost_opt_bastion_host }}"
+          min: 1
+          max: 253
+
 controller_workflows:
   - name: "OpenShift Virtualization | Provision VM and install package"
     description: >-

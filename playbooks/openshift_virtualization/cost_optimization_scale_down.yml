@@ -1,0 +1,152 @@
+---
+# Gracefully stop all running VMs, save their names to a ConfigMap, then scale the
+# bare-metal machinepool to 0 via the ROSA bastion.  Designed for AAP scheduling.
+#
+# Extra vars / survey:
+#   ocpv_cost_opt_cluster_name   — ROSA cluster name (default rosa-tdnkz)
+#   ocpv_cost_opt_machinepool    — machinepool id  (default rosa-virt)
+#   ocpv_cost_opt_namespaces     — YAML list of namespaces with VMs to drain (default [ocpv-aap-smoke])
+#   ocpv_cost_opt_bastion_host   — bastion FQDN (default from env ROSA_BASTION_HOST)
+#   ocpv_cost_opt_wait_for_node  — wait until current_replicas==0 (default true)
+
+- name: "Cost Optimization — Gracefully stop VMs and scale down metal node"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    openshift_host: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_HOST', default=Undefined) | default('', true) }}"
+    openshift_api_key: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_API_KEY', default=Undefined) | default('', true) }}"
+    openshift_verify_ssl: "{{ lookup('ansible.builtin.env', 'K8S_AUTH_VERIFY_SSL', default='') | default(false) | bool }}"
+    ocpv_cost_opt_cluster_name: "{{ ocpv_cost_opt_cluster_name | default('rosa-tdnkz') }}"
+    ocpv_cost_opt_machinepool: "{{ ocpv_cost_opt_machinepool | default('rosa-virt') }}"
+    ocpv_cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"
+    ocpv_cost_opt_bastion_host: >-
+      {{ ocpv_cost_opt_bastion_host
+         | default(lookup('ansible.builtin.env', 'ROSA_BASTION_HOST', default=''))
+         | default('bastion.tdnkz.sandbox5192.opentlc.com', true) }}
+    ocpv_cost_opt_state_configmap: ocpv-cost-opt-state
+    ocpv_cost_opt_wait_for_node: "{{ ocpv_cost_opt_wait_for_node | default(true) | bool }}"
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_cost_opt_cluster_name | length > 0
+          - ocpv_cost_opt_machinepool | length > 0
+          - ocpv_cost_opt_namespaces | length > 0
+          - ocpv_cost_opt_bastion_host | length > 0
+
+    - name: Discover running VMs across target namespaces
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        namespace: "{{ item }}"
+      loop: "{{ ocpv_cost_opt_namespaces }}"
+      register: _vmi_results
+
+    - name: Build list of running VMs to stop
+      ansible.builtin.set_fact:
+        _running_vms: >-
+          {{
+            _vmi_results.results
+            | map(attribute='resources')
+            | flatten
+            | map(attribute='metadata')
+            | map('dict2items')
+            | map('selectattr', 'key', 'in', ['name', 'namespace'])
+            | map('items2dict')
+            | list
+          }}
+
+    - name: Show VMs that will be stopped
+      ansible.builtin.debug:
+        msg: "Will gracefully stop {{ _running_vms | length }} VM(s): {{ _running_vms | map(attribute='name') | list }}"
+
+    - name: Save running VM list to ConfigMap (for scale-up restore)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: "{{ ocpv_cost_opt_state_configmap }}"
+            namespace: "{{ ocpv_cost_opt_namespaces | first }}"
+            labels:
+              app.kubernetes.io/managed-by: mad-hatter-cost-opt
+          data:
+            running_vms: "{{ _running_vms | to_nice_json }}"
+            timestamp: "{{ now(utc=true) | string }}"
+      when: _running_vms | length > 0
+
+    - name: Gracefully stop each running VM
+      kubernetes.core.k8s:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ item.name }}"
+        namespace: "{{ item.namespace }}"
+        state: present
+        merge_type: merge
+        definition:
+          spec:
+            running: false
+      loop: "{{ _running_vms }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+      when: _running_vms | length > 0
+
+    - name: Wait for VMIs to terminate (guest shutdown complete)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ item.name }}"
+        namespace: "{{ item.namespace }}"
+      register: _vmi_check
+      until: (_vmi_check.resources | default([])) | length == 0
+      retries: 40
+      delay: 15
+      loop: "{{ _running_vms }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+      when: _running_vms | length > 0
+
+    - name: Add ROSA bastion to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ ocpv_cost_opt_bastion_host }}"
+        groups: rosa_bastion
+        ansible_user: "{{ lookup('ansible.builtin.env', 'ANSIBLE_NET_USERNAME', default='') | default('rosa', true) }}"
+        ansible_password: "{{ lookup('ansible.builtin.env', 'ANSIBLE_NET_PASSWORD', default='') | default(omit) }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+- name: "Cost Optimization — Scale machinepool to 0"
+  hosts: rosa_bastion
+  gather_facts: false
+  vars:
+    ocpv_cost_opt_cluster_name: "{{ hostvars['localhost']['ocpv_cost_opt_cluster_name'] }}"
+    ocpv_cost_opt_machinepool: "{{ hostvars['localhost']['ocpv_cost_opt_machinepool'] }}"
+    ocpv_cost_opt_wait_for_node: "{{ hostvars['localhost']['ocpv_cost_opt_wait_for_node'] }}"
+  tasks:
+    - name: Scale machinepool to 0 replicas
+      ansible.builtin.command: >-
+        rosa edit machinepool {{ ocpv_cost_opt_machinepool }}
+        --cluster={{ ocpv_cost_opt_cluster_name }}
+        --replicas=0
+      changed_when: true
+
+    - name: Wait for machinepool current_replicas to reach 0
+      when: ocpv_cost_opt_wait_for_node | bool
+      ansible.builtin.command: >-
+        rosa list machinepool --cluster={{ ocpv_cost_opt_cluster_name }} -o json
+      changed_when: false
+      register: _mp_status
+      until: >-
+        (_mp_status.stdout | from_json
+         | selectattr('id', 'equalto', ocpv_cost_opt_machinepool)
+         | list)[0].status.current_replicas | default(1) == 0
+      retries: 75
+      delay: 20
+
+    - name: Report scale-down complete
+      ansible.builtin.debug:
+        msg: >-
+          Machinepool '{{ ocpv_cost_opt_machinepool }}' on cluster '{{ ocpv_cost_opt_cluster_name }}'
+          scaled to 0 replicas.

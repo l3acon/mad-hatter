@@ -88,6 +88,22 @@
             if openshift_virt_aap_windows_vm_ssh_machine_cred_enabled | bool else []
           )
         + openshift_virt_aap_openshift_credential
+        + (
+            [
+              {
+                'name': openshift_virt_aap_bastion_cred_name,
+                'credential_type': 'Machine',
+                'organization': 'Default',
+                'update_secrets': true,
+                'inputs': {
+                  'username': openshift_virt_aap_bastion_user,
+                  'password': openshift_virt_aap_bastion_password,
+                },
+              },
+            ]
+            if (openshift_virt_aap_bastion_cred_enabled | bool
+                and (openshift_virt_aap_bastion_password | length) > 0) else []
+          )
       }}
   no_log: true
 
@@ -158,6 +174,7 @@
     controller_hosts: "{{ controller_hosts }}"
     controller_workflows: "{{ controller_workflows }}"
     controller_roles: "{{ controller_roles }}"
+    controller_schedules: "{{ controller_schedules }}"
 
 - name: Apply Automation Controller configuration (OpenShift Virtualization CasC)
   ansible.builtin.include_role:
