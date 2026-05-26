@@ -25,7 +25,6 @@
          | default(lookup('ansible.builtin.env', 'ROSA_BASTION_HOST', default=''))
          | default('bastion.tdnkz.sandbox5192.opentlc.com', true) }}
     ocpv_cost_opt_state_configmap: ocpv-cost-opt-state
-    ocpv_cost_opt_wait_for_node: "{{ ocpv_cost_opt_wait_for_node | default(true) | bool }}"
 
   tasks:
     - name: Validate required variables
@@ -161,7 +160,7 @@
   vars:
     ocpv_cost_opt_cluster_name: "{{ hostvars['localhost']['ocpv_cost_opt_cluster_name'] }}"
     ocpv_cost_opt_machinepool: "{{ hostvars['localhost']['ocpv_cost_opt_machinepool'] }}"
-    ocpv_cost_opt_wait_for_node: "{{ ocpv_cost_opt_wait_for_node | default(true) | bool }}"
+    _wait_for_node: "{{ ocpv_cost_opt_wait_for_node | default(true) | bool }}"
   tasks:
     - name: Scale machinepool to 0 replicas
       ansible.builtin.command: >-
@@ -171,7 +170,7 @@
       changed_when: true
 
     - name: Wait for machinepool current_replicas to reach 0
-      when: ocpv_cost_opt_wait_for_node | bool
+      when: _wait_for_node | bool
       ansible.builtin.command: >-
         rosa list machinepool --cluster={{ ocpv_cost_opt_cluster_name }} -o json
       changed_when: false
