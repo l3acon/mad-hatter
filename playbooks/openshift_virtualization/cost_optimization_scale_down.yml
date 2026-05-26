@@ -161,7 +161,7 @@
   vars:
     ocpv_cost_opt_cluster_name: "{{ hostvars['localhost']['ocpv_cost_opt_cluster_name'] }}"
     ocpv_cost_opt_machinepool: "{{ hostvars['localhost']['ocpv_cost_opt_machinepool'] }}"
-    ocpv_cost_opt_wait_for_node: "{{ hostvars['localhost']['ocpv_cost_opt_wait_for_node'] }}"
+    ocpv_cost_opt_wait_for_node: "{{ ocpv_cost_opt_wait_for_node | default(true) | bool }}"
   tasks:
     - name: Scale machinepool to 0 replicas
       ansible.builtin.command: >-
