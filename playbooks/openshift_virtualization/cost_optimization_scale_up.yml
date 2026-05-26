@@ -54,7 +54,7 @@
         --replicas=1
       changed_when: true
 
-    - name: Wait for machinepool current_replicas to reach 1
+    - name: Wait for machinepool current_replicas to reach 1 (bare-metal can take 30+ min)
       ansible.builtin.command: >-
         rosa list machinepool --cluster={{ ocpv_cost_opt_cluster_name }} -o json
       changed_when: false
@@ -63,8 +63,8 @@
         (_mp_status.stdout | from_json
          | selectattr('id', 'equalto', ocpv_cost_opt_machinepool)
          | list)[0].status.current_replicas | default(0) == 1
-      retries: 75
-      delay: 20
+      retries: 120
+      delay: 30
 
     - name: Report scale-up complete
       ansible.builtin.debug:
