@@ -5,6 +5,7 @@
 | Playbook | What it does |
 |---|---|
 | `aro/aap.yml` | Deploy **AAP only** on ARO. No ContainerLab, no CasC — just the operator, CR, and manifest injection. |
+| `aro/aap-with-apd.yml` | Deploy AAP + OpenShift Virtualization product demos CasC. No ContainerLab. |
 | `aro/clab.yml` | Deploy AAP + ContainerLab + multi-vendor network workshop CasC. |
 | `aro/clab-with-apd.yml` | Deploy AAP + ContainerLab + OpenShift Virtualization CasC. |
 

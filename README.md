@@ -22,6 +22,7 @@ There are two infrastructures this project builds upon. See the individual READM
 | Playbook | Description |
 |---|---|
 | `aro/aap.yml` | Deploy AAP only (no clab, no CasC). Suitable for a fresh ARO cluster. |
+| `aro/aap-with-apd.yml` | Deploy AAP + OpenShift Virtualization product demos CasC (no ContainerLab). |
 | `aro/clab.yml` | Deploy AAP + ContainerLab + multi-vendor network CasC. |
 | `aro/clab-with-apd.yml` | Deploy AAP + ContainerLab + OpenShift Virtualization CasC. |
 
