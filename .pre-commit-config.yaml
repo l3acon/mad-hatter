@@ -10,8 +10,7 @@ repos:
       - id: detect-private-key
         exclude: >
           (?x)^(
-            aws/README.md|
-            aro/README.md
+            README.md
           )$
       - id: end-of-file-fixer
         # ignore formatting-prettier to have an accurate prettier comparison

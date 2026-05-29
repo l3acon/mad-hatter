@@ -1,25 +1,30 @@
 ---
-- name: Deploy AAP with OpenShift Virtualization product demos on ARO
+- name: Deploy and configure ARO environment
   hosts: localhost
   vars:
     aap_operator_disable_lightspeed: false
-    aro_creds_file_path: "{{ playbook_dir }}/../aro.creds.yml"
+    aro_creds_file_path: "{{ playbook_dir }}/aro.creds.yml"
     aro_creds_require_pub_key: true
   tasks:
+    # ── always: credentials and cluster login ────────────────────────────
     - name: Slurp ARO credentials
+      tags: always
       ansible.builtin.include_role:
         name: aro_creds
 
     - name: Slurp user credentials
+      tags: always
       ansible.builtin.include_role:
         name: user_creds
 
     - name: Get OC login status
+      tags: always
       ansible.builtin.command: "oc whoami --show-server=true" # noqa: no-changed-when
       register: oc_whoami
       ignore_errors: true
 
     - name: Login to ARO cluster if needed
+      tags: always
       when:
         - (oc_whoami is failed) or (openshift_console_url not in oc_whoami.stdout)
       block:
@@ -31,7 +36,9 @@
           register: oc_login
           changed_when: "'Login successful' in oc_login.stdout"
 
+    # ── aap: deploy AAP operator ─────────────────────────────────────────
     - name: Deploy AAP Operator
+      tags: [aap]
       ansible.builtin.include_role:
         name: 'aap_operator'
         tasks_from: workload
@@ -40,15 +47,19 @@
         aap_operator_inject_manifest: true
         aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
 
+    # ── shared setup for clab / apd ──────────────────────────────────────
     - name: Get OCP bearer token
+      tags: [clab, apd]
       ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when
       register: oc_token_result
 
     - name: Set OCP bearer token
+      tags: [clab, apd]
       ansible.builtin.set_fact:
         openshift_bearer_token: "{{ oc_token_result.stdout }}"
 
     - name: Obtain gateway OAuth token for CasC modules
+      tags: [clab, apd]
       ansible.platform.token:
         description: "CasC dispatch token"
         scope: "write"
@@ -60,10 +71,56 @@
       register: _casc_token_result
 
     - name: Set controller OAuth token for ansible.controller modules
+      tags: [clab, apd]
       ansible.builtin.set_fact:
         controller_oauthtoken: "{{ _casc_token_result.ansible_facts.aap_token.token }}"
 
+    # ── clab: ContainerLab + network workshop CasC ───────────────────────
+    - name: Deploy ContainerLab
+      tags: [clab]
+      ansible.builtin.include_role:
+        name: clab
+      vars:
+        clab_topology_deployment: "rhdp"
+
+    - name: Run multi-vendor network workshop config as code
+      tags: [clab]
+      ansible.builtin.include_role:
+        name: mvnw
+
+    - name: Configure ContainerLab credentials # noqa: var-naming[no-role-prefix]
+      tags: [clab]
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        controller_credentials:
+          - name: Demo Credential
+            credential_type: Machine
+            update_secrets: true
+            inputs:
+              username: "admin"
+              password: "{{ aap_machine_cred_password }}"
+              ssh_key_data: "{{ aap_machine_cred_priv_key }}"
+          - name: Azure
+            credential_type: Microsoft Azure Resource Manager
+            organization: Default
+            inputs:
+              subscription: "{{ azure_subscription }}"
+              username: "{{ azure_resourcegroup }}"
+              password: "{{ azure_password }}"
+              secret: "{{ azure_password }}"
+              tenant: "{{ azure_tenant }}"
+              client: "{{ azure_client_id }}"
+          - name: OpenShift Credential
+            credential_type: "OpenShift or Kubernetes API Bearer Token"
+            organization: Default
+            inputs:
+              host: "{{ openshift_api_url }}"
+              bearer_token: "{{ openshift_bearer_token }}"
+
+    # ── apd: OpenShift Virtualization product demos CasC ─────────────────
     - name: OpenShift Virtualization AAP configuration as code # noqa: var-naming[no-role-prefix]
+      tags: [apd]
       ansible.builtin.include_role:
         name: openshift_virtualization_aap
       vars:
@@ -76,7 +133,6 @@
               username: "admin"
               password: "{{ aap_machine_cred_password }}"
               ssh_key_data: "{{ aap_machine_cred_priv_key }}"
-
           - name: Azure
             credential_type: Microsoft Azure Resource Manager
             organization: Default
@@ -88,7 +144,10 @@
               tenant: "{{ azure_tenant }}"
               client: "{{ azure_client_id }}"
 
+    # ── always: display results ──────────────────────────────────────────
     - name: Display Access info
+      tags: always
+      when: aap_controller_web_url is defined
       ansible.builtin.debug:
         msg:
           - "AAP URL: {{ aap_controller_web_url }}"
