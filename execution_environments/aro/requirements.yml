@@ -3,8 +3,12 @@ collections:
   - name: azure.azcollection
     version: "3.9.0"
   - name: ansible.controller
+    version: ">=4.6.0"
+  - name: ansible.platform
+    version: ">=2.5.0"
   - name: infra.aap_configuration
   - name: kubernetes.core
+    version: ">=6.1.0"
   - name: containers.podman
   - name: community.general
     version: "9.5.0"

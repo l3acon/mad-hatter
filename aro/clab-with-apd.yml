@@ -24,7 +24,7 @@
           register: oc_login
           changed_when: "'Login successful' in oc_login.stdout"
 
-    - name: Deploy AAP 2.5+ Operator
+    - name: Deploy AAP Operator
       ansible.builtin.include_role:
         name: 'aap_operator'
         tasks_from: workload

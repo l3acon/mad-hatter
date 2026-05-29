@@ -2,7 +2,7 @@
 - name: Configure 'AWS with ROSA Open Environment' for OpenShift Virtualization with AAP
   hosts: localhost
   vars:
-    aap_operator_operator_channel: "stable-2.6"
+    aap_operator_operator_channel: "stable-2.7"
     aap_operator_disable_lightspeed: false
     rosa_creds_file_path: "{{ playbook_dir }}/../rosa.creds.yml"
   tasks:
@@ -114,7 +114,7 @@
           --instance-type m5zn.metal  --name rosa-virt" # noqa: no-changed-when
           when: machinepools.stdout | from_json | length < 2
 
-    - name: Deploy AAP 2.6 Operator
+    - name: Deploy AAP Operator
       ansible.builtin.include_role:
         name: 'aap_operator'
         tasks_from: workload
