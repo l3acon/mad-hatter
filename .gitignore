@@ -2,6 +2,7 @@
 *.swp
 *.creds
 *.creds.yml
+!examples/*.creds.yml
 .azure
 ansible-builder.log
 podman-build*

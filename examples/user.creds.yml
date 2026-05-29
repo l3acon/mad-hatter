@@ -1,0 +1,11 @@
+---
+# Loaded by the user_creds role via include_vars.
+# Copy this file to the project root as user.creds.yml and fill in your values.
+
+# OpenAI API token for AAP Lightspeed (ALIA). Leave empty to skip if
+# aap_operator_disable_lightspeed is set to true in your playbook.
+aap_operator_chatbot_token: ""
+
+# Password used for the OpenShift admin user (kubeadmin on ARO, cluster-admin
+# on ROSA). Also passed as K8S_AUTH_PASSWORD via navigator env vars.
+openshift_admin_password: ""
