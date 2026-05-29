@@ -3,6 +3,7 @@ redhat-developer-hub:
     _environment:
       _development: false
       _production: true
+    pluginMode: oci
     dynamic:
       plugins:
         - disabled: false
@@ -60,7 +61,7 @@ redhat-developer-hub:
         - disabled: false
           package: >-
             ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-gitlab-dynamic
-    imageTagInfo: main
+    imageTagInfo: "2.2.0"
   nameOverride: rhaap-portal
   test:
     enabled: false
@@ -132,6 +133,23 @@ redhat-developer-hub:
                         minutes: 60
                       timeout:
                         seconds: 30
+                  pahCollections:
+                    enabled: true
+                    schedule:
+                      frequency:
+                        minutes: 60
+                      timeout:
+                        seconds: 30
+                  ansibleGitContents:
+                    enabled: true
+                    schedule:
+                      frequency:
+                        minutes: 60
+                      timeout:
+                        seconds: 30
+          locations:
+            - type: url
+              target: https://github.com/ansible/ansible-rhdh-templates/blob/main/all.yaml
           rules:
             - allow:
                 - Component
@@ -190,6 +208,8 @@ redhat-developer-hub:
                   priority: 120
                   title: Templates
                   to: /self-service/catalog
+                default.ee:
+                  enabled: true
                 default.myitem:
                   icon: category
                   priority: 110

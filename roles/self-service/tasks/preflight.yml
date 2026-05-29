@@ -60,7 +60,7 @@
       Run 'oc login' first, e.g.:
         oc login --server=https://api.your-cluster.example.com:6443 -u kubeadmin -p '<password>'
 
-# -- Plugin files -------------------------------------------------------------
+# -- Plugin files (tarball mode only) -----------------------------------------
 - name: Define expected plugin tarballs
   ansible.builtin.set_fact:
     _preflight_expected_plugins:
@@ -68,6 +68,7 @@
       - ansible-backstage-plugin-catalog-backend-module-rhaap-dynamic
       - ansible-plugin-backstage-self-service-dynamic
       - ansible-backstage-plugin-auth-backend-module-rhaap-provider-dynamic
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
 - name: Look for plugin tarballs in {{ plugin_root_dir }}
   ansible.builtin.find:
@@ -75,11 +76,13 @@
     patterns: "*.tgz"
     file_type: file
   register: _preflight_plugin_files
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
 - name: Build list of found plugin basenames
   ansible.builtin.set_fact:
     _preflight_found_basenames: >-
       {{ _preflight_plugin_files.files | map(attribute='path') | map('basename') | list }}
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
 - name: Check each required plugin tarball is present
   ansible.builtin.assert:
@@ -91,8 +94,9 @@
         https://access.redhat.com/downloads/content/480
       Place the .tgz files in {{ plugin_root_dir }}/
   loop: "{{ _preflight_expected_plugins }}"
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
-# -- Plugin / chart version alignment -----------------------------------------
+# -- Plugin / chart version alignment (tarball mode only) ---------------------
 - name: Extract plugin version from scaffolder tarball filename
   ansible.builtin.set_fact:
     _preflight_plugin_version: >-
@@ -104,6 +108,7 @@
         | regex_replace('^ansible-plugin-scaffolder-backend-module-backstage-rhaap-dynamic-', '')
         | regex_replace('\.tgz$', '')
       }}
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
 - name: Query chart appVersion for {{ helm_chart_name }} {{ helm_chart_version }}
   ansible.builtin.command:
@@ -113,6 +118,7 @@
   changed_when: false
   failed_when: false
   register: _preflight_chart_info
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
 - name: Extract appVersion from chart metadata
   ansible.builtin.set_fact:
@@ -123,7 +129,9 @@
           | default('appVersion: UNKNOWN'))
          | regex_replace('^appVersion:\s*', '')
       }}
-  when: _preflight_chart_info.rc == 0
+  when:
+    - ssp_plugin_mode | default('oci') != 'oci'
+    - _preflight_chart_info.rc == 0
 
 - name: Fail if chart metadata could not be fetched
   ansible.builtin.assert:
@@ -131,8 +139,9 @@
     fail_msg: >-
       Could not fetch chart {{ helm_repo_name }}/{{ helm_chart_name }} version {{ helm_chart_version }}.
       Run 'helm repo add {{ helm_repo_name }} {{ helm_repo_url }} && helm repo update' and retry.
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
-- name: Assert plugin version ({{ _preflight_plugin_version }}) matches chart appVersion ({{ _preflight_chart_app_version }})
+- name: Assert plugin version ({{ _preflight_plugin_version | default('N/A') }}) matches chart appVersion ({{ _preflight_chart_app_version | default('N/A') }})
   ansible.builtin.assert:
     that: _preflight_plugin_version == _preflight_chart_app_version
     fail_msg: >-
@@ -143,8 +152,9 @@
 
       Fix: set helm_chart_version to a chart whose appVersion is {{ _preflight_plugin_version }}, or
       download matching plugin tarballs from https://access.redhat.com/downloads/content/480
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
-- name: Verify all plugin tarballs match the same version ({{ _preflight_plugin_version }})
+- name: Verify all plugin tarballs match the same version ({{ _preflight_plugin_version | default('N/A') }})
   ansible.builtin.assert:
     that: >-
       _preflight_found_basenames
@@ -155,11 +165,12 @@
       All plugin tarballs must be the same version. Download the correct set from:
         https://access.redhat.com/downloads/content/480
   loop: "{{ _preflight_expected_plugins }}"
+  when: ssp_plugin_mode | default('oci') != 'oci'
 
 - name: Preflight passed
   ansible.builtin.debug:
     msg: >-
       All checks passed: helm={{ _preflight_helm.stdout | trim }},
       cluster user={{ _preflight_oc.stdout | trim }},
-      plugin version={{ _preflight_plugin_version }},
-      chart={{ helm_chart_name }} {{ helm_chart_version }} (appVersion={{ _preflight_chart_app_version }})
+      plugin mode={{ ssp_plugin_mode | default('oci') }}
+      {{ ', plugin version=' ~ _preflight_plugin_version ~ ', chart=' ~ helm_chart_name ~ ' ' ~ helm_chart_version ~ ' (appVersion=' ~ _preflight_chart_app_version ~ ')' if ssp_plugin_mode | default('oci') != 'oci' else '' }}

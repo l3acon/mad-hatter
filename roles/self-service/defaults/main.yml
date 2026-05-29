@@ -4,7 +4,7 @@
 plugin_root_dir: "{{ role_path }}/files/plugins"
 helm_values: "{{ role_path }}/files/helm/values.yml"
 openshift_namespace: self-service
-helm_chart_version: "2.1.5"
+helm_chart_version: "2.2.0"
 helm_repo_url: "https://charts.openshift.io"
 helm_repo_name: "openshift-helm-charts"
 helm_chart_name: "redhat-rhaap-portal"
@@ -14,3 +14,10 @@ controller_verify_ssl: True
 aap_oauth_client_name: "Self Service"
 aap_organization: "Default"
 aap_ssl_verify: true
+
+# EE Builder and content catalog (AAP 2.7+)
+ssp_ee_builder_enabled: true
+ssp_content_catalog_enabled: true
+
+# Plugin delivery mode: "oci" (recommended for 2.7+) or "tarball" (legacy)
+ssp_plugin_mode: "oci"

@@ -27,12 +27,14 @@
   import_tasks: rbac_configmap.yml
   tags: [rbac]
 
-- name: Build plugin registry
-  import_tasks: plugins.yml
+- name: Build plugin registry (tarball mode only)
+  ansible.builtin.include_tasks: plugins.yml
+  when: ssp_plugin_mode | default('oci') != 'oci'
   tags: [build_plugin]
 
-- name: Deploy plugin registry app
-  import_tasks: plugin_deploy.yml
+- name: Deploy plugin registry app (tarball mode only)
+  ansible.builtin.include_tasks: plugin_deploy.yml
+  when: ssp_plugin_mode | default('oci') != 'oci'
   tags: [deploy_plugin]
 
 - name: Generate Helm values with plugin integrity

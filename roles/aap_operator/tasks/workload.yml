@@ -1,6 +1,13 @@
 ---
 - name: Setup environment vars
   block:
+    - name: Check for existing OperatorGroup in namespace
+      kubernetes.core.k8s_info:
+        api_version: operators.coreos.com/v1
+        kind: OperatorGroup
+        namespace: "{{ aap_operator_project }}"
+      register: r_existing_og
+
     - name: Install Red Hat Ansible Automation Platform
       ansible.builtin.include_role:
         name: install_operator
@@ -23,6 +30,8 @@
          {{ aap_operator_catalog_snapshot_image }}
         install_operator_catalogsource_image_tag: >-
           {{ aap_operator_catalog_snapshot_image_tag }}
+        install_operator_skip_operatorgroup: >-
+          {{ (r_existing_og.resources | length > 0) | bool }}
 
     - name: Create AAP admin secret
       kubernetes.core.k8s:
@@ -42,49 +51,27 @@
         definition: "{{ lookup('template', 'aap.j2') }}"
 
 
-- name: Wait until all AAP2 Operators are running
+- name: Wait until AAP operator deployments are running
   block:
-    - name: Wait until the Automation Controller Manager operator is running
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Deployment
-        name: automation-controller-operator-controller-manager
-        namespace: "{{ aap_operator_project }}"
-      register: r_aap_controller_manager_operator
-      until:
-        - r_aap_controller_manager_operator.resources[0].status.readyReplicas is defined
-        - "r_aap_controller_manager_operator.resources[0].status.replicas == \
-            r_aap_controller_manager_operator.resources[0].status.readyReplicas"
+    - name: Get operator-manager deployment names
+      ansible.builtin.command: >-
+        oc get deployment -n {{ aap_operator_project }}
+        -l operators.coreos.com/ansible-automation-platform-operator.{{ aap_operator_project }}
+        -o jsonpath='{.items[*].metadata.name}'
+      changed_when: false
+      register: r_operator_dep_names
+      until: r_operator_dep_names.stdout | trim | length > 0
       retries: 30
       delay: 10
 
-    - name: Wait until the Automation Hub Manager operator is running
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Deployment
-        name: automation-hub-operator-controller-manager
-        namespace: "{{ aap_operator_project }}"
-      register: r_aap_hub_manager_operator
-      until:
-        - r_aap_hub_manager_operator.resources[0].status.readyReplicas is defined
-        - "r_aap_hub_manager_operator.resources[0].status.replicas == \
-            r_aap_hub_manager_operator.resources[0].status.readyReplicas"
-      retries: 30
-      delay: 10
-
-    - name: Wait until the Automation Resource Manager operator is running
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Deployment
-        name: resource-operator-controller-manager
-        namespace: "{{ aap_operator_project }}"
-      register: r_aap_resource_manager_operator
-      until:
-        - r_aap_resource_manager_operator.resources[0].status.readyReplicas is defined
-        - "r_aap_resource_manager_operator.resources[0].status.replicas == \
-            r_aap_resource_manager_operator.resources[0].status.readyReplicas"
-      retries: 30
-      delay: 10
+    - name: Wait for each operator deployment rollout
+      ansible.builtin.command: >-
+        oc rollout status deployment/{{ item }}
+        -n {{ aap_operator_project }} --timeout=300s
+      changed_when: false
+      loop: "{{ r_operator_dep_names.stdout.split() }}"
+      loop_control:
+        label: "{{ item }}"
 
     - name: Retrieve created route
       kubernetes.core.k8s_info:
@@ -101,12 +88,13 @@
       ansible.builtin.set_fact:
         automation_controller_hostname: "{{ r_route.resources[0].spec.host }}"
 
-    - name: Wait for automation_controller to be running
+    - name: Wait for AAP gateway to be running
       ansible.builtin.uri:
-        url: http://{{ automation_controller_hostname }}/api/controller/v2/ping/
-        status_code: 200
+        url: "https://{{ automation_controller_hostname }}/api/gateway/v1/"
+        status_code: [200, 401]
+        validate_certs: false
       register: r_result
-      until: r_result.json.version is defined
+      until: r_result.status is defined and r_result.status in [200, 401]
       retries: 60
       delay: 45
 
@@ -119,9 +107,19 @@
         seconds: 120
       when: r_aap_admin_secret_apply.changed | default(false)
 
-    # AAP 2.6+ issues OAuth tokens at /api/gateway/v1/tokens/; ansible.controller still
-    # POSTs to /api/controller/v2/tokens/ by default, which returns 401 on 2.6.
-    - name: Obtain OAuth2 token from AAP gateway (2.6+)
+    - name: Wait for controller API to be ready behind the gateway
+      ansible.builtin.uri:
+        url: "https://{{ automation_controller_hostname }}/api/controller/v2/ping/"
+        status_code: [200]
+        validate_certs: false
+      register: r_controller_ping
+      until:
+        - r_controller_ping.status is defined
+        - r_controller_ping.status == 200
+      retries: 60
+      delay: 30
+
+    - name: Obtain OAuth2 token from AAP gateway
       ansible.builtin.uri:
         url: "https://{{ automation_controller_hostname }}/api/gateway/v1/tokens/"
         method: POST
@@ -139,7 +137,7 @@
       register: r_gw_token
       ignore_errors: true
 
-    - name: Obtain OAuth2 token from controller API (2.5 and earlier)
+    - name: Obtain OAuth2 token from controller API (pre-2.7 fallback)
       ansible.builtin.uri:
         url: "https://{{ automation_controller_hostname }}/api/controller/v2/tokens/"
         method: POST
