@@ -1,5 +1,5 @@
 ---
-- name: Install self-service portal
+- name: Deploy Ansible Automation Portal
   hosts: localhost
   # Required extra vars:
   #   controller_host: https://my-aap-deployment.example.com

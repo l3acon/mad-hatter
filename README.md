@@ -114,7 +114,7 @@ The same behavior exists under `execution_environments/aro/build.sh`.
 ## Common reference
 
 ### user.creds.yml
-At a minimum the following variables are required in this file:
+Copy [examples/user.creds.yml](examples/user.creds.yml) to the project root and fill in your values. At a minimum:
 ```yaml
 aap_operator_chatbot_token: <some token>
 openshift_admin_password: <k8s password>
@@ -122,41 +122,53 @@ openshift_admin_password: <k8s password>
 See [user_creds](roles/user_creds/tasks/main.yml) for more details on credential loading.
 
 ### ansible-navigator config
-I use volume-mounts for ssh keys and manifest files. Here is an example navigator config:
-```yaml
-ansible-navigator:
-  execution-environment:
-    pull:
-      policy: missing
-    volume-mounts:
-      - src: "/home/user/keys"
-        dest: "/root/keys"
-        options: "Z"
-      - src: "/home/user/manifests"
-        dest: "/root/manifests"
-        options: "Z"
-    environment-variables:
-      pass:
-        - AAP_MACHINE_CRED_PASSWORD
-        - CONTROLLER_PASSWORD
-      set:
-        K8S_AUTH_PASSWORD: "Curiouser&Curiouser"
+Copy [examples/ansible-navigator.yml](examples/ansible-navigator.yml) to the project root as `ansible-navigator.yml`. Adjust the volume-mount source paths to match your local key and manifest locations. The environment variables are used by the `user_creds` role:
+
+| Env var | Maps to |
+|---|---|
+| `CONTROLLER_PASSWORD` | `aap_admin_password` |
+| `AAP_MACHINE_CRED_PASSWORD` | `aap_machine_cred_password` |
+| `K8S_AUTH_PASSWORD` | `openshift_admin_password` |
+
+### Ansible Automation Portal (`deploy_portal.yml`)
+
+Deploys the Ansible Automation Portal (formerly "Self-Service Portal") on OpenShift via the `redhat-rhaap-portal` Helm chart. In AAP 2.7 the portal uses **OCI plugin delivery** by default — no plugin tarballs required.
+
+Key features enabled out of the box:
+- **EE Builder** — visual wizard for defining Execution Environments (collections, Python/system packages). Generates `execution-environment.yml` definitions.
+- **Content catalog** — syncs collections from Private Automation Hub and discovers Ansible content in configured Git orgs.
+- **OCI plugins** — pulled from `registry.redhat.io`; the role automatically provisions registry auth from the cluster pull-secret.
+
+#### Prerequisites
+- `oc` logged into the target cluster
+- `helm` v3+
+- AAP 2.7+ accessible from the control node
+- `ansible.platform`, `redhat.openshift`, `kubernetes.core` collections (`ansible-galaxy collection install -r roles/self-service/requirements.yml`)
+
+#### Quick start
+```bash
+ansible-playbook deploy_portal.yml \
+  -e controller_host=https://aap.apps.example.com \
+  -e controller_username=admin \
+  -e controller_password='YourPassword'
 ```
 
-### Self-Service portal
-Currently I run this as an add-on (and stolen from [Hicham](https://github.com/naeemarsalan/aap-self-service-role.git)). The steps required are outlined below.
-
-1. Download and untar plugins to `${project_root}/roles/self-service/files/plugins`
-1. Install depends (see below)
-1. Set the required variables (see below)
-1. Login to openshift using CLI (see below)
-1. Run the playbook.
-
+#### With GitHub integration (EE Builder save-to-Git + content discovery)
+```bash
+ansible-playbook deploy_portal.yml \
+  -e controller_host=https://aap.apps.example.com \
+  -e controller_username=admin \
+  -e controller_password='YourPassword' \
+  -e github_token=ghp_xxxxxxxxxxxxxxxxxxxx
 ```
-ansible-galaxy collection install -r roles/self-service/requirements.yml
-oc login --token=sha256~mylongtoken --server=https://api.my-ocp.com:443
-ansible-playbook deploy_ssp.yml -e controller_username=admin -e controller_password=SomePassword -e github_token=gh_something -e namespace=self-service -e controller_host=https://my-aap-deployment.example.com
+
+#### Refreshing the portal catalog
+The portal syncs AAP job templates on a schedule (default 30 minutes). To trigger an immediate refresh after updating job templates in AAP:
+```bash
+curl -X POST https://<portal-route>/api/catalog/refresh -H 'Authorization: Bearer <token>'
 ```
+
+See [roles/self-service/README.md](roles/self-service/README.md) for the full variable reference, tag list, tarball-mode instructions, and troubleshooting.
 
 ### Troubleshooting
 Add debugging flag for Config as Code collections:

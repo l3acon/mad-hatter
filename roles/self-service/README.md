@@ -111,7 +111,7 @@ required — plugins are pulled as OCI artifacts from `registry.redhat.io`.
 ### Minimal command-line run
 
 ```bash
-ansible-playbook deploy_ssp.yml \
+ansible-playbook deploy_portal.yml \
   -e controller_host=https://aap.apps.example.com \
   -e controller_username=admin \
   -e controller_password='YourPassword'
@@ -120,7 +120,7 @@ ansible-playbook deploy_ssp.yml \
 ### With optional SCM tokens and a custom namespace
 
 ```bash
-ansible-playbook deploy_ssp.yml \
+ansible-playbook deploy_portal.yml \
   -e controller_host=https://aap.apps.example.com \
   -e controller_username=admin \
   -e controller_password='YourPassword' \
@@ -131,7 +131,7 @@ ansible-playbook deploy_ssp.yml \
 ### With EE Builder and GitHub integration
 
 ```bash
-ansible-playbook deploy_ssp.yml \
+ansible-playbook deploy_portal.yml \
   -e controller_host=https://aap.apps.example.com \
   -e controller_username=admin \
   -e controller_password='YourPassword' \
@@ -141,7 +141,7 @@ ansible-playbook deploy_ssp.yml \
 ### Legacy tarball mode (pre-2.7)
 
 ```bash
-ansible-playbook deploy_ssp.yml \
+ansible-playbook deploy_portal.yml \
   -e controller_host=https://aap.apps.example.com \
   -e controller_username=admin \
   -e controller_password='YourPassword' \
@@ -152,7 +152,7 @@ ansible-playbook deploy_ssp.yml \
 ### Disable AAP TLS verification (lab/self-signed certs)
 
 ```bash
-ansible-playbook deploy_ssp.yml \
+ansible-playbook deploy_portal.yml \
   -e controller_host=https://aap.apps.example.com \
   -e controller_username=admin \
   -e controller_password='YourPassword' \
@@ -163,7 +163,7 @@ ansible-playbook deploy_ssp.yml \
 ### Run only the preflight checks
 
 ```bash
-ansible-playbook deploy_ssp.yml \
+ansible-playbook deploy_portal.yml \
   -e controller_host=https://aap.apps.example.com \
   -e controller_username=admin \
   -e controller_password='YourPassword' \
