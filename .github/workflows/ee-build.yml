@@ -96,11 +96,13 @@ jobs:
             changed="${ALL_EES}"
           fi
 
+          # If no specific EE changed (e.g. only the workflow file was
+          # updated), build all EEs so the pipeline itself gets validated.
           if [[ "$changed" == "[]" || -z "$changed" ]]; then
-            echo 'matrix={"ee_name":[]}' >> "$GITHUB_OUTPUT"
-          else
-            echo "matrix={\"ee_name\":${changed}}" >> "$GITHUB_OUTPUT"
+            changed="${ALL_EES}"
           fi
+
+          echo "matrix={\"ee_name\":${changed}}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Build (and optionally push) each detected EE.
