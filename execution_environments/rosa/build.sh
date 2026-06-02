@@ -19,7 +19,7 @@ if [[ -z ${ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN:-} || -z ${ANSIBLE_GALAXY_SERVE
 fi
 
 # Only require registry.redhat.io when the EE base_image pulls from there.
-if grep -qE '^[[:space:]]*name:[[:space:]]*registry\.redhat\.io/' "${SCRIPT_DIR}/execution-environment.yml" 2>/dev/null; then
+if grep -qE '^[[:space:]]*name:[[:space:]]*['"'"'"]*registry\.redhat\.io/' "${SCRIPT_DIR}/execution-environment.yml" 2>/dev/null; then
   ensure_podman_redhat_registry_login
 else
   echo "No registry.redhat.io base_image in execution-environment.yml; skipping Red Hat registry login."
