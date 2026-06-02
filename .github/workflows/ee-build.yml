@@ -27,13 +27,15 @@ on:
           - windows
 
   push:
-    branches: [main,ee-builder]
+    branches: [main, ee-builder]
     paths:
       - 'execution_environments/**'
+      - '.github/workflows/ee-build.yml'
 
   pull_request:
     paths:
       - 'execution_environments/**'
+      - '.github/workflows/ee-build.yml'
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -72,10 +74,16 @@ jobs:
             BASE_SHA="${{ github.event.before }}"
           fi
 
+          # First push on a new branch has an all-zeros before SHA.
+          if [[ "${BASE_SHA}" == "0000000000000000000000000000000000000000" ]]; then
+            echo "matrix={\"ee_name\":${ALL_EES}}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           changed=$(
             git diff --name-only "${BASE_SHA}" "${{ github.sha }}" -- execution_environments/ \
               | sed -n 's|^execution_environments/\([^/]*\)/.*|\1|p' \
-              | grep -v '^utils$' \
+              | { grep -v '^utils$' || true; } \
               | sort -u \
               | jq -Rc . | jq -sc .
           )
