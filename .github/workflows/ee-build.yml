@@ -1,0 +1,153 @@
+# Build and push Execution Environment images (quay.io/matferna/mh-*).
+#
+# Triggers:
+#   - workflow_dispatch: pick a single EE or "all"
+#   - push to main when execution_environments/** changes (auto-detects which EEs changed)
+#   - pull_request touching execution_environments/** (build only, no push)
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   QUAY_IO_USERNAME              — quay.io robot/account with push to quay.io/matferna/mh-*
+#   QUAY_IO_PASSWORD              — quay.io robot token or CLI password
+#   AUTOMATION_HUB_TOKEN          — offline token for certified + validated Galaxy pulls
+#   REGISTRY_REDHAT_IO_USERNAME   — Red Hat registry service-account (for aro/rosa base images)
+#   REGISTRY_REDHAT_IO_PASSWORD   — Red Hat registry token
+name: Build and push Execution Environments
+
+on:
+  workflow_dispatch:
+    inputs:
+      ee_name:
+        description: 'Execution Environment to build'
+        required: true
+        type: choice
+        options:
+          - all
+          - aro
+          - rosa
+          - windows
+
+  push:
+    branches: [main]
+    paths:
+      - 'execution_environments/**'
+
+  pull_request:
+    paths:
+      - 'execution_environments/**'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Determine which EE(s) to build and emit a JSON matrix.
+  # ---------------------------------------------------------------------------
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine EE matrix
+        id: set-matrix
+        run: |
+          set -euo pipefail
+
+          ALL_EES='["aro","rosa","windows"]'
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ inputs.ee_name }}" == "all" ]]; then
+              echo "matrix={\"ee_name\":${ALL_EES}}" >> "$GITHUB_OUTPUT"
+            else
+              echo 'matrix={"ee_name":["${{ inputs.ee_name }}"]}' >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          # For push/PR events, detect which EE directories changed.
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+
+          changed=$(
+            git diff --name-only "${BASE_SHA}" "${{ github.sha }}" -- execution_environments/ \
+              | sed -n 's|^execution_environments/\([^/]*\)/.*|\1|p' \
+              | grep -v '^utils$' \
+              | sort -u \
+              | jq -Rc . | jq -sc .
+          )
+
+          # If shared utils changed, rebuild everything.
+          utils_changed=$(
+            git diff --name-only "${BASE_SHA}" "${{ github.sha }}" -- execution_environments/utils/ | wc -l
+          )
+          if [[ "$utils_changed" -gt 0 ]]; then
+            changed="${ALL_EES}"
+          fi
+
+          if [[ "$changed" == "[]" || -z "$changed" ]]; then
+            echo 'matrix={"ee_name":[]}' >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix={\"ee_name\":${changed}}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Build (and optionally push) each detected EE.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: detect
+    if: ${{ fromJson(needs.detect.outputs.matrix).ee_name[0] != null }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
+    env:
+      ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
+      ANSIBLE_GALAXY_SERVER_VALIDATED_TOKEN: ${{ secrets.AUTOMATION_HUB_TOKEN }}
+      REGISTRY_REDHAT_IO_USERNAME: ${{ secrets.REGISTRY_REDHAT_IO_USERNAME }}
+      REGISTRY_REDHAT_IO_PASSWORD: ${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}
+      QUAY_IO_USERNAME: ${{ secrets.QUAY_IO_USERNAME }}
+      QUAY_IO_PASSWORD: ${{ secrets.QUAY_IO_PASSWORD }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ansible-builder
+        run: pip install --upgrade pip ansible-builder
+
+      - name: Validate secrets
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -z "${ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN}" ]] && missing+=("AUTOMATION_HUB_TOKEN")
+
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            [[ -z "${QUAY_IO_USERNAME}" ]] && missing+=("QUAY_IO_USERNAME")
+            [[ -z "${QUAY_IO_PASSWORD}" ]] && missing+=("QUAY_IO_PASSWORD")
+          fi
+
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing required repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Build and push mh-${{ matrix.ee_name }}
+        env:
+          SKIP_QUAY_PUSH: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          cd execution_environments/${{ matrix.ee_name }}
+          bash ./build.sh

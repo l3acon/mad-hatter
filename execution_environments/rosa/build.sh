@@ -18,8 +18,18 @@ if [[ -z ${ANSIBLE_GALAXY_SERVER_CERTIFIED_TOKEN:-} || -z ${ANSIBLE_GALAXY_SERVE
   exit 1
 fi
 
-ensure_podman_redhat_registry_login
-ensure_podman_quay_io_login
+# Only require registry.redhat.io when the EE base_image pulls from there.
+if grep -qE '^[[:space:]]*name:[[:space:]]*registry\.redhat\.io/' "${SCRIPT_DIR}/execution-environment.yml" 2>/dev/null; then
+  ensure_podman_redhat_registry_login
+else
+  echo "No registry.redhat.io base_image in execution-environment.yml; skipping Red Hat registry login."
+fi
+
+if [[ "${SKIP_QUAY_PUSH:-}" == "1" ]]; then
+  echo "SKIP_QUAY_PUSH=1: will build and tag locally but skip podman push."
+else
+  ensure_podman_quay_io_login
+fi
 
 # Optional: merge [defaults] from the repository ansible.cfg into this EE's ansible.cfg for the build only.
 if [[ "${MERGE_REPO_ANSIBLE_CFG:-}" == 1 ]]; then
@@ -67,6 +77,10 @@ podman tag "${IMAGE_TAG}" "${IMAGE}:latest"
 echo "Built ${IMAGE_TAG} and tagged ${IMAGE}:latest"
 podman inspect "${IMAGE_TAG}" --format 'Architecture={{.Architecture}} OS={{.Os}}'
 
-echo "Pushing ${IMAGE_TAG} and ${IMAGE}:latest"
-podman push "${IMAGE_TAG}"
-podman push "${IMAGE}:latest"
+if [[ "${SKIP_QUAY_PUSH:-}" == "1" ]]; then
+  echo "Skipping push (SKIP_QUAY_PUSH=1). Image available locally as ${IMAGE_TAG} and ${IMAGE}:latest"
+else
+  echo "Pushing ${IMAGE_TAG} and ${IMAGE}:latest"
+  podman push "${IMAGE_TAG}"
+  podman push "${IMAGE}:latest"
+fi
