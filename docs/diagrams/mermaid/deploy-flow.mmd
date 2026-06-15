@@ -1,0 +1,12 @@
+---
+title: "Deployment Flow"
+---
+graph LR
+  CREDS["Credential Files<br/>(aro/rosa/user)"]
+  NAV["ansible-navigator run"]
+  OP["Install AAP<br/>Operator"]
+  MANIFEST["Inject<br/>Manifest"]
+  CASC["Apply CasC<br/>(infra.aap_configuration)"]
+  ADDONS["Deploy Add-ons<br/>(ContainerLab / OCP-V / Portal)"]
+
+  CREDS --> NAV --> OP --> MANIFEST --> CASC --> ADDONS

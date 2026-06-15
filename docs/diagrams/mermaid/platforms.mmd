@@ -1,0 +1,20 @@
+---
+title: "Supported Platforms"
+---
+graph LR
+  subgraph ARO["ARO (Azure)"]
+    direction TB
+    A1["AAP + ContainerLab"]
+    A2["Network CasC"]
+    A3["OCP-V Product Demos"]
+  end
+
+  subgraph ROSA["ROSA (AWS)"]
+    direction TB
+    R1["AAP + Bare-metal Nodes"]
+    R2["OCP Virtualization"]
+    R3["OCP-V Product Demos"]
+  end
+
+  RHDP["RHDP Catalog"] -->|"order"| ARO
+  RHDP -->|"order"| ROSA

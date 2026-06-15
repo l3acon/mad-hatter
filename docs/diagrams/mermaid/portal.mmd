@@ -1,0 +1,14 @@
+---
+title: "Automation Portal Components"
+---
+graph LR
+  PORTAL["Automation Portal<br/>(Helm chart)"]
+  AAP["AAP 2.7<br/>(OAuth2)"]
+  PAH["Private<br/>Automation Hub"]
+  GIT["GitHub / GitLab"]
+  REG["registry.redhat.io<br/>(OCI plugins)"]
+
+  PORTAL -->|"auth"| AAP
+  PORTAL -->|"collections"| PAH
+  PORTAL -->|"content discovery"| GIT
+  PORTAL -->|"plugins"| REG

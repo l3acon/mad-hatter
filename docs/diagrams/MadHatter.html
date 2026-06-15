@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mad Hatter — AAP on OpenShift Deployer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700;900&family=Red+Hat+Text:wght@400;500;700&family=Red+Hat+Mono:wght@400;500&display=swap');
+
+:root {
+  --rh-red:        #EE0000;
+  --rh-red-dark:   #A30000;
+  --rh-red-light:  #FF4D4D;
+  --rh-darker:     #0C0C0C;
+  --rh-dark:       #151515;
+  --rh-gray-900:   #1A1A1A;
+  --rh-gray-800:   #252525;
+  --rh-gray-700:   #3C3C3C;
+  --rh-gray-400:   #8A8D90;
+  --rh-gray-200:   #C7C7C7;
+  --rh-white:      #FFFFFF;
+  --rh-gold:       #F0AB00;
+  --rh-teal:       #009596;
+  --rh-blue:       #0066CC;
+  --rh-purple:     #5E40BE;
+  --accent-glow:   rgba(238, 0, 0, 0.08);
+  --font-display:  'Red Hat Display', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-body:     'Red Hat Text',    'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono:     'Red Hat Mono',    'JetBrains Mono', Menlo, monospace;
+  --fs-h1:         4.5rem;
+  --fs-h2:         3rem;
+  --fs-h3:         1.5rem;
+  --fs-body:       1.15rem;
+  --fs-label:      0.7rem;
+  --r-sm:          4px;
+  --r-md:          6px;
+  --r-lg:          8px;
+  --r-pill:        999px;
+  --border-hair:   1px solid var(--rh-gray-700);
+}
+
+html, body { margin: 0; padding: 0; font-family: var(--font-body); color: var(--rh-gray-200); background: #000; }
+h1, h2, h3, h4 { margin: 0; }
+
+/* ── Base slide chrome ── */
+.slide {
+  position: relative; width: 1920px; height: 1080px;
+  color: #fff; font-family: var(--font-body); overflow: hidden;
+  background: linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px) 0 0/72px 72px,
+    linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px) 0 0/72px 72px, #0C0C0C;
+}
+.slide.glow {
+  background: radial-gradient(circle 900px at 92% -8%, rgba(238,0,0,.32), transparent 65%),
+    linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px) 0 0/72px 72px,
+    linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px) 0 0/72px 72px, #0C0C0C;
+}
+.slide.glow-bl {
+  background: radial-gradient(circle 900px at 8% 108%, rgba(238,0,0,.24), transparent 65%),
+    linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px) 0 0/72px 72px,
+    linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px) 0 0/72px 72px, #0C0C0C;
+}
+
+.num { position: absolute; top: 48px; left: 96px; font-family: var(--font-mono); font-size: 18px; letter-spacing: .22em; text-transform: uppercase; color: var(--rh-gray-400); }
+.num strong { color: var(--rh-red); }
+.foot { position: absolute; left: 96px; right: 96px; bottom: 42px; display: flex; justify-content: flex-end; align-items: center; font-family: var(--font-mono); font-size: 16px; letter-spacing: .18em; text-transform: uppercase; color: var(--rh-gray-400); border-top: 1px solid var(--rh-gray-700); padding-top: 18px; }
+.foot .pg { color: var(--rh-red); }
+.eyebrow { font-family: var(--font-mono); font-size: 18px; letter-spacing: .24em; text-transform: uppercase; color: var(--rh-red); }
+.div60 { width: 90px; height: 4px; background: var(--rh-red); border-radius: 2px; }
+.keyword { display: inline-block; background: rgba(238,0,0,.15); color: var(--rh-red); padding: .05em .35em; border-radius: 6px; font-weight: 900; }
+em.r { color: var(--rh-red); font-style: normal; }
+em.t { color: var(--rh-teal); font-style: normal; }
+em.g { color: var(--rh-gold); font-style: normal; }
+em.b { color: var(--rh-blue); font-style: normal; }
+
+/* ── Section header ── */
+.head { position: absolute; left: 96px; right: 96px; top: 120px; max-width: none; }
+.head h2 { font-family: var(--font-display); font-weight: 900; font-size: 84px; line-height: 1.02; letter-spacing: -.022em; margin: 18px 0 22px; }
+.head .lede { font-family: var(--font-body); font-size: 26px; line-height: 1.5; color: var(--rh-gray-200); max-width: none; margin-top: 18px; }
+
+/* ── Title slide ── */
+.s-title .stage { position: absolute; left: 96px; right: 96px; top: 50%; transform: translateY(-54%); max-width: 1500px; }
+.s-title h1 { font-family: var(--font-display); font-weight: 900; font-size: 120px; line-height: .98; letter-spacing: -.03em; margin: 28px 0 0; }
+.s-title .sub { font-family: var(--font-body); font-size: 30px; line-height: 1.4; color: var(--rh-gray-200); margin-top: 42px; max-width: none; }
+.s-title .tags { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 10px; }
+.s-title .tag { padding: 8px 18px; border: 1px solid var(--rh-gray-700); border-radius: var(--r-pill); font-family: var(--font-mono); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--rh-gray-200); }
+.s-title .tag.accent { border-color: var(--rh-red); color: var(--rh-red); }
+
+/* ── Bullet list ── */
+.bullet-panel { position: absolute; left: 96px; right: 96px; top: 400px; bottom: 130px; display: flex; flex-direction: column; gap: 22px; }
+.bullet-item { display: flex; gap: 20px; align-items: flex-start; }
+.bullet-item .marker { flex-shrink: 0; width: 24px; height: 3px; background: var(--rh-red); margin-top: 14px; border-radius: 2px; }
+.bullet-item .content { flex: 1; }
+.bullet-item .content strong { display: block; font-family: var(--font-display); font-weight: 700; font-size: 24px; color: #fff; margin-bottom: 4px; letter-spacing: -.01em; }
+.bullet-item .content p { font-family: var(--font-body); font-size: 20px; line-height: 1.5; color: var(--rh-gray-200); margin: 0; }
+
+/* ── Mermaid placeholder (converter output) ── */
+.mermaid-placeholder {
+  position: absolute; left: 96px; right: 96px; top: 380px; bottom: 130px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--rh-gray-700); border-radius: 10px;
+  background: rgba(26,26,26,.5);
+}
+.mermaid-placeholder pre {
+  font-family: var(--font-mono); font-size: 14px; color: var(--rh-gray-400);
+  white-space: pre-wrap; max-width: 80%; text-align: left;
+}
+.mermaid-placeholder::after {
+  content: 'MERMAID PLACEHOLDER — convert to CSS diagram or add mermaid.js CDN';
+  position: absolute; bottom: 20px;
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--rh-red); opacity: .7;
+}
+
+/* ── Two-column grid (generic) ── */
+.dual-panel { position: absolute; left: 96px; right: 96px; top: 360px; bottom: 100px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+.dual-col { background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700); border-radius: 10px; padding: 28px 32px; display: flex; flex-direction: column; overflow: hidden; }
+.dual-col .dc-head { font-family: var(--font-mono); font-size: 14px; letter-spacing: .22em; text-transform: uppercase; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--rh-gray-700); color: var(--rh-red); }
+.dual-col .dc-items { display: flex; flex-direction: column; gap: 9px; }
+.dc-item { padding-left: 16px; position: relative; font-family: var(--font-body); font-size: 16px; line-height: 1.45; color: var(--rh-gray-200); }
+.dc-item::before { content: '\2014'; position: absolute; left: 0; font-weight: 700; color: var(--rh-red); }
+.dc-item strong { color: #fff; font-weight: 700; }
+
+/* ── Comparison cards ── */
+.cmp-grid { position: absolute; left: 96px; right: 96px; top: 380px; bottom: 190px; display: grid; grid-template-columns: 1fr 80px 1fr; gap: 0; align-items: stretch; }
+.cmp-card { background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700); border-radius: 10px; padding: 36px 36px 32px; display: flex; flex-direction: column; }
+.cmp-card.old { border-top: 4px solid var(--rh-red); }
+.cmp-card.new { border-top: 4px solid var(--rh-teal); }
+.cmp-card .cmp-label { font-family: var(--font-mono); font-size: 14px; letter-spacing: .22em; text-transform: uppercase; margin-bottom: 18px; }
+.cmp-card.old .cmp-label { color: var(--rh-red); }
+.cmp-card.new .cmp-label { color: var(--rh-teal); }
+.cmp-card h3 { font-family: var(--font-display); font-weight: 900; font-size: 34px; color: #fff; margin-bottom: 22px; letter-spacing: -.015em; }
+.cmp-card .cmp-items { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+.cmp-card .cmp-items li { list-style: none; position: relative; padding-left: 20px; font-family: var(--font-body); font-size: 19px; line-height: 1.5; color: var(--rh-gray-200); }
+.cmp-card.old .cmp-items li::before { content: '\00D7'; position: absolute; left: 0; color: var(--rh-red); font-weight: 700; font-family: var(--font-mono); }
+.cmp-card.new .cmp-items li::before { content: '\2713'; position: absolute; left: 0; color: var(--rh-teal); font-weight: 700; font-family: var(--font-mono); }
+.cmp-card .cmp-items li strong { color: #fff; }
+.cmp-arrow-mid { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
+.cmp-arrow-mid .ca-sym { font-family: var(--font-mono); font-size: 32px; color: var(--rh-gray-400); }
+.cmp-arrow-mid .ca-lbl { font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--rh-gray-400); writing-mode: vertical-rl; text-orientation: mixed; }
+
+/* ── Future / resources layout ── */
+.future-layout { position: absolute; left: 96px; right: 96px; top: 380px; bottom: 130px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+.future-col { display: flex; flex-direction: column; gap: 14px; }
+.future-col .fc-head { font-family: var(--font-mono); font-size: 14px; letter-spacing: .22em; text-transform: uppercase; margin-bottom: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--rh-gray-700); }
+.future-col .fc-head.open { color: var(--rh-gold); }
+.future-col .fc-head.links { color: var(--rh-blue); }
+.future-item { background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700); border-radius: var(--r-md); padding: 14px 18px; }
+.future-item strong { display: block; font-family: var(--font-display); font-weight: 700; font-size: 18px; color: #fff; margin-bottom: 4px; }
+.future-item p { font-family: var(--font-body); font-size: 15px; line-height: 1.4; color: var(--rh-gray-200); margin: 0; }
+.future-item a { color: var(--rh-blue); text-decoration: none; border-bottom: 1px solid rgba(0,102,204,.4); }
+.future-item a:hover { border-bottom-color: var(--rh-blue); }
+.future-item code { font-family: var(--font-mono); font-size: 14px; background: rgba(255,255,255,.06); padding: 1px 6px; border-radius: 3px; }
+
+/* ── Light mode ── */
+body.light-mode .slide { background: linear-gradient(rgba(0,0,0,.03) 1px, transparent 1px) 0 0/72px 72px, linear-gradient(90deg, rgba(0,0,0,.03) 1px, transparent 1px) 0 0/72px 72px, #F5F5F5; color: #151515; }
+body.light-mode .slide.glow { background: radial-gradient(circle 900px at 92% -8%, rgba(238,0,0,.12), transparent 65%), linear-gradient(rgba(0,0,0,.03) 1px, transparent 1px) 0 0/72px 72px, linear-gradient(90deg, rgba(0,0,0,.03) 1px, transparent 1px) 0 0/72px 72px, #F5F5F5; }
+body.light-mode h1, body.light-mode h2, body.light-mode h3, body.light-mode h4,
+body.light-mode .bullet-item .content strong, body.light-mode .dc-item strong,
+body.light-mode .cmp-card h3, body.light-mode .future-item strong { color: #151515; }
+body.light-mode .bullet-item .content p, body.light-mode .dc-item,
+body.light-mode .cmp-card .cmp-items li, body.light-mode .future-item p,
+body.light-mode .s-title .sub, body.light-mode .head .lede { color: #3C3C3C; }
+body.light-mode .dual-col, body.light-mode .cmp-card, body.light-mode .future-item { background: #fff; border-color: #D2D2D2; }
+body.light-mode .foot { border-top-color: #D2D2D2; }
+
+body.exporting .foot { display: none; }
+
+/* ── Zone grid (architecture diagrams) ── */
+.zone-grid {
+  position: absolute; left: 96px; right: 96px; top: 380px; bottom: 130px;
+  display: grid; gap: 0; align-items: stretch;
+}
+.zone {
+  background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700);
+  border-radius: 10px; padding: 28px 28px 24px; display: flex;
+  flex-direction: column; gap: 16px;
+}
+.zone.zone-src { border-top: 4px solid var(--rh-gold); }
+.zone.zone-ocp { border-top: 4px solid var(--rh-red); }
+.zone.zone-aro { border-top: 4px solid var(--rh-teal); }
+.zone.zone-rosa { border-top: 4px solid var(--rh-blue); }
+.zone .zone-label {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: .22em;
+  text-transform: uppercase; margin-bottom: 4px;
+}
+.zone.zone-src .zone-label { color: var(--rh-gold); }
+.zone.zone-ocp .zone-label { color: var(--rh-red); }
+.zone.zone-aro .zone-label { color: var(--rh-teal); }
+.zone.zone-rosa .zone-label { color: var(--rh-blue); }
+.zone-node {
+  background: #0F0F0F; border: 1px solid var(--rh-gray-700);
+  border-radius: var(--r-lg); padding: 18px 20px; flex: 1;
+}
+.zone-node h4 {
+  font-family: var(--font-display); font-weight: 700; font-size: 21px;
+  color: #fff; margin-bottom: 8px; letter-spacing: -.01em;
+}
+.zone-node p {
+  font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  color: var(--rh-gray-200); margin: 0;
+}
+.zone-arrow {
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 6px;
+}
+.zone-arrow .arr {
+  font-family: var(--font-mono); font-size: 32px; color: var(--rh-red); font-weight: 700;
+}
+.zone-arrow .arr-label {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--rh-gray-400); text-align: center;
+  max-width: 80px; line-height: 1.3;
+}
+
+/* ── Horizontal pipeline ── */
+.pipe-layout {
+  position: absolute; left: 72px; right: 72px; top: 380px; bottom: 130px;
+  display: flex; align-items: center; gap: 0;
+}
+.pipe-node {
+  background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700);
+  border-radius: var(--r-lg); padding: 20px 18px; flex: 1;
+  min-width: 0; display: flex; flex-direction: column; gap: 6px;
+}
+.pipe-node.accent { border-top: 3px solid var(--rh-red); }
+.pipe-node.external { background: #0F0F0F; border: 1px dashed var(--rh-gray-700); }
+.pipe-node .pn-label {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--rh-gray-400);
+}
+.pipe-node h4 {
+  font-family: var(--font-display); font-weight: 700; font-size: 18px;
+  color: #fff; letter-spacing: -.01em;
+}
+.pipe-node p {
+  font-family: var(--font-body); font-size: 13px; line-height: 1.45;
+  color: var(--rh-gray-200); margin: 0;
+}
+.pipe-arrow {
+  flex-shrink: 0; width: 44px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+}
+.pipe-arrow .pa-sym {
+  font-family: var(--font-mono); font-size: 24px; color: var(--rh-red); font-weight: 700;
+}
+.pipe-arrow .pa-lbl {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--rh-gray-400); text-align: center; line-height: 1.2;
+}
+
+/* ── Hub-spoke (portal integrations) ── */
+.hub-layout {
+  position: absolute; left: 96px; right: 96px; top: 360px; bottom: 130px;
+  display: grid; grid-template-columns: 1.2fr 60px 1fr; gap: 0; align-items: center;
+}
+.hub-center {
+  background: var(--rh-gray-900); border: 2px solid var(--rh-red);
+  border-radius: 14px; padding: 32px 28px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.hub-center h3 {
+  font-family: var(--font-display); font-weight: 900; font-size: 32px; color: #fff;
+}
+.hub-center p {
+  font-family: var(--font-body); font-size: 17px; color: var(--rh-gray-200); margin: 0;
+}
+.hub-spokes {
+  display: flex; flex-direction: column; gap: 14px;
+}
+.hub-spoke {
+  background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700);
+  border-radius: var(--r-lg); padding: 16px 20px;
+  display: flex; gap: 14px; align-items: center;
+}
+.hub-spoke .hs-icon {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+  background: #0F0F0F; display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+}
+.hub-spoke .hs-icon.auth { border: 2px solid var(--rh-red); color: var(--rh-red); }
+.hub-spoke .hs-icon.coll { border: 2px solid var(--rh-teal); color: var(--rh-teal); }
+.hub-spoke .hs-icon.git { border: 2px solid var(--rh-purple); color: var(--rh-purple); }
+.hub-spoke .hs-icon.reg { border: 2px solid var(--rh-blue); color: var(--rh-blue); }
+.hub-spoke h4 {
+  font-family: var(--font-display); font-weight: 700; font-size: 18px; color: #fff;
+}
+.hub-spoke p {
+  font-family: var(--font-body); font-size: 14px; color: var(--rh-gray-200); margin: 0;
+}
+
+/* ── Platform cards ── */
+.platform-layout {
+  position: absolute; left: 96px; right: 96px; top: 380px; bottom: 130px;
+  display: grid; grid-template-columns: auto 60px 1fr 48px 1fr; gap: 0; align-items: stretch;
+}
+.platform-source {
+  display: flex; align-items: center;
+}
+.platform-source-card {
+  background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700);
+  border-radius: var(--r-lg); padding: 24px 22px; border-top: 4px solid var(--rh-gold);
+  display: flex; flex-direction: column; gap: 8px; min-width: 180px;
+}
+.platform-source-card h4 { font-family: var(--font-display); font-weight: 700; font-size: 22px; color: #fff; }
+.platform-source-card p { font-family: var(--font-mono); font-size: 12px; color: var(--rh-gray-400); margin: 0; letter-spacing: .1em; text-transform: uppercase; }
+.platform-card {
+  background: var(--rh-gray-900); border: 1px solid var(--rh-gray-700);
+  border-radius: 10px; padding: 24px 24px 20px; display: flex;
+  flex-direction: column; gap: 12px;
+}
+.platform-card.aro { border-top: 4px solid var(--rh-teal); }
+.platform-card.rosa { border-top: 4px solid var(--rh-blue); }
+.platform-card .pc-label {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: .22em; text-transform: uppercase;
+}
+.platform-card.aro .pc-label { color: var(--rh-teal); }
+.platform-card.rosa .pc-label { color: var(--rh-blue); }
+.platform-card h3 { font-family: var(--font-display); font-weight: 900; font-size: 28px; color: #fff; }
+.platform-feature {
+  background: #0F0F0F; border: 1px solid var(--rh-gray-700);
+  border-radius: var(--r-md); padding: 12px 16px;
+  font-family: var(--font-body); font-size: 16px; color: var(--rh-gray-200);
+}
+
+/* ── Light mode additions ── */
+body.light-mode .zone, body.light-mode .zone-node,
+body.light-mode .pipe-node, body.light-mode .hub-center,
+body.light-mode .hub-spoke, body.light-mode .platform-card,
+body.light-mode .platform-source-card, body.light-mode .platform-feature {
+  background: #fff; border-color: #D2D2D2;
+}
+body.light-mode .pipe-node.external, body.light-mode .zone-node { background: #F5F5F5; }
+body.light-mode .zone-node h4, body.light-mode .pipe-node h4,
+body.light-mode .hub-center h3, body.light-mode .hub-spoke h4,
+body.light-mode .platform-card h3, body.light-mode .platform-source-card h4 { color: #151515; }
+body.light-mode .zone-node p, body.light-mode .pipe-node p,
+body.light-mode .hub-center p, body.light-mode .hub-spoke p,
+body.light-mode .platform-feature { color: #3C3C3C; }
+
+</style>
+<script>
+(() => {
+  const DESIGN_W_DEFAULT = 1920;
+  const DESIGN_H_DEFAULT = 1080;
+  const OVERLAY_HIDE_MS = 1800;
+  const VALIDATE_ATTR = 'no_overflowing_text,no_overlapping_text,slide_sized_text';
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  const stylesheet = `
+    :host { position:fixed; inset:0; display:block; background:#000; color:#fff; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif; overflow:hidden; }
+    .stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+    .canvas { position:relative; transform-origin:center center; flex-shrink:0; background:#fff; will-change:transform; }
+    ::slotted(*) { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; box-sizing:border-box !important; overflow:hidden; opacity:0; pointer-events:none; visibility:hidden; }
+    ::slotted([data-deck-active]) { opacity:1; pointer-events:auto; visibility:visible; }
+    .tapzones { position:fixed; inset:0; display:flex; z-index:2147482000; pointer-events:none; }
+    .tapzone { flex:1; pointer-events:auto; -webkit-tap-highlight-color:transparent; }
+    @media (hover:hover) and (pointer:fine) { .tapzones { display:none; } }
+    .overlay { position:fixed; left:50%; bottom:22px; transform:translate(-50%,6px) scale(.92); filter:blur(6px); display:flex; align-items:center; gap:4px; padding:4px; background:#000; color:#fff; border-radius:999px; font-size:12px; font-feature-settings:"tnum" 1; letter-spacing:.01em; opacity:0; pointer-events:none; transition:opacity 260ms ease,transform 260ms cubic-bezier(.2,.8,.2,1),filter 260ms ease; transform-origin:center bottom; z-index:2147483000; user-select:none; }
+    .overlay[data-visible] { opacity:1; pointer-events:auto; transform:translate(-50%,0) scale(1); filter:blur(0); }
+    .btn { appearance:none; -webkit-appearance:none; background:transparent; border:0; margin:0; padding:0; color:inherit; font:inherit; cursor:default; display:inline-flex; align-items:center; justify-content:center; height:28px; min-width:28px; border-radius:999px; color:rgba(255,255,255,.72); transition:background 140ms ease,color 140ms ease; -webkit-tap-highlight-color:transparent; }
+    .btn:hover { background:rgba(255,255,255,.12); color:#fff; }
+    .btn:active { background:rgba(255,255,255,.18); }
+    .btn:focus,.btn:focus-visible { outline:none; }
+    .btn::-moz-focus-inner { border:0; }
+    .btn svg { width:14px; height:14px; display:block; }
+    .btn.reset { font-size:11px; font-weight:500; letter-spacing:.02em; padding:0 10px 0 12px; gap:6px; color:rgba(255,255,255,.72); }
+    .btn.reset .kbd { display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px; padding:0 4px; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:10px; line-height:1; color:rgba(255,255,255,.88); background:rgba(255,255,255,.12); border-radius:4px; }
+    .count { font-variant-numeric:tabular-nums; color:#fff; font-weight:500; padding:0 8px; min-width:42px; text-align:center; font-size:12px; }
+    .count .sep { color:rgba(255,255,255,.45); margin:0 3px; font-weight:400; }
+    .count .total { color:rgba(255,255,255,.55); }
+    .divider { width:1px; height:14px; background:rgba(255,255,255,.18); margin:0 2px; }
+    @media print {
+      :host { position:static; inset:auto; background:none; overflow:visible; color:inherit; }
+      .stage { position:static; display:block; }
+      .canvas { transform:none !important; width:auto !important; height:auto !important; background:none; will-change:auto; }
+      ::slotted(*) { position:relative !important; inset:auto !important; width:var(--deck-design-w) !important; height:var(--deck-design-h) !important; box-sizing:border-box !important; opacity:1 !important; visibility:visible !important; pointer-events:auto; break-after:page; page-break-after:always; break-inside:avoid; overflow:hidden; }
+      ::slotted(*:last-child) { break-after:auto; page-break-after:auto; }
+      .overlay,.tapzones { display:none !important; }
+    }
+  `;
+
+  class DeckStage extends HTMLElement {
+    static get observedAttributes() { return ['width','height','noscale']; }
+    constructor() {
+      super();
+      this._root = this.attachShadow({ mode:'open' });
+      this._index = 0; this._slides = []; this._notes = [];
+      this._hideTimer = null; this._mouseIdleTimer = null;
+      this._onKey = this._onKey.bind(this);
+      this._onResize = this._onResize.bind(this);
+      this._onSlotChange = this._onSlotChange.bind(this);
+      this._onMouseMove = this._onMouseMove.bind(this);
+      this._onTapBack = this._onTapBack.bind(this);
+      this._onTapForward = this._onTapForward.bind(this);
+    }
+    get designWidth() { return parseInt(this.getAttribute('width'),10) || DESIGN_W_DEFAULT; }
+    get designHeight() { return parseInt(this.getAttribute('height'),10) || DESIGN_H_DEFAULT; }
+    connectedCallback() {
+      this._render(); this._loadNotes(); this._syncPrintPageRule();
+      window.addEventListener('keydown', this._onKey);
+      window.addEventListener('resize', this._onResize);
+      window.addEventListener('mousemove', this._onMouseMove, { passive:true });
+    }
+    disconnectedCallback() {
+      window.removeEventListener('keydown', this._onKey);
+      window.removeEventListener('resize', this._onResize);
+      window.removeEventListener('mousemove', this._onMouseMove);
+      if (this._hideTimer) clearTimeout(this._hideTimer);
+      if (this._mouseIdleTimer) clearTimeout(this._mouseIdleTimer);
+    }
+    attributeChangedCallback() {
+      if (this._canvas) {
+        this._canvas.style.width = this.designWidth+'px';
+        this._canvas.style.height = this.designHeight+'px';
+        this._canvas.style.setProperty('--deck-design-w', this.designWidth+'px');
+        this._canvas.style.setProperty('--deck-design-h', this.designHeight+'px');
+        this._fit(); this._syncPrintPageRule();
+      }
+    }
+    _render() {
+      const style = document.createElement('style'); style.textContent = stylesheet;
+      const stage = document.createElement('div'); stage.className = 'stage';
+      const canvas = document.createElement('div'); canvas.className = 'canvas';
+      canvas.style.width = this.designWidth+'px'; canvas.style.height = this.designHeight+'px';
+      canvas.style.setProperty('--deck-design-w', this.designWidth+'px');
+      canvas.style.setProperty('--deck-design-h', this.designHeight+'px');
+      const slot = document.createElement('slot');
+      slot.addEventListener('slotchange', this._onSlotChange);
+      canvas.appendChild(slot); stage.appendChild(canvas);
+      const tapzones = document.createElement('div'); tapzones.className = 'tapzones';
+      tapzones.setAttribute('aria-hidden','true');
+      const tzBack = document.createElement('div'); tzBack.className = 'tapzone tapzone--back';
+      const tzMid = document.createElement('div'); tzMid.className = 'tapzone tapzone--mid'; tzMid.style.pointerEvents = 'none';
+      const tzFwd = document.createElement('div'); tzFwd.className = 'tapzone tapzone--fwd';
+      tzBack.addEventListener('click', this._onTapBack);
+      tzFwd.addEventListener('click', this._onTapForward);
+      tapzones.append(tzBack, tzMid, tzFwd);
+      const overlay = document.createElement('div'); overlay.className = 'overlay';
+      overlay.setAttribute('role','toolbar'); overlay.setAttribute('aria-label','Deck controls');
+      overlay.innerHTML = `
+        <button class="btn prev" type="button" aria-label="Previous slide" title="Previous"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg></button>
+        <span class="count"><span class="current">1</span><span class="sep">/</span><span class="total">1</span></span>
+        <button class="btn next" type="button" aria-label="Next slide" title="Next"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></button>
+        <span class="divider"></span>
+        <button class="btn reset" type="button" aria-label="Reset" title="Reset (R)">Reset<span class="kbd">R</span></button>`;
+      overlay.querySelector('.prev').addEventListener('click', () => this._go(this._index-1,'click'));
+      overlay.querySelector('.next').addEventListener('click', () => this._go(this._index+1,'click'));
+      overlay.querySelector('.reset').addEventListener('click', () => this._go(0,'click'));
+      this._root.append(style, stage, tapzones, overlay);
+      this._canvas = canvas; this._slot = slot; this._overlay = overlay;
+      this._countEl = overlay.querySelector('.current'); this._totalEl = overlay.querySelector('.total');
+    }
+    _syncPrintPageRule() {
+      const id = 'deck-stage-print-page';
+      let tag = document.getElementById(id);
+      if (!tag) { tag = document.createElement('style'); tag.id = id; document.head.appendChild(tag); }
+      tag.textContent = '@page{size:'+this.designWidth+'px '+this.designHeight+'px;margin:0}@media print{html,body{margin:0!important;padding:0!important;background:none!important;overflow:visible!important;height:auto!important}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}';
+    }
+    _onSlotChange() { this._collectSlides(); this._restoreIndex(); this._applyIndex({showOverlay:false,broadcast:true,reason:'init'}); this._fit(); }
+    _collectSlides() {
+      this._slides = this._slot.assignedElements({flatten:true}).filter(el => !['TEMPLATE','SCRIPT','STYLE'].includes(el.tagName));
+      this._slides.forEach((slide,i) => {
+        let label = slide.getAttribute('data-label');
+        if (!label) { const h = slide.querySelector('h1,h2,h3,[data-title]'); if (h) label = (h.textContent||'').trim().slice(0,40); }
+        if (!label) label = 'Slide';
+        slide.setAttribute('data-screen-label', pad2(i+1)+' '+label);
+        if (!slide.hasAttribute('data-om-validate')) slide.setAttribute('data-om-validate', VALIDATE_ATTR);
+        slide.setAttribute('data-deck-slide', String(i));
+      });
+      if (this._totalEl) this._totalEl.textContent = String(this._slides.length||1);
+      if (this._index >= this._slides.length) this._index = Math.max(0, this._slides.length-1);
+    }
+    _loadNotes() {
+      const tag = document.getElementById('speaker-notes');
+      if (!tag) { this._notes = []; return; }
+      try { const p = JSON.parse(tag.textContent||'[]'); if (Array.isArray(p)) this._notes = p; } catch(e) { this._notes = []; }
+    }
+    _restoreIndex() {
+      const h = (location.hash||'').match(/^#(\d+)$/);
+      if (h) { const n = parseInt(h[1],10)-1; if (n>=0 && n<this._slides.length) this._index = n; }
+    }
+    _applyIndex({showOverlay=true,broadcast=true,reason='init'}={}) {
+      if (!this._slides.length) return;
+      const prev = this._prevIndex==null ? -1 : this._prevIndex;
+      const curr = this._index;
+      try { history.replaceState(null,'','#'+(curr+1)); } catch(e) {}
+      this._slides.forEach((s,i) => { if (i===curr) s.setAttribute('data-deck-active',''); else s.removeAttribute('data-deck-active'); });
+      if (this._countEl) this._countEl.textContent = String(curr+1);
+      if (broadcast) {
+        try { window.postMessage({slideIndexChanged:curr},'*'); } catch(e) {}
+        this.dispatchEvent(new CustomEvent('slidechange',{detail:{index:curr,previousIndex:prev,total:this._slides.length,slide:this._slides[curr]||null,previousSlide:prev>=0?(this._slides[prev]||null):null,reason},bubbles:true,composed:true}));
+      }
+      this._prevIndex = curr;
+      if (showOverlay) this._flashOverlay();
+    }
+    _flashOverlay() {
+      if (!this._overlay) return;
+      this._overlay.setAttribute('data-visible','');
+      if (this._hideTimer) clearTimeout(this._hideTimer);
+      this._hideTimer = setTimeout(() => this._overlay.removeAttribute('data-visible'), OVERLAY_HIDE_MS);
+    }
+    _fit() {
+      if (!this._canvas) return;
+      if (this.hasAttribute('noscale')) { this._canvas.style.transform = 'none'; return; }
+      const s = Math.min(window.innerWidth/this.designWidth, window.innerHeight/this.designHeight);
+      this._canvas.style.transform = 'scale('+s+')';
+    }
+    _onResize() { this._fit(); }
+    _onMouseMove() { this._flashOverlay(); }
+    _onTapBack(e) { e.preventDefault(); this._go(this._index-1,'tap'); }
+    _onTapForward(e) { e.preventDefault(); this._go(this._index+1,'tap'); }
+    _onKey(e) {
+      const t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.metaKey||e.ctrlKey||e.altKey) return;
+      const key = e.key; let handled = true;
+      if (key==='ArrowRight'||key==='PageDown'||key===' '||key==='Spacebar') this._go(this._index+1,'keyboard');
+      else if (key==='ArrowLeft'||key==='PageUp') this._go(this._index-1,'keyboard');
+      else if (key==='Home') this._go(0,'keyboard');
+      else if (key==='End') this._go(this._slides.length-1,'keyboard');
+      else if (key==='r'||key==='R') this._go(0,'keyboard');
+      else if (/^[0-9]$/.test(key)) { const n = key==='0'?9:parseInt(key,10)-1; if (n<this._slides.length) this._go(n,'keyboard'); }
+      else handled = false;
+      if (handled) { e.preventDefault(); this._flashOverlay(); }
+    }
+    _go(i, reason='api') {
+      if (!this._slides.length) return;
+      const clamped = Math.max(0, Math.min(this._slides.length-1, i));
+      if (clamped===this._index) { this._flashOverlay(); return; }
+      this._index = clamped;
+      this._applyIndex({showOverlay:true,broadcast:true,reason});
+    }
+    get index() { return this._index; }
+    get length() { return this._slides.length; }
+    goTo(i) { this._go(i,'api'); }
+    next() { this._go(this._index+1,'api'); }
+    prev() { this._go(this._index-1,'api'); }
+    reset() { this._go(0,'api'); }
+  }
+  if (!customElements.get('deck-stage')) customElements.define('deck-stage', DeckStage);
+})();
+
+</script>
+</head>
+<body>
+
+<deck-stage width="1920" height="1080">
+
+<section class="slide glow s-title" data-label="Title">
+  <div class="stage">
+    <div class="eyebrow">AAP on OpenShift</div>
+    <div class="div60" style="margin:18px 0 0"></div>
+    <h1>Mad Hatter</h1>
+    <p class="sub">Ansible-driven deployer for AAP 2.7 on ARO &amp; ROSA — one command, fully configured</p>
+    <div class="tags">
+      <span class="tag accent">AAP 2.7</span>
+      <span class="tag">OpenShift</span>
+      <span class="tag">ContainerLab</span>
+      <span class="tag">OCP-V</span>
+      <span class="tag">Automation Portal</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-label="Deploying AAP on OpenShift is complex and manual">
+  <div class="num"><strong>02</strong></div>
+  <div class="head">
+    <div class="eyebrow">Problem Statement</div>
+    <h2>Deploying AAP on OpenShift is complex and manual</h2>
+  </div>
+  <div class="bullet-panel">
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>AAP operator installation requires multiple manual steps</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Configuration as Code setup is time-consuming and error-prone</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Add-ons (ContainerLab, OCP-V, Portal) each have their own deployment process</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Demo environments need to be reproducible and fast to stand up</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>AAP 2.7 introduces breaking changes (gateway API, new collections)</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">02</span></div>
+</section>
+
+<section class="slide" data-label="One command deploys everything">
+  <div class="num"><strong>03</strong></div>
+  <div class="head">
+    <div class="eyebrow">Solution</div>
+    <h2>One command deploys everything</h2>
+  </div>
+  <div class="bullet-panel">
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible-navigator run deploy_aro.yml</code> — complete AAP on Azure</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible-navigator run deploy_rosa.yml</code> — complete AAP on AWS</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Tag-based component selection (<code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">--tags aap,clab,apd,ocpv</code>)</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Pre-built Execution Environments on Quay.io</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Supports AAP 2.7 gateway API and <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible.platform</code> collection</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Fully declarative — credential files + one playbook</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">03</span></div>
+</section>
+
+<section class="slide glow" data-label="Architecture">
+  <div class="num"><strong>04</strong> · architecture</div>
+  <div class="head">
+    <div class="eyebrow">Architecture</div>
+    <h2>How it fits together</h2>
+  </div>
+  <div class="zone-grid" style="grid-template-columns:1fr 60px 2.4fr">
+    <div class="zone zone-src">
+      <div class="zone-label">Source</div>
+      <div class="zone-node">
+        <h4>ansible-navigator</h4>
+        <p>CLI entry point — runs playbooks inside the EE container</p>
+      </div>
+      <div class="zone-node">
+        <h4>Execution Environment</h4>
+        <p><code style="font-family:var(--font-mono);font-size:13px;background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">quay.io/matferna/mh-*</code></p>
+        <p>oc, helm, collections, Python deps</p>
+      </div>
+    </div>
+    <div class="zone-arrow">
+      <div class="arr">→</div>
+      <div class="arr-label">deploys</div>
+    </div>
+    <div class="zone zone-ocp">
+      <div class="zone-label">OpenShift Cluster</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="zone-node"><h4>AAP 2.7</h4><p>Operator-managed platform with gateway API</p></div>
+        <div class="zone-node"><h4>ContainerLab</h4><p>Multi-vendor network topologies for labs</p></div>
+        <div class="zone-node"><h4>OCP Virtualization</h4><p>Windows VMs on bare-metal nodes</p></div>
+        <div class="zone-node"><h4>Automation Portal</h4><p>Self-service UI deployed via Helm</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">04</span></div>
+</section>
+
+<section class="slide" data-label="Supported Platforms">
+  <div class="num"><strong>05</strong> · platforms</div>
+  <div class="head">
+    <div class="eyebrow">Supported Platforms</div>
+    <h2>Two flavors, one workflow</h2>
+  </div>
+  <div class="platform-layout">
+    <div class="platform-source">
+      <div class="platform-source-card">
+        <h4>RHDP Catalog</h4>
+        <p>Order</p>
+      </div>
+    </div>
+    <div class="zone-arrow"><div class="arr">→</div></div>
+    <div class="platform-card aro">
+      <div class="pc-label">ARO (Azure)</div>
+      <h3>Azure Red Hat OpenShift</h3>
+      <div class="platform-feature">AAP + ContainerLab</div>
+      <div class="platform-feature">Network CasC</div>
+      <div class="platform-feature">OCP-V Product Demos</div>
+    </div>
+    <div class="zone-arrow"><div class="arr" style="visibility:hidden">→</div></div>
+    <div class="platform-card rosa">
+      <div class="pc-label">ROSA (AWS)</div>
+      <h3>Red Hat OpenShift on AWS</h3>
+      <div class="platform-feature">AAP + Bare-metal Nodes</div>
+      <div class="platform-feature">OCP Virtualization</div>
+      <div class="platform-feature">OCP-V Product Demos</div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">05</span></div>
+</section>
+
+<section class="slide glow-bl" data-label="Deployment Flow">
+  <div class="num"><strong>06</strong> · flow</div>
+  <div class="head">
+    <div class="eyebrow">Deployment Flow</div>
+    <h2>From credentials to running environment</h2>
+  </div>
+  <div class="pipe-layout">
+    <div class="pipe-node external">
+      <div class="pn-label">Input</div>
+      <h4>Credential Files</h4>
+      <p>aro/rosa/user creds from RHDP</p>
+    </div>
+    <div class="pipe-arrow"><div class="pa-sym">→</div></div>
+    <div class="pipe-node accent">
+      <div class="pn-label">Entry Point</div>
+      <h4>ansible-navigator</h4>
+      <p>Runs inside EE container</p>
+    </div>
+    <div class="pipe-arrow"><div class="pa-sym">→</div></div>
+    <div class="pipe-node accent">
+      <div class="pn-label">Step 1</div>
+      <h4>Install Operator</h4>
+      <p>AAP operator via OLM</p>
+    </div>
+    <div class="pipe-arrow"><div class="pa-sym">→</div></div>
+    <div class="pipe-node accent">
+      <div class="pn-label">Step 2</div>
+      <h4>Inject Manifest</h4>
+      <p>License + entitlements</p>
+    </div>
+    <div class="pipe-arrow"><div class="pa-sym">→</div></div>
+    <div class="pipe-node accent">
+      <div class="pn-label">Step 3</div>
+      <h4>Apply CasC</h4>
+      <p>infra.aap_configuration</p>
+    </div>
+    <div class="pipe-arrow"><div class="pa-sym">→</div></div>
+    <div class="pipe-node external">
+      <div class="pn-label">Step 4</div>
+      <h4>Deploy Add-ons</h4>
+      <p>ContainerLab / OCP-V / Portal</p>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">06</span></div>
+</section>
+
+<section class="slide" data-label="Automation Portal">
+  <div class="num"><strong>07</strong> · integrations</div>
+  <div class="head">
+    <div class="eyebrow">Automation Portal</div>
+    <h2>Self-service UI integrations</h2>
+  </div>
+  <div class="hub-layout">
+    <div class="hub-center">
+      <div class="eyebrow" style="font-size:13px">Helm Chart</div>
+      <h3>Automation Portal</h3>
+      <p>Build EEs, browse content, generate playbooks</p>
+    </div>
+    <div class="zone-arrow"><div class="arr">→</div></div>
+    <div class="hub-spokes">
+      <div class="hub-spoke">
+        <div class="hs-icon auth">OAuth</div>
+        <div>
+          <h4>AAP 2.7</h4>
+          <p>OAuth2 authentication &amp; job launch</p>
+        </div>
+      </div>
+      <div class="hub-spoke">
+        <div class="hs-icon coll">Hub</div>
+        <div>
+          <h4>Private Automation Hub</h4>
+          <p>Collections &amp; certified content</p>
+        </div>
+      </div>
+      <div class="hub-spoke">
+        <div class="hs-icon git">Git</div>
+        <div>
+          <h4>GitHub / GitLab</h4>
+          <p>Content discovery &amp; repo sync</p>
+        </div>
+      </div>
+      <div class="hub-spoke">
+        <div class="hs-icon reg">OCI</div>
+        <div>
+          <h4>registry.redhat.io</h4>
+          <p>OCI plugin delivery</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">07</span></div>
+</section>
+
+<section class="slide glow" data-label="Compose your environment with tags">
+  <div class="num"><strong>08</strong></div>
+  <div class="head">
+    <div class="eyebrow">Tag-Based Component Selection</div>
+    <h2>Compose your environment with tags</h2>
+  </div>
+  <div class="bullet-panel">
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">--tags aap</code> — AAP operator + manifest only</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">--tags aap,clab</code> — add ContainerLab networking labs</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">--tags aap,ocpv</code> — add bare-metal nodes for OCP Virtualization</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">--tags aap,apd</code> — add Ansible product demo CasC</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">--tags aap,clab,apd</code> — networking labs + product demos</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>No tags — deploy everything</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">08</span></div>
+</section>
+
+<section class="slide" data-label="Breaking changes handled transparently">
+  <div class="num"><strong>09</strong></div>
+  <div class="head">
+    <div class="eyebrow">AAP 2.7 Support</div>
+    <h2>Breaking changes handled transparently</h2>
+  </div>
+  <div class="bullet-panel">
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        <strong>Platform gateway</strong>
+        <p>is the sole API entry point (no direct <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">/api/v2/</code>)</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>CasC authenticates via gateway OAuth tokens (<code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible.platform.token</code>)</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible.platform</code> collection replaces deprecated <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible.hub</code></p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>OCI plugin delivery from <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">registry.redhat.io</code></p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Operator channel defaults to <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">stable-2.7</code> (override for older clusters)</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">09</span></div>
+</section>
+
+<section class="slide" data-label="Modular, reusable components">
+  <div class="num"><strong>10</strong></div>
+  <div class="head">
+    <div class="eyebrow">Roles</div>
+    <h2>Modular, reusable components</h2>
+  </div>
+  <div class="bullet-panel">
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        <strong>aap_operator</strong>
+        <p>installs AAP operator, waits for readiness, injects manifest</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        <strong>clab</strong>
+        <p>deploys ContainerLab with multi-vendor network topologies</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        <strong>openshift_virtualization_aap</strong>
+        <p>provisions bare-metal machinepool + OCP-V</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        <strong>self-service</strong>
+        <p>deploys Automation Portal via Helm (OAuth, secrets, plugins)</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        <strong>aro_creds / rosa_creds / user_creds</strong>
+        <p>parse platform-specific credentials</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        <strong>install_operator</strong>
+        <p>generic OLM operator installer</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">10</span></div>
+</section>
+
+<section class="slide" data-label="Pre-built, ready to use">
+  <div class="num"><strong>11</strong></div>
+  <div class="head">
+    <div class="eyebrow">Execution Environments</div>
+    <h2>Pre-built, ready to use</h2>
+  </div>
+  <div class="bullet-panel">
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">quay.io/matferna/mh-aro:latest</code> — for ARO deployments</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p><code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">quay.io/matferna/mh-rosa:latest</code> — for ROSA deployments</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Contains: <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">oc</code>, <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">helm</code>, Ansible collections, Python deps</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Volume mounts: SSH keys at <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">/root/keys/</code>, manifest at <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">/root/manifests/</code></p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Rebuild with <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible-builder</code> if customization needed</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">11</span></div>
+</section>
+
+<section class="slide glow-bl" data-label="Three steps to a running environment">
+  <div class="num"><strong>12</strong></div>
+  <div class="head">
+    <div class="eyebrow">Quick Start</div>
+    <h2>Three steps to a running environment</h2>
+  </div>
+  <div class="bullet-panel">
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Order environment from RHDP catalog (~30 min provision)</p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Copy credentials: <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">aro.creds.yml</code> or <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">rosa.creds.yml</code> + <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">user.creds.yml</code></p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Run: <code style="font-family:var(--font-mono);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">ansible-navigator run deploy_aro.yml --tags aap --eei quay.io/matferna/mh-aro:latest</code></p>
+      </div>
+    </div>
+    <div class="bullet-item">
+      <div class="marker"></div>
+      <div class="content">
+        
+        <p>Environment ready in ~15 minutes</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">12</span></div>
+</section>
+
+<section class="slide glow-bl" data-label="Future Work">
+  <div class="num"><strong>13</strong> · roadmap</div>
+  <div class="head">
+    <div class="eyebrow">Roadmap</div>
+    <h2>Future Work</h2>
+  </div>
+  <div class="future-layout">
+    <div class="future-col">
+      <div class="fc-head open">Platform Evolution</div>
+      <div class="future-item">
+        <strong>AAP 2.8 support</strong>
+        <p>Track operator channel evolution as new versions release</p>
+      </div>
+      <div class="future-item">
+        <strong>Lightspeed integration</strong>
+        <p>AI-assisted playbook generation in Automation Portal</p>
+      </div>
+      <div class="future-item">
+        <strong>Multi-cluster deployment</strong>
+        <p>Hub + spoke pattern for federated environments</p>
+      </div>
+    </div>
+    <div class="future-col">
+      <div class="fc-head links">Operations</div>
+      <div class="future-item">
+        <strong>Automated credential rotation</strong>
+        <p>Lifecycle management for long-lived environments</p>
+      </div>
+      <div class="future-item">
+        <strong>GitHub Actions CI</strong>
+        <p>Automated EE rebuilds on collection updates</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">13</span></div>
+</section>
+
+<section class="slide glow" data-label="Questions?">
+  <div class="num"><strong>14</strong></div>
+  <div class="head">
+    <div class="eyebrow">Questions?</div>
+    <h2>Resources &amp; Links</h2>
+  </div>
+  <div class="future-layout">
+    <div class="future-col">
+      <div class="fc-head links">Code &amp; Images</div>
+      <div class="future-item">
+        <strong>Repository</strong>
+        <p><a href="https://github.com/l3acon/mad-hatter">github.com/l3acon/mad-hatter</a></p>
+      </div>
+      <div class="future-item">
+        <strong>EE Images</strong>
+        <p><code>quay.io/matferna/mh-aro</code><br><code>quay.io/matferna/mh-rosa</code></p>
+      </div>
+    </div>
+    <div class="future-col">
+      <div class="fc-head links">Documentation</div>
+      <div class="future-item">
+        <strong>RHDP Catalog</strong>
+        <p><a href="https://catalog.demo.redhat.com">catalog.demo.redhat.com</a></p>
+      </div>
+      <div class="future-item">
+        <strong>AAP 2.7 Documentation</strong>
+        <p><a href="https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.7">docs.redhat.com/.../2.7</a></p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="pg">14</span></div>
+</section>
+
+</deck-stage>
+
+<script type="application/json" id="speaker-notes">
+[
+  "Mad Hatter deploys a complete AAP 2.7 environment on OpenShift (ARO or ROSA) with optional add-ons — all from a single ansible-navigator command.",
+  "Before Mad Hatter, standing up a fully-configured AAP environment with networking labs, Windows VMs, and a self-service portal took hours of manual work. Now it's one command.",
+  "The key insight is composability via tags. Need just AAP? One tag. Need AAP plus networking labs? Two tags. Everything? No tags.",
+  "ansible-navigator runs inside a purpose-built EE that contains all required tools (oc, helm, ansible collections). The EE deploys all components to the target OpenShift cluster.",
+  "Both platforms are ordered from the Red Hat Demo Platform catalog. ARO is Azure-based with ContainerLab for networking. ROSA is AWS-based with bare-metal nodes for real virtualization.",
+  "Credential files are parsed from RHDP output. The playbook handles operator install, manifest injection, CasC application, and add-on deployment in sequence.",
+  "The Automation Portal provides a self-service UI for building EEs, browsing content, and generating playbooks. It integrates with AAP via OAuth2 and pulls plugins as OCI artifacts.",
+  "This is the composability story. Each tag is independent and idempotent. You can add components later by re-running with additional tags.",
+  "AAP 2.7 is a significant architectural change. Mad Hatter abstracts all of this — users don't need to know about gateway routing or collection migration.",
+  "Each role is independently testable. The credential roles normalize different RHDP formats into a common variable set consumed by all other roles.",
+  "The EEs eliminate \"works on my machine\" issues. Everyone runs the same container with the same tool versions.",
+  "The total time from ordering to running demo is about 45 minutes — 30 for provisioning, 15 for deployment. Compare to hours of manual setup.",
+  "The architecture is designed for forward compatibility. Operator channel and collection versions are variables, not hardcoded.",
+  ""
+]
+</script>
+
+</body>
+</html>

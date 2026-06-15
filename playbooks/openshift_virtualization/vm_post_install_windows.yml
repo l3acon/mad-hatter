@@ -11,6 +11,8 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   tasks:
     - name: Validate required job variables
       ansible.builtin.assert:
@@ -103,6 +105,29 @@
       delay: 10
       register: _winrm_resize
       until: _winrm_resize is not failed
+
+    - name: Disable UAC remote token filtering for full admin elevation
+      ansible.windows.win_shell: |
+        $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+        $current = (Get-ItemProperty -Path $path -Name LocalAccountTokenFilterPolicy -ErrorAction SilentlyContinue).LocalAccountTokenFilterPolicy
+        if ($current -ne 1) {
+          Set-ItemProperty -Path $path -Name LocalAccountTokenFilterPolicy -Value 1 -Type DWord
+          Write-Output 'changed'
+        } else {
+          Write-Output 'ok'
+        }
+      register: _uac_policy
+      changed_when: "'changed' in _uac_policy.stdout"
+
+    - name: Reset WinRM connection to pick up unfiltered admin token
+      ansible.builtin.meta: reset_connection
+
+    - name: Verify reconnection after UAC policy change
+      ansible.windows.win_ping:
+      retries: 5
+      delay: 10
+      register: _winrm_reconnect
+      until: _winrm_reconnect is not failed
 
     - name: Install Chocolatey when missing
       ansible.windows.win_shell: |

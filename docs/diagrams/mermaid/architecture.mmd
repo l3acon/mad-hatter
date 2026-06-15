@@ -1,0 +1,19 @@
+---
+title: "Mad Hatter — Architecture"
+---
+graph LR
+  NAV["ansible-navigator"]
+  EE["Execution Environment<br/>(quay.io/matferna/mh-*)"]
+
+  subgraph OCP["OpenShift Cluster"]
+    AAP["AAP 2.7<br/>(Operator)"]
+    CLAB["ContainerLab<br/>(Network Labs)"]
+    OCPV["OCP Virtualization<br/>(Windows VMs)"]
+    PORTAL["Automation Portal<br/>(Helm)"]
+  end
+
+  NAV -->|"runs inside"| EE
+  EE -->|"deploys"| AAP
+  EE -->|"deploys"| CLAB
+  EE -->|"deploys"| OCPV
+  EE -->|"deploys"| PORTAL
