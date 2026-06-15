@@ -367,6 +367,11 @@
 - name: Install requested package with Chocolatey
   hosts: ocpv_win_guests
   gather_facts: false
+  become: true
+  become_method: runas
+  become_user: "{{ ocpv_windows_admin_user | default('Administrator') }}"
+  vars:
+    ansible_become_password: "{{ ocpv_windows_admin_password }}"
   tasks:
     - name: Wait for WinRM session
       ansible.windows.win_ping:
@@ -374,6 +379,7 @@
       delay: 15
       register: _winrm_ping
       until: _winrm_ping is not failed and _winrm_ping is not unreachable
+      become: false
 
     - name: Increase WinRM MaxEnvelopeSizekb for large command output
       ansible.windows.win_shell: |
