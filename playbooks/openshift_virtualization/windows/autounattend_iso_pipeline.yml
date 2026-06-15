@@ -14,6 +14,7 @@
   connection: local
   gather_facts: true
   vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     ocpv_win_autounattend_enabled: false
     ocpv_win_namespace: ocpv-aap-smoke
     ocpv_win_autounattend_iso_dv_name: windows-autounattend-iso

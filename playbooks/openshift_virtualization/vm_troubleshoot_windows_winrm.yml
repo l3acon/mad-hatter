@@ -16,6 +16,7 @@
   # for all cases, so force local transport here; play 2 also uses local + uri to the guest IP.
   vars:
     ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   tasks:
     - name: Validate required extra vars
       ansible.builtin.assert:
@@ -106,6 +107,7 @@
   gather_facts: false
   vars:
     ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   tasks:
     # win_ping needs ansible.windows on the execution environment. mh-rosa (kubevirt EE) does not ship it;
     # POST /wsman still exercises the same TCP path and confirms the WinRM HTTP listener responds.

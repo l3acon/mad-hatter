@@ -14,6 +14,7 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     ocpv_cost_opt_cluster_name: "{{ ocpv_cost_opt_cluster_name | default('rosa-tdnkz') }}"
     ocpv_cost_opt_machinepool: "{{ ocpv_cost_opt_machinepool | default('rosa-virt') }}"
     ocpv_cost_opt_namespaces: "{{ ocpv_cost_opt_namespaces | default(['ocpv-aap-smoke']) }}"

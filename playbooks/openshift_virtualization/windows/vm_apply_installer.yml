@@ -8,6 +8,7 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     ocpv_win_namespace: ocpv-aap-smoke
     ocpv_win_installer_vm_name: windows-server-installer
     ocpv_win_iso_dv_name: windows-server-eval-iso
