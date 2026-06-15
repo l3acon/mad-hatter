@@ -169,6 +169,32 @@ openshift_virt_aap_ssp_user_enabled: true
 openshift_virt_aap_ssp_user_name: win-vm-user
 openshift_virt_aap_ssp_user_password: "{{ lookup('env', 'OCPV_SSP_USER_PASSWORD') | default('ChangeMe123!', true) }}"
 
+# Self-service survey dropdown choices (multiplechoice).
+# Golden source DataVolumes available for CDI-cloning.
+openshift_virt_aap_ssp_golden_dv_choices:
+  - windows-server-os-work
+
+# Instancetype choices for the self-service Windows VM survey.
+openshift_virt_aap_ssp_instancetype_choices:
+  - u1.medium
+  - u1.large
+  - u1.xlarge
+  - u1.2xlarge
+  - u1.4xlarge
+
+# Preference choices for the self-service Windows VM survey.
+openshift_virt_aap_ssp_preference_choices:
+  - windows.2k22
+  - windows.2k22.virtio
+  - windows.2k19
+  - windows.2k19.virtio
+  - windows.2k25
+  - windows.2k25.virtio
+  - windows.11
+  - windows.11.virtio
+  - windows.10
+  - windows.10.virtio
+
 openshift_virt_aap_openshift_credential:
   - name: OpenShift Credential
     credential_type: OpenShift or Kubernetes API Bearer Token

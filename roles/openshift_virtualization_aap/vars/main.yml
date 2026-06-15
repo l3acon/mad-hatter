@@ -270,21 +270,27 @@ controller_templates:
           max: 63
         - question_name: Golden source DataVolume name
           question_description: >-
-            Existing DataVolume in the same namespace whose PVC will be CDI-cloned.
-          type: text
+            Pre-built golden image whose PVC will be CDI-cloned for this VM.
+          type: multiplechoice
           variable: ocpv_win_root_dv_name
           required: true
-          min: 1
-          max: 253
-        - question_name: Instancetype name
-          type: text
+          choices: "{{ openshift_virt_aap_ssp_golden_dv_choices }}"
+          default: "{{ openshift_virt_aap_ssp_golden_dv_choices | first }}"
+        - question_name: Instancetype
+          question_description: >-
+            VM sizing (vCPU/memory). u1.medium = 1 vCPU / 4 GiB.
+          type: multiplechoice
           variable: ocpv_instancetype_name
-          required: false
+          required: true
+          choices: "{{ openshift_virt_aap_ssp_instancetype_choices }}"
           default: u1.medium
-        - question_name: Preference name
-          type: text
+        - question_name: Preference
+          question_description: >-
+            Guest OS optimization profile (clock, drivers, firmware).
+          type: multiplechoice
           variable: ocpv_preference_name
-          required: false
+          required: true
+          choices: "{{ openshift_virt_aap_ssp_preference_choices }}"
           default: windows.2k22
         - question_name: Local Administrator password
           type: password
