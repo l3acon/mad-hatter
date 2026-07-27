@@ -18,15 +18,14 @@ fields:
 selection_order: host_name,name,ip_address
 
 columns:
-  host_name: name
-  ip_address: ansible_host
+  - host_name: name
+  - ip_address: ansible_host
 
 compose:
   ansible_host: ip_address
 
 groups:
   linux: sys_class_name == "cmdb_ci_linux_server"
-  rhel: "'Red Hat' in os"
 
 keyed_groups:
   - key: environment | default("unknown") | lower
