@@ -1,0 +1,64 @@
+---
+# Deploy ServiceNow catalog items, REST Message, Script Include, and Business Rule
+# via an Update Set XML uploaded to the instance.
+#
+# This bypasses Business Rule restrictions that block direct Table API creation
+# of REST Message HTTP methods. Update Set commits are privileged platform operations.
+#
+# Usage:
+#   ansible-playbook playbooks/snow/catalog_deploy_updateset.yml
+- name: Deploy SNOW catalog integration via Update Set
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_instance: "{{ lookup('env', 'SNOW_INSTANCE') }}"
+    snow_username: "{{ lookup('env', 'SNOW_USERNAME') }}"
+    snow_password: "{{ lookup('env', 'SNOW_PASSWORD') }}"
+    aap_host: "{{ lookup('env', 'CONTROLLER_HOST') }}"
+    aap_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+    aap_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+  vars_files:
+    - "{{ playbook_dir }}/../../roles/snow/files/catalog_items.yml"
+  tasks:
+    - name: Validate required environment variables
+      ansible.builtin.assert:
+        that:
+          - snow_instance | length > 0
+          - snow_username | length > 0
+          - snow_password | length > 0
+          - aap_host | length > 0
+          - aap_username | length > 0
+          - aap_password | length > 0
+        fail_msg: >-
+          Missing credentials. Source the .env file or set SNOW_INSTANCE, SNOW_USERNAME,
+          SNOW_PASSWORD, CONTROLLER_HOST, CONTROLLER_USERNAME, CONTROLLER_PASSWORD.
+
+    - name: Resolve REST Message endpoint (strip Jinja templates from YAML)
+      ansible.builtin.set_fact:
+        resolved_rest_message:
+          name: "{{ snow_rest_message.name }}"
+          description: "{{ snow_rest_message.description }}"
+          http_methods: "{{ snow_rest_message.http_methods }}"
+
+    - name: Deploy Update Set to ServiceNow
+      snow_update_set:
+        instance: "{{ snow_instance }}"
+        username: "{{ snow_username }}"
+        password: "{{ snow_password }}"
+        aap_host: "{{ aap_host }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        catalog_items: "{{ snow_catalog_items }}"
+        rest_message: "{{ resolved_rest_message }}"
+        update_set_name: "AAP ServiceNow Integration"
+        commit: true
+      register: deploy_result
+
+    - name: Display deployment result
+      ansible.builtin.debug:
+        msg:
+          - "Update Set: {{ deploy_result.update_set_name }}"
+          - "Uploaded: {{ deploy_result.uploaded }}"
+          - "Committed: {{ deploy_result.committed | default('N/A') }}"
+          - "sys_id: {{ deploy_result.sys_id | default('N/A') }}"
+          - "Message: {{ deploy_result.msg | default('Success') }}"

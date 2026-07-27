@@ -115,7 +115,7 @@ snow_rest_message:
   http_methods:
     - name: "Launch Job Template"
       http_method: POST
-      endpoint: "/api/v2/job_templates/${job_template_id}/launch/"
+      endpoint: "/api/controller/v2/job_templates/${job_template_id}/launch/"
       request_body: |
         {
           "extra_vars": ${extra_vars}
@@ -125,7 +125,7 @@ snow_rest_message:
 
     - name: "Launch Workflow"
       http_method: POST
-      endpoint: "/api/v2/workflow_job_templates/${workflow_id}/launch/"
+      endpoint: "/api/controller/v2/workflow_job_templates/${workflow_id}/launch/"
       request_body: |
         {
           "extra_vars": ${extra_vars}
@@ -135,6 +135,6 @@ snow_rest_message:
 
     - name: "Get Job Status"
       http_method: GET
-      endpoint: "/api/v2/jobs/${job_id}/"
+      endpoint: "/api/controller/v2/jobs/${job_id}/"
       headers:
         Content-Type: application/json

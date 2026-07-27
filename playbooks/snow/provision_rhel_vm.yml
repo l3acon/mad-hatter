@@ -8,7 +8,7 @@
   vars:
     snow_vm_name: ""
     snow_vm_instance_type: t3.medium
-    snow_vm_region: us-east-1
+    snow_vm_region: us-east-2
     snow_vm_ami: "{{ snow_vm_default_ami | default('') }}"
     snow_vm_key_name: "{{ snow_vm_keypair | default('aap-snow-demo') }}"
     snow_vm_security_group: "{{ snow_vm_sg | default('aap-snow-demo-sg') }}"
@@ -38,17 +38,66 @@
       ansible.builtin.set_fact:
         snow_vm_ami: "{{ (_rhel_amis.images | sort(attribute='creation_date') | last).image_id }}"
 
+    - name: Find a default subnet if none specified
+      when: snow_vm_subnet is not defined or snow_vm_subnet == ''
+      block:
+        - name: Get available subnets
+          amazon.aws.ec2_vpc_subnet_info:
+            region: "{{ snow_vm_region }}"
+            filters:
+              default-for-az: "true"
+          register: _default_subnets
+
+        - name: Fall back to any available subnet
+          when: _default_subnets.subnets | length == 0
+          amazon.aws.ec2_vpc_subnet_info:
+            region: "{{ snow_vm_region }}"
+            filters:
+              state: available
+          register: _all_subnets
+
+        - name: Select subnet
+          ansible.builtin.set_fact:
+            snow_vm_subnet: >-
+              {{ (_default_subnets.subnets | first).subnet_id
+                 if (_default_subnets.subnets | length > 0)
+                 else (_all_subnets.subnets | first).subnet_id }}
+
+    - name: Ensure security group exists
+      amazon.aws.ec2_security_group:
+        name: "{{ snow_vm_security_group }}"
+        description: "AAP SNOW demo - allows SSH inbound"
+        region: "{{ snow_vm_region }}"
+        vpc_id: "{{ snow_vm_subnet | default(omit) }}"
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+        state: present
+      register: _sg_result
+      ignore_errors: true
+
+    - name: Create EC2 key pair if missing
+      amazon.aws.ec2_key:
+        name: "{{ snow_vm_key_name }}"
+        region: "{{ snow_vm_region }}"
+        state: present
+      register: _key_result
+      ignore_errors: true
+
     - name: Create EC2 instance
       amazon.aws.ec2_instance:
         name: "{{ snow_vm_name }}"
         region: "{{ snow_vm_region }}"
         instance_type: "{{ snow_vm_instance_type }}"
         image_id: "{{ snow_vm_ami }}"
-        key_name: "{{ snow_vm_key_name }}"
-        security_group: "{{ snow_vm_security_group }}"
-        subnet_id: "{{ snow_vm_subnet | default(omit) }}"
-        network:
-          assign_public_ip: true
+        key_name: "{{ snow_vm_key_name if (_key_result is not failed) else omit }}"
+        security_group: "{{ snow_vm_security_group if (_sg_result is not failed) else omit }}"
+        vpc_subnet_id: "{{ snow_vm_subnet }}"
+        network_interfaces:
+          - assign_public_ip: true
+            device_index: 0
         wait: true
         wait_timeout: 300
         state: running
