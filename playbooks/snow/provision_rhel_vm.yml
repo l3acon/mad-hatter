@@ -41,21 +41,19 @@
     - name: Find a subnet if none specified
       when: snow_vm_subnet | default('') | length == 0
       block:
-        - name: Get all available subnets in region
+        - name: Get all subnets in region
           amazon.aws.ec2_vpc_subnet_info:
             region: "{{ snow_vm_region }}"
-            filters:
-              state: available
           register: _all_subnets
 
         - name: Select first public subnet (or any subnet)
           ansible.builtin.set_fact:
             snow_vm_subnet: >-
-              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | first).subnet_id
+              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | first).subnet_id
                  if (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | length > 0)
                  else (_all_subnets.subnets | first).subnet_id }}
             snow_vm_vpc_id: >-
-              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | first).vpc_id
+              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | first).vpc_id
                  if (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | length > 0)
                  else (_all_subnets.subnets | first).vpc_id }}
 
