@@ -18,10 +18,8 @@ fields:
 selection_order: host_name,name,ip_address
 
 columns:
-  - host_name: name
-  - ip_address: ansible_host
-  - os: os
-  - sys_class_name: classification
+  host_name: name
+  ip_address: ansible_host
 
 compose:
   ansible_host: ip_address
