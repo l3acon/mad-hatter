@@ -6,7 +6,7 @@ snow_password: "{{ lookup('env', 'SNOW_PASSWORD') }}"
 
 # ─── AAP project & execution environment ──────────────────────────────────────
 snow_aap_project_scm_url: https://github.com/l3acon/mad-hatter
-snow_aap_project_scm_branch: main
+snow_aap_project_scm_branch: snow
 snow_aap_project_name: "ServiceNow Integration (mad-hatter)"
 snow_aap_ee_image: quay.io/matferna/mh-snow:latest
 snow_aap_ee_name: "ServiceNow EE"
