@@ -41,29 +41,55 @@
     - name: Find a subnet if none specified
       when: snow_vm_subnet | default('') | length == 0
       block:
-        - name: Get all subnets in region
-          amazon.aws.ec2_vpc_subnet_info:
+        - name: Ensure demo VPC exists
+          amazon.aws.ec2_vpc_net:
+            name: "aap-snow-demo-vpc"
+            cidr_block: "10.100.0.0/16"
             region: "{{ snow_vm_region }}"
-          register: _all_subnets
-          ignore_errors: true
+            state: present
+            tags:
+              ManagedBy: ansible-aap
+          register: _demo_vpc
 
-        - name: Select public subnet from discovered subnets
-          when: _all_subnets is not failed and (_all_subnets.subnets | default([]) | length > 0)
-          ansible.builtin.set_fact:
-            snow_vm_subnet: >-
-              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | first).subnet_id
-                 if (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | length > 0)
-                 else (_all_subnets.subnets | first).subnet_id }}
-            snow_vm_vpc_id: >-
-              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | first).vpc_id
-                 if (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | length > 0)
-                 else (_all_subnets.subnets | first).vpc_id }}
+        - name: Ensure public subnet exists
+          amazon.aws.ec2_vpc_subnet:
+            vpc_id: "{{ _demo_vpc.vpc.id }}"
+            cidr: "10.100.1.0/24"
+            region: "{{ snow_vm_region }}"
+            az: "{{ snow_vm_region }}a"
+            map_public: true
+            state: present
+            tags:
+              Name: aap-snow-demo-public
+              ManagedBy: ansible-aap
+          register: _demo_subnet
 
-        - name: Use fallback subnet (ROSA consolidated public subnet)
-          when: snow_vm_subnet | default('') | length == 0
+        - name: Ensure internet gateway exists
+          amazon.aws.ec2_vpc_igw:
+            vpc_id: "{{ _demo_vpc.vpc.id }}"
+            region: "{{ snow_vm_region }}"
+            state: present
+            tags:
+              Name: aap-snow-demo-igw
+          register: _demo_igw
+
+        - name: Ensure route table has internet route
+          amazon.aws.ec2_vpc_route_table:
+            vpc_id: "{{ _demo_vpc.vpc.id }}"
+            region: "{{ snow_vm_region }}"
+            subnets:
+              - "{{ _demo_subnet.subnet.id }}"
+            routes:
+              - dest: "0.0.0.0/0"
+                gateway_id: "{{ _demo_igw.gateway_id }}"
+            tags:
+              Name: aap-snow-demo-rt
+          register: _demo_rt
+
+        - name: Set subnet and VPC facts
           ansible.builtin.set_fact:
-            snow_vm_subnet: "subnet-01fc512bc29c8070f"
-            snow_vm_vpc_id: "vpc-05d12c0ce36be94ef"
+            snow_vm_subnet: "{{ _demo_subnet.subnet.id }}"
+            snow_vm_vpc_id: "{{ _demo_vpc.vpc.id }}"
 
     - name: Ensure security group exists
       amazon.aws.ec2_security_group:
