@@ -8,12 +8,10 @@
         name: "ServiceNow CMDB Source"
         inventory: "{{ snow_aap_inventory_name | default('ServiceNow CMDB Inventory') }}"
         wait: true
-        timeout: 600
-        controller_host: "{{ aap_hostname | default(lookup('env', 'CONTROLLER_HOST')) }}"
-        controller_oauthtoken: "{{ controller_oauthtoken | default(omit) }}"
-        controller_username: "{{ aap_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
-        controller_password: "{{ aap_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
-        validate_certs: "{{ snow_aap_verify_ssl | default(false) }}"
+        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
+        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+        validate_certs: false
       register: snow_sync_result
 
     - name: Display sync result
