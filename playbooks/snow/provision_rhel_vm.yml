@@ -12,7 +12,7 @@
     snow_vm_ami: "{{ snow_vm_default_ami | default('') }}"
     snow_vm_key_name: "{{ snow_vm_keypair | default('aap-snow-demo') }}"
     snow_vm_security_group: "{{ snow_vm_sg | default('aap-snow-demo-sg') }}"
-    snow_vm_subnet: "{{ snow_vm_subnet_id | default(omit) }}"
+    snow_vm_subnet: "{{ snow_vm_subnet_id | default('') }}"
     snow_request_sys_id: ""
   tasks:
     - name: Validate required parameters
@@ -38,37 +38,42 @@
       ansible.builtin.set_fact:
         snow_vm_ami: "{{ (_rhel_amis.images | sort(attribute='creation_date') | last).image_id }}"
 
-    - name: Find a default subnet if none specified
-      when: snow_vm_subnet is not defined or snow_vm_subnet == ''
+    - name: Find a subnet if none specified
+      when: snow_vm_subnet | default('') | length == 0
       block:
-        - name: Get available subnets
-          amazon.aws.ec2_vpc_subnet_info:
-            region: "{{ snow_vm_region }}"
-            filters:
-              default-for-az: "true"
-          register: _default_subnets
-
-        - name: Fall back to any available subnet
-          when: _default_subnets.subnets | length == 0
+        - name: Get all available subnets in region
           amazon.aws.ec2_vpc_subnet_info:
             region: "{{ snow_vm_region }}"
             filters:
               state: available
-          register: _all_subnets
+              map-public-ip-on-launch: "true"
+          register: _public_subnets
 
-        - name: Select subnet
+        - name: Fall back to any subnet if no public ones found
+          when: _public_subnets.subnets | length == 0
+          amazon.aws.ec2_vpc_subnet_info:
+            region: "{{ snow_vm_region }}"
+            filters:
+              state: available
+          register: _any_subnets
+
+        - name: Select subnet and VPC
           ansible.builtin.set_fact:
             snow_vm_subnet: >-
-              {{ (_default_subnets.subnets | first).subnet_id
-                 if (_default_subnets.subnets | length > 0)
-                 else (_all_subnets.subnets | first).subnet_id }}
+              {{ (_public_subnets.subnets | first).subnet_id
+                 if (_public_subnets.subnets | length > 0)
+                 else (_any_subnets.subnets | first).subnet_id }}
+            snow_vm_vpc_id: >-
+              {{ (_public_subnets.subnets | first).vpc_id
+                 if (_public_subnets.subnets | length > 0)
+                 else (_any_subnets.subnets | first).vpc_id }}
 
     - name: Ensure security group exists
       amazon.aws.ec2_security_group:
         name: "{{ snow_vm_security_group }}"
         description: "AAP SNOW demo - allows SSH inbound"
         region: "{{ snow_vm_region }}"
-        vpc_id: "{{ snow_vm_subnet | default(omit) }}"
+        vpc_id: "{{ snow_vm_vpc_id | default(omit) }}"
         rules:
           - proto: tcp
             from_port: 22
