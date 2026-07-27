@@ -46,27 +46,18 @@
             region: "{{ snow_vm_region }}"
             filters:
               state: available
-              map-public-ip-on-launch: "true"
-          register: _public_subnets
+          register: _all_subnets
 
-        - name: Fall back to any subnet if no public ones found
-          when: _public_subnets.subnets | length == 0
-          amazon.aws.ec2_vpc_subnet_info:
-            region: "{{ snow_vm_region }}"
-            filters:
-              state: available
-          register: _any_subnets
-
-        - name: Select subnet and VPC
+        - name: Select first public subnet (or any subnet)
           ansible.builtin.set_fact:
             snow_vm_subnet: >-
-              {{ (_public_subnets.subnets | first).subnet_id
-                 if (_public_subnets.subnets | length > 0)
-                 else (_any_subnets.subnets | first).subnet_id }}
+              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | first).subnet_id
+                 if (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | length > 0)
+                 else (_all_subnets.subnets | first).subnet_id }}
             snow_vm_vpc_id: >-
-              {{ (_public_subnets.subnets | first).vpc_id
-                 if (_public_subnets.subnets | length > 0)
-                 else (_any_subnets.subnets | first).vpc_id }}
+              {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | first).vpc_id
+                 if (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | length > 0)
+                 else (_all_subnets.subnets | first).vpc_id }}
 
     - name: Ensure security group exists
       amazon.aws.ec2_security_group:
