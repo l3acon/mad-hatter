@@ -15,6 +15,16 @@
 - name: Build ServiceNow credential for dispatch
   ansible.builtin.set_fact:
     snow_controller_credentials:
+      - name: Controller Credential
+        organization: Default
+        credential_type: Red Hat Ansible Automation Platform
+        update_secrets: false
+        inputs:
+          host: "{{ aap_hostname }}"
+          username: "{{ aap_username }}"
+          password: "{{ aap_password }}"
+          verify_ssl: "{{ snow_aap_verify_ssl }}"
+
       - name: "{{ snow_aap_credential_name }}"
         credential_type: ServiceNow
         organization: Default
@@ -63,6 +73,22 @@
     controller_host: "{{ aap_hostname }}"
     controller_oauthtoken: "{{ controller_oauthtoken }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
+  register: _snow_user_result
+  ignore_errors: true
+
+- name: Warn if user creation failed
+  when:
+    - snow_ssp_user_enabled | bool
+    - _snow_user_result is failed
+  ansible.builtin.debug:
+    msg: "WARNING: Could not create SSP user '{{ snow_ssp_user_name }}' — {{ _snow_user_result.msg | default('unknown error') }}. Skipping RBAC."
+
+- name: Disable RBAC dispatch if user creation failed
+  when:
+    - snow_ssp_user_enabled | bool
+    - _snow_user_result is failed
+  ansible.builtin.set_fact:
+    controller_roles: []
 
 - name: Build inventory source configuration for CMDB
   ansible.builtin.set_fact:
@@ -73,7 +99,9 @@
         description: >-
           ServiceNow CMDB dynamic inventory (servicenow.itsm.now inventory plugin).
           Syncs {{ snow_cmdb_table }} with filter: {{ snow_cmdb_filter }}.
-        source: servicenow
+        source: scm
+        source_project: "{{ snow_aap_project_name }}"
+        source_path: roles/snow/files/snow_cmdb.now.yml
         credential: "{{ snow_aap_credential_name }}"
         execution_environment: "{{ snow_aap_ee_name }}"
         overwrite: true
@@ -81,22 +109,12 @@
         update_cache_timeout: 0
         timeout: 600
         verbosity: 1
-        source_vars:
-          plugin: servicenow.itsm.now
-          table: "{{ snow_cmdb_table }}"
-          fields: "{{ snow_cmdb_fields }}"
-          selection_order: host_name,name,ip_address
-          filter: "{{ snow_cmdb_filter }}"
-          columns:
-            host_name: name
-            ip_address: ansible_host
-            os: os
-            sys_class_name: classification
 
 - name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
   ansible.builtin.set_fact:
     controller_host: "{{ aap_hostname }}"
     controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_credential_types: "{{ controller_credential_types }}"
     controller_execution_environments: "{{ controller_execution_environments }}"
     controller_projects: "{{ controller_projects }}"
     controller_inventories: []

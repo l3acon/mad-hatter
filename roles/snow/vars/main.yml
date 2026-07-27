@@ -439,6 +439,39 @@ controller_workflows:
           variable: snow_requested_by
           required: false
 
+# ─── Credential Types ─────────────────────────────────────────────────────────
+# The ServiceNow credential type is not built-in to AAP; we create it so our
+# credential and inventory source can reference it.
+controller_credential_types:
+  - name: ServiceNow
+    description: "ServiceNow instance credentials (host, username, password)"
+    kind: cloud
+    inputs:
+      fields:
+        - id: instance
+          type: string
+          label: Instance URL
+        - id: username
+          type: string
+          label: Username
+        - id: password
+          type: string
+          label: Password
+          secret: true
+      required:
+        - instance
+        - username
+        - password
+    injectors:
+      env:
+        SN_HOST: "{% raw %}{{ instance }}{% endraw %}"
+        SN_USERNAME: "{% raw %}{{ username }}{% endraw %}"
+        SN_PASSWORD: "{% raw %}{{ password }}{% endraw %}"
+      extra_vars:
+        snow_instance: "{% raw %}{{ instance }}{% endraw %}"
+        snow_username: "{% raw %}{{ username }}{% endraw %}"
+        snow_password: "{% raw %}{{ password }}{% endraw %}"
+
 # ─── Execution Environments ───────────────────────────────────────────────────
 controller_execution_environments:
   - name: "{{ snow_aap_ee_name }}"

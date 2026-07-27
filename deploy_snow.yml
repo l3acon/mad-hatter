@@ -61,10 +61,8 @@
             update_secrets: false
 
     # ── Catalog: deploy SNOW catalog items and REST Message ────────────────
-    - name: Deploy ServiceNow catalog items
-      tags: [catalog]
-      ansible.builtin.include_tasks:
-        file: playbooks/snow/catalog_deploy.yml
+    # Run separately: ansible-playbook playbooks/snow/catalog_deploy.yml
+    # (catalog_deploy.yml is a standalone playbook, not includable as tasks)
 
     # ── Summary ────────────────────────────────────────────────────────────
     - name: Display deployment summary
