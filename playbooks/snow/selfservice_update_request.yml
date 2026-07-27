@@ -1,0 +1,77 @@
+---
+# Update a ServiceNow catalog request item (sc_req_item) with status information.
+# Used by workflow nodes to report progress, completion, or failure back to the
+# requesting user in ServiceNow.
+#
+# RITM states: 1=Open, 2=Work in Progress, 3=Closed Complete, 4=Closed Incomplete
+- name: Update ServiceNow catalog request item status
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_request_sys_id: ""
+    snow_request_state: ""
+    snow_request_work_notes: ""
+    snow_request_close_notes: ""
+    # Set by upstream workflow nodes via set_stats.
+    snow_vm_public_ip: ""
+    snow_vm_public_dns: ""
+    snow_vm_name: ""
+  tasks:
+    - name: Validate request sys_id
+      ansible.builtin.assert:
+        that:
+          - snow_request_sys_id | length > 0
+        fail_msg: "snow_request_sys_id is required"
+
+    - name: Determine request state from workflow context
+      ansible.builtin.set_fact:
+        _snow_ritm_state: >-
+          {{ snow_request_state
+             | default('3' if (snow_vm_public_ip | length > 0 or snow_vm_public_dns | length > 0) else '4') }}
+
+    - name: Build completion notes with access info
+      ansible.builtin.set_fact:
+        _snow_completion_notes: |
+          {% if snow_vm_public_dns | length > 0 %}
+          [Ansible Automation Platform] Provisioning complete.
+          VM Name: {{ snow_vm_name }}
+          Access: ssh ec2-user@{{ snow_vm_public_dns }}
+          Public IP: {{ snow_vm_public_ip | default('N/A') }}
+          {% elif snow_vm_public_ip | length > 0 %}
+          [Ansible Automation Platform] Provisioning complete.
+          VM Name: {{ snow_vm_name }}
+          Access: ssh ec2-user@{{ snow_vm_public_ip }}
+          {% elif _snow_ritm_state == '4' %}
+          [Ansible Automation Platform] Provisioning failed. Check AAP job logs for details.
+          {% else %}
+          [Ansible Automation Platform] Request processing update.
+          {% endif %}
+
+    - name: Build update payload
+      ansible.builtin.set_fact:
+        _snow_update_payload: >-
+          {{
+            {'state': _snow_ritm_state}
+            | combine({'work_notes': snow_request_work_notes} if snow_request_work_notes | length > 0 else {})
+            | combine({'close_notes': _snow_completion_notes | trim} if _snow_ritm_state in ['3', '4'] else {})
+            | combine({'work_notes': _snow_completion_notes | trim} if _snow_ritm_state == '2' else {})
+          }}
+
+    - name: Update catalog request item
+      servicenow.itsm.api:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_request_sys_id }}"
+        data: "{{ _snow_update_payload }}"
+      register: snow_update_result
+
+    - name: Display update
+      ansible.builtin.debug:
+        msg:
+          - "Catalog request {{ snow_request_sys_id }} updated"
+          - "State: {{ _snow_ritm_state }}"
+          - "Notes: {{ _snow_completion_notes | trim }}"

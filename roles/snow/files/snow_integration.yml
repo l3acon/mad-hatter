@@ -1,0 +1,194 @@
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# ServiceNow Flow Designer / REST Message — AAP Integration Patterns
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# This file documents both integration approaches for connecting ServiceNow
+# catalog items to AAP job templates/workflows.
+#
+# APPROACH 1: REST Message (API-deployable, used by catalog_deploy.yml)
+# ─────────────────────────────────────────────────────────────────────────────
+# A sys_rest_message + sys_rest_message_fn pair that POSTs to the AAP API.
+# This is fully deployable via the ServiceNow REST API (Table API).
+# The catalog item's "Order Now" button triggers a Business Rule or
+# Catalog Client Script that calls the REST Message.
+#
+# Pros: Fully automatable, version-controllable, no UI interaction needed.
+# Cons: Requires scripting the glue (Business Rule / Script Include).
+#
+# APPROACH 2: Flow Designer (preferred UX but requires UI setup)
+# ─────────────────────────────────────────────────────────────────────────────
+# Flow Designer provides a visual integration but its flows are not fully
+# accessible via the Table API (they use sys_hub_flow / sys_hub_action_type_definition).
+# The Flow Designer REST step can call AAP directly.
+#
+# If Flow Designer API access is available:
+# - Use the /api/now/table/sys_hub_flow to create flows
+# - Use action type: REST Step
+# - Configure with the same endpoint/auth as the REST Message
+#
+# For now, we use Approach 1 (REST Message) as the default since it's fully
+# automatable. The catalog_deploy.yml playbook sets this up end-to-end.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── Script Include (deployed to ServiceNow) ─────────────────────────────────
+# This Script Include is called by the Catalog Item's workflow/business rule
+# when an order is placed. It launches the AAP job and passes the catalog
+# variables as extra_vars.
+
+snow_script_include:
+  name: "AAPIntegration"
+  description: "Utility to launch AAP job templates/workflows from catalog item orders"
+  api_name: "global.AAPIntegration"
+  script: |
+    var AAPIntegration = Class.create();
+    AAPIntegration.prototype = {
+        initialize: function() {
+            this.REST_MESSAGE = 'Ansible Automation Platform';
+        },
+
+        /**
+         * Launch an AAP workflow job template.
+         * @param {string} workflowName - Name of the workflow in AAP
+         * @param {object} extraVars - Variables to pass to the workflow
+         * @param {string} ritmSysId - sys_id of the catalog request item
+         * @returns {object} Response from AAP API
+         */
+        launchWorkflow: function(workflowName, extraVars, ritmSysId) {
+            // Look up workflow ID from AAP
+            var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Launch Workflow');
+
+            // Add the request sys_id to extra_vars so AAP can update the RITM
+            extraVars.snow_request_sys_id = ritmSysId;
+
+            sm.setStringParameterNoEscape('workflow_id', this._getWorkflowId(workflowName));
+            sm.setStringParameterNoEscape('extra_vars', JSON.stringify(extraVars));
+            sm.setRequestHeader('Content-Type', 'application/json');
+
+            var response = sm.execute();
+            return {
+                status: response.getStatusCode(),
+                body: response.getBody()
+            };
+        },
+
+        /**
+         * Launch an AAP job template.
+         * @param {string} templateName - Name of the job template in AAP
+         * @param {object} extraVars - Variables to pass to the job
+         * @param {string} ritmSysId - sys_id of the catalog request item
+         * @returns {object} Response from AAP API
+         */
+        launchJobTemplate: function(templateName, extraVars, ritmSysId) {
+            var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Launch Job Template');
+
+            extraVars.snow_request_sys_id = ritmSysId;
+
+            sm.setStringParameterNoEscape('job_template_id', this._getTemplateId(templateName));
+            sm.setStringParameterNoEscape('extra_vars', JSON.stringify(extraVars));
+            sm.setRequestHeader('Content-Type', 'application/json');
+
+            var response = sm.execute();
+            return {
+                status: response.getStatusCode(),
+                body: response.getBody()
+            };
+        },
+
+        /**
+         * Look up a workflow template ID by name from AAP.
+         */
+        _getWorkflowId: function(name) {
+            var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Get Job Status');
+            // Override endpoint for lookup
+            sm.setEndpoint(sm.getEndpoint().replace('/api/v2/jobs/${job_id}/', '/api/v2/workflow_job_templates/?name=' + encodeURIComponent(name)));
+            var response = sm.execute();
+            var body = JSON.parse(response.getBody());
+            if (body.results && body.results.length > 0) {
+                return body.results[0].id.toString();
+            }
+            throw new Error('Workflow not found: ' + name);
+        },
+
+        _getTemplateId: function(name) {
+            var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Get Job Status');
+            sm.setEndpoint(sm.getEndpoint().replace('/api/v2/jobs/${job_id}/', '/api/v2/job_templates/?name=' + encodeURIComponent(name)));
+            var response = sm.execute();
+            var body = JSON.parse(response.getBody());
+            if (body.results && body.results.length > 0) {
+                return body.results[0].id.toString();
+            }
+            throw new Error('Job template not found: ' + name);
+        },
+
+        type: 'AAPIntegration'
+    };
+
+# ─── Catalog Item Workflow Script (Business Rule) ─────────────────────────────
+# This is attached to the sc_req_item table and fires when a new RITM is created
+# for catalog items backed by AAP.
+
+snow_catalog_business_rule:
+  name: "AAP - Launch on Catalog Order"
+  table: sc_req_item
+  when: "after"
+  insert: true
+  condition: "current.cat_item.sc_catalogs.title == 'Ansible Automation Platform'"
+  script: |
+    (function executeRule(current, previous) {
+        var aap = new AAPIntegration();
+        var catItemName = current.cat_item.name.toString();
+        var ritmSysId = current.sys_id.toString();
+
+        // Collect variables from the request item
+        var extraVars = {};
+        var vars = new GlideRecord('sc_item_option_mtom');
+        vars.addQuery('request_item', ritmSysId);
+        vars.query();
+        while (vars.next()) {
+            var opt = vars.sc_item_option;
+            extraVars[opt.item_option_new.name.toString()] = opt.value.toString();
+        }
+
+        // Determine resource type from catalog item configuration
+        // (stored in a custom field or looked up from catalog_items.yml mapping)
+        var resourceType = 'workflow';  // default to workflow
+
+        try {
+            var result;
+            if (resourceType === 'workflow') {
+                result = aap.launchWorkflow(
+                    _getAAPResourceName(catItemName),
+                    extraVars,
+                    ritmSysId
+                );
+            } else {
+                result = aap.launchJobTemplate(
+                    _getAAPResourceName(catItemName),
+                    extraVars,
+                    ritmSysId
+                );
+            }
+
+            if (result.status == 201) {
+                current.work_notes = 'AAP automation launched successfully';
+                current.state = '2';  // Work in Progress
+            } else {
+                current.work_notes = 'AAP launch failed: ' + result.body;
+            }
+            current.update();
+        } catch (e) {
+            gs.error('AAPIntegration error: ' + e.message);
+            current.work_notes = 'AAP integration error: ' + e.message;
+            current.update();
+        }
+
+        function _getAAPResourceName(catalogItemName) {
+            var mapping = {
+                'Order RHEL VM': 'ServiceNow | Provision RHEL VM (end-to-end)',
+                'Sync CMDB Inventory': 'ServiceNow | CMDB - Sync Inventory',
+                'Create Incident': 'ServiceNow | ITSM - Create Incident'
+            };
+            return mapping[catalogItemName] || catalogItemName;
+        }
+    })(current, previous);

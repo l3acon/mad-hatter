@@ -1,0 +1,140 @@
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# ServiceNow Catalog Item Definitions — Config as Code
+# ═══════════════════════════════════════════════════════════════════════════════
+# These definitions are deployed to ServiceNow via the catalog_deploy.yml playbook.
+# Each item maps a SNOW Service Catalog entry to an AAP job template or workflow.
+#
+# The integration uses a REST Message (Ansible Automation Platform) to call the
+# AAP API and launch the associated job template/workflow, passing variables from
+# the catalog item form as extra_vars.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+snow_catalog_items:
+  - name: "Order RHEL VM"
+    short_description: "Provision a Red Hat Enterprise Linux virtual machine in AWS"
+    description: |
+      Self-service provisioning of a RHEL 9 VM in AWS. Backed by an AAP workflow that:
+      1. Acknowledges your request (updates RITM state)
+      2. Provisions the VM in AWS EC2
+      3. Registers the host in the ServiceNow CMDB
+      4. Syncs the AAP inventory from CMDB
+      5. Installs any requested packages
+      6. Updates this request with connection details (IP/DNS)
+    category: Infrastructure
+    catalog: Ansible Automation Platform
+    aap_resource_type: workflow_job_template
+    aap_resource_name: "ServiceNow | Provision RHEL VM (end-to-end)"
+    variables:
+      - name: snow_vm_name
+        label: VM Name
+        type: String
+        mandatory: true
+        help_text: "A unique name for the virtual machine (lowercase, no spaces)"
+        order: 100
+      - name: snow_vm_instance_type
+        label: Instance Size
+        type: Select Box
+        mandatory: true
+        default_value: t3.medium
+        choices:
+          - label: "Micro (1 vCPU, 1 GB)"
+            value: t3.micro
+          - label: "Small (2 vCPU, 2 GB)"
+            value: t3.small
+          - label: "Medium (2 vCPU, 4 GB)"
+            value: t3.medium
+          - label: "Large (2 vCPU, 8 GB)"
+            value: t3.large
+          - label: "XLarge (4 vCPU, 16 GB)"
+            value: t3.xlarge
+        order: 200
+      - name: snow_packages
+        label: Packages to Install
+        type: String
+        mandatory: false
+        help_text: "Comma-separated list of RPM packages (e.g. httpd,vim,git)"
+        order: 300
+
+  - name: "Sync CMDB Inventory"
+    short_description: "Trigger an inventory sync from ServiceNow CMDB to AAP"
+    description: |
+      Manually trigger a synchronization of the AAP inventory from ServiceNow CMDB.
+      Useful when CMDB changes have been made outside of automation and the AAP
+      inventory needs to be refreshed immediately.
+    category: Infrastructure
+    catalog: Ansible Automation Platform
+    aap_resource_type: job_template
+    aap_resource_name: "ServiceNow | CMDB - Sync Inventory"
+    variables: []
+
+  - name: "Create Incident"
+    short_description: "Create a new incident via Ansible Automation Platform"
+    description: |
+      Submit a new incident that will be created in ServiceNow ITSM via AAP.
+      The incident is automatically categorized and assigned.
+    category: IT Services
+    catalog: Ansible Automation Platform
+    aap_resource_type: job_template
+    aap_resource_name: "ServiceNow | ITSM - Create Incident"
+    variables:
+      - name: snow_incident_short_description
+        label: Summary
+        type: String
+        mandatory: true
+        order: 100
+      - name: snow_incident_description
+        label: Details
+        type: Text Area
+        mandatory: false
+        order: 200
+      - name: snow_incident_urgency
+        label: Urgency
+        type: Select Box
+        mandatory: true
+        default_value: "2 - Medium"
+        choices:
+          - label: High
+            value: "1 - High"
+          - label: Medium
+            value: "2 - Medium"
+          - label: Low
+            value: "3 - Low"
+        order: 300
+
+# ─── REST Message definition ─────────────────────────────────────────────────
+# This defines the outbound REST integration from SNOW to AAP.
+# Deployed via the catalog_deploy.yml playbook.
+snow_rest_message:
+  name: "Ansible Automation Platform"
+  description: "REST integration to launch AAP job templates and workflows"
+  rest_endpoint: "{{ aap_hostname | default('https://aap.example.com') }}"
+  authentication_type: basic
+  basic_auth_user: "{{ snow_username }}"
+  basic_auth_password: "{{ snow_password }}"
+  http_methods:
+    - name: "Launch Job Template"
+      http_method: POST
+      endpoint: "/api/v2/job_templates/${job_template_id}/launch/"
+      request_body: |
+        {
+          "extra_vars": ${extra_vars}
+        }
+      headers:
+        Content-Type: application/json
+
+    - name: "Launch Workflow"
+      http_method: POST
+      endpoint: "/api/v2/workflow_job_templates/${workflow_id}/launch/"
+      request_body: |
+        {
+          "extra_vars": ${extra_vars}
+        }
+      headers:
+        Content-Type: application/json
+
+    - name: "Get Job Status"
+      http_method: GET
+      endpoint: "/api/v2/jobs/${job_id}/"
+      headers:
+        Content-Type: application/json

@@ -1,0 +1,64 @@
+---
+# ─── ServiceNow connection ────────────────────────────────────────────────────
+snow_instance: "{{ lookup('env', 'SNOW_INSTANCE') }}"
+snow_username: "{{ lookup('env', 'SNOW_USERNAME') }}"
+snow_password: "{{ lookup('env', 'SNOW_PASSWORD') }}"
+
+# ─── AAP project & execution environment ──────────────────────────────────────
+snow_aap_project_scm_url: https://github.com/l3acon/mad-hatter
+snow_aap_project_scm_branch: main
+snow_aap_project_name: "ServiceNow Integration (mad-hatter)"
+snow_aap_ee_image: quay.io/matferna/mh-snow:latest
+snow_aap_ee_name: "ServiceNow EE"
+snow_aap_verify_ssl: false
+
+# ─── Inventories ──────────────────────────────────────────────────────────────
+snow_aap_inventory_name: "ServiceNow CMDB Inventory"
+snow_aap_runtime_inventory_name: "ServiceNow Runtime"
+
+# CMDB inventory source configuration (servicenow.itsm inventory plugin).
+snow_cmdb_table: cmdb_ci_linux_server
+snow_cmdb_fields:
+  - name
+  - host_name
+  - ip_address
+  - os
+  - ram
+  - cpu_count
+  - sys_class_name
+  - operational_status
+snow_cmdb_filter: operational_statusINOperational
+
+# ─── Credentials ──────────────────────────────────────────────────────────────
+snow_aap_credential_name: "ServiceNow Credential"
+
+# AWS credential (for VM provisioning use case).
+snow_aws_credential_name: "AWS"
+
+# ─── ITSM ticket defaults ────────────────────────────────────────────────────
+snow_incident_caller: "matferna"
+snow_incident_category: "Software"
+snow_incident_subcategory: "Operating System"
+
+# ServiceNow incident states (well-defined state machine):
+#   1 = New, 2 = In Progress, 3 = On Hold, 6 = Resolved, 7 = Closed
+# Close codes: Solved (Permanently), Solved (Work Around), Not Solved, Closed/Resolved by Caller
+snow_incident_default_urgency: "2"
+snow_incident_default_impact: "2"
+
+# ─── Self-service catalog ────────────────────────────────────────────────────
+snow_catalog_name: "Ansible Automation Platform"
+snow_catalog_category: "Infrastructure"
+
+# Default VM provisioning parameters (for the RHEL VM catalog item).
+snow_vm_default_instance_type: t3.medium
+snow_vm_default_region: us-east-1
+snow_vm_default_ami: ami-0c55b159cbfafe1f0
+
+# ─── AAP workflow configuration ──────────────────────────────────────────────
+snow_provision_workflow_name: "ServiceNow | Provision RHEL VM (end-to-end)"
+
+# Self-service portal user.
+snow_ssp_user_enabled: true
+snow_ssp_user_name: snow-user
+snow_ssp_user_password: "{{ lookup('env', 'SNOW_SSP_USER_PASSWORD') | default('ChangeMe123!', true) }}"

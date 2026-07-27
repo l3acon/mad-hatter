@@ -1,0 +1,168 @@
+---
+# Deploy ServiceNow catalog items and REST Message configuration.
+# This playbook creates/updates the SNOW service catalog entries and the outbound
+# REST Message used to call back to AAP when a catalog item is ordered.
+#
+# The catalog items are defined in roles/snow/files/catalog_items.yml and can be
+# modified there — re-running this playbook applies the changes to SNOW.
+- name: Deploy ServiceNow catalog items and REST integration
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../../roles/snow/files/catalog_items.yml"
+  vars:
+    snow_aap_api_user: "{{ aap_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+    snow_aap_api_password: "{{ aap_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+    snow_aap_base_url: "{{ aap_hostname | default(lookup('env', 'CONTROLLER_HOST')) }}"
+  tasks:
+    # ── REST Message setup ──────────────────────────────────────────────────
+    - name: Check if REST Message already exists
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/sys_rest_message?sysparm_query=name={{ snow_rest_message.name | urlencode }}"
+        method: GET
+        user: "{{ snow_username }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: true
+        return_content: true
+        headers:
+          Accept: application/json
+      register: _rest_msg_check
+
+    - name: Create REST Message in ServiceNow
+      when: (_rest_msg_check.json.result | length) == 0
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/sys_rest_message"
+        method: POST
+        user: "{{ snow_username }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: "{{ snow_rest_message.name }}"
+          description: "{{ snow_rest_message.description }}"
+          rest_endpoint: "{{ snow_aap_base_url }}"
+          authentication_type: basic
+          basic_auth_user: "{{ snow_aap_api_user }}"
+          basic_auth_password: "{{ snow_aap_api_password }}"
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        status_code: [200, 201]
+      register: _rest_msg_created
+
+    - name: Set REST Message sys_id
+      ansible.builtin.set_fact:
+        _rest_message_sys_id: >-
+          {{ (_rest_msg_check.json.result[0].sys_id)
+             if (_rest_msg_check.json.result | length) > 0
+             else _rest_msg_created.json.result.sys_id }}
+
+    - name: Create/update REST Message HTTP methods
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/sys_rest_message_fn"
+        method: POST
+        user: "{{ snow_username }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: "{{ item.name }}"
+          rest_message: "{{ _rest_message_sys_id }}"
+          http_method: "{{ item.http_method }}"
+          rest_endpoint: "{{ snow_aap_base_url }}{{ item.endpoint }}"
+          content: "{{ item.request_body | default('') }}"
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        status_code: [200, 201]
+      loop: "{{ snow_rest_message.http_methods }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # ── Catalog setup ───────────────────────────────────────────────────────
+    - name: Ensure service catalog exists
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/sc_catalog?sysparm_query=title={{ snow_catalog_items[0].catalog | urlencode }}"
+        method: GET
+        user: "{{ snow_username }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: true
+        return_content: true
+        headers:
+          Accept: application/json
+      register: _catalog_check
+
+    - name: Create service catalog if missing
+      when: (_catalog_check.json.result | length) == 0
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/sc_catalog"
+        method: POST
+        user: "{{ snow_username }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          title: "{{ snow_catalog_items[0].catalog }}"
+          description: "Self-service catalog items backed by Ansible Automation Platform"
+          active: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        status_code: [200, 201]
+      register: _catalog_created
+
+    - name: Set catalog sys_id
+      ansible.builtin.set_fact:
+        _catalog_sys_id: >-
+          {{ (_catalog_check.json.result[0].sys_id)
+             if (_catalog_check.json.result | length) > 0
+             else _catalog_created.json.result.sys_id }}
+
+    # ── Catalog items ───────────────────────────────────────────────────────
+    - name: Look up AAP resource IDs for catalog items
+      ansible.builtin.uri:
+        url: >-
+          {{ snow_aap_base_url }}/api/v2/{{ item.aap_resource_type }}s/?name={{ item.aap_resource_name | urlencode }}
+        method: GET
+        user: "{{ snow_aap_api_user }}"
+        password: "{{ snow_aap_api_password }}"
+        force_basic_auth: true
+        return_content: true
+        validate_certs: false
+        headers:
+          Accept: application/json
+      loop: "{{ snow_catalog_items }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: _aap_resource_lookups
+
+    - name: Create catalog items in ServiceNow
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/sc_cat_item"
+        method: POST
+        user: "{{ snow_username }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: "{{ item.item.name }}"
+          short_description: "{{ item.item.short_description }}"
+          description: "{{ item.item.description }}"
+          category: "{{ item.item.category }}"
+          sc_catalogs: "{{ _catalog_sys_id }}"
+          active: true
+          use_sc_layout: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        status_code: [200, 201]
+      loop: "{{ _aap_resource_lookups.results | zip(snow_catalog_items) | map('combine') | list }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      register: _catalog_items_created
+      vars:
+        _combined: "{{ snow_catalog_items | zip(_aap_resource_lookups.results) }}"
+
+    - name: Display deployed catalog items
+      ansible.builtin.debug:
+        msg: "Deployed {{ snow_catalog_items | length }} catalog item(s) to ServiceNow"

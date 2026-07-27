@@ -1,0 +1,36 @@
+---
+# Post-provisioning: install packages on a newly provisioned host.
+# Runs against the target host (passed from upstream workflow node via set_stats).
+- name: Post-provision — install packages on target host
+  hosts: "{{ snow_target_host | default('all') }}"
+  gather_facts: true
+  become: true
+  vars:
+    snow_packages: ""
+  tasks:
+    - name: Parse package list
+      ansible.builtin.set_fact:
+        _package_list: >-
+          {{ snow_packages | split(',') | map('trim') | select() | list }}
+      when: snow_packages | length > 0
+
+    - name: Install requested packages
+      ansible.builtin.dnf:
+        name: "{{ _package_list }}"
+        state: present
+      when:
+        - snow_packages | length > 0
+        - _package_list | length > 0
+      register: _install_result
+
+    - name: Display installation result
+      ansible.builtin.debug:
+        msg:
+          - "Packages installed: {{ _package_list | default([]) | join(', ') }}"
+          - "Host: {{ inventory_hostname }}"
+      when: snow_packages | length > 0
+
+    - name: Skip message when no packages requested
+      ansible.builtin.debug:
+        msg: "No packages requested — post-provision step skipped"
+      when: snow_packages | length == 0

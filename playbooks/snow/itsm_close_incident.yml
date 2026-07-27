@@ -1,0 +1,37 @@
+---
+# Close an incident. The incident MUST be in Resolved(6) state first.
+# Transition: Resolved(6) -> Closed(7)
+# Required fields: close_code, close_notes
+- name: Close incident in ServiceNow ITSM
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_incident_number: ""
+    snow_incident_close_code: "Solved (Permanently)"
+    snow_incident_close_notes: ""
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - snow_incident_number | length > 0
+          - snow_incident_close_notes | length > 0
+        fail_msg: "snow_incident_number and snow_incident_close_notes are required"
+
+    - name: Close incident
+      servicenow.itsm.incident:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        state: closed
+        number: "{{ snow_incident_number }}"
+        close_code: "{{ snow_incident_close_code }}"
+        close_notes: "{{ snow_incident_close_notes }}"
+      register: snow_close_result
+
+    - name: Display close result
+      ansible.builtin.debug:
+        msg:
+          - "Incident {{ snow_incident_number }} closed"
+          - "Close code: {{ snow_incident_close_code }}"
+          - "Close notes: {{ snow_incident_close_notes }}"

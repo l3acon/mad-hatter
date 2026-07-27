@@ -1,0 +1,93 @@
+---
+# Provision a RHEL VM in AWS. This is a workflow node that creates the EC2 instance,
+# waits for it to become reachable, and publishes connection details as artifacts
+# for downstream workflow nodes (CMDB registration, inventory sync, post-provision).
+- name: Provision RHEL VM in AWS
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_vm_name: ""
+    snow_vm_instance_type: t3.medium
+    snow_vm_region: us-east-1
+    snow_vm_ami: "{{ snow_vm_default_ami | default('') }}"
+    snow_vm_key_name: "{{ snow_vm_keypair | default('aap-snow-demo') }}"
+    snow_vm_security_group: "{{ snow_vm_sg | default('aap-snow-demo-sg') }}"
+    snow_vm_subnet: "{{ snow_vm_subnet_id | default(omit) }}"
+    snow_request_sys_id: ""
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - snow_vm_name | length > 0
+        fail_msg: "snow_vm_name is required"
+
+    - name: Look up latest RHEL 9 AMI if not provided
+      when: snow_vm_ami | length == 0
+      amazon.aws.ec2_ami_info:
+        region: "{{ snow_vm_region }}"
+        owners:
+          - "309956199498"
+        filters:
+          name: "RHEL-9*_HVM-*-x86_64-*-Hourly2-GP3"
+          architecture: x86_64
+          state: available
+      register: _rhel_amis
+
+    - name: Select latest AMI
+      when: snow_vm_ami | length == 0
+      ansible.builtin.set_fact:
+        snow_vm_ami: "{{ (_rhel_amis.images | sort(attribute='creation_date') | last).image_id }}"
+
+    - name: Create EC2 instance
+      amazon.aws.ec2_instance:
+        name: "{{ snow_vm_name }}"
+        region: "{{ snow_vm_region }}"
+        instance_type: "{{ snow_vm_instance_type }}"
+        image_id: "{{ snow_vm_ami }}"
+        key_name: "{{ snow_vm_key_name }}"
+        security_group: "{{ snow_vm_security_group }}"
+        subnet_id: "{{ snow_vm_subnet | default(omit) }}"
+        network:
+          assign_public_ip: true
+        wait: true
+        wait_timeout: 300
+        state: running
+        tags:
+          Environment: demo
+          ManagedBy: ansible-aap
+          ServiceNowRequest: "{{ snow_request_sys_id | default('manual') }}"
+      register: ec2_result
+
+    - name: Set instance facts
+      ansible.builtin.set_fact:
+        _ec2_instance: "{{ ec2_result.instances[0] }}"
+
+    - name: Wait for SSH to become available
+      ansible.builtin.wait_for:
+        host: "{{ _ec2_instance.public_ip_address }}"
+        port: 22
+        delay: 10
+        timeout: 300
+
+    - name: Display provisioned VM details
+      ansible.builtin.debug:
+        msg:
+          - "VM provisioned successfully"
+          - "Instance ID: {{ _ec2_instance.instance_id }}"
+          - "Public IP: {{ _ec2_instance.public_ip_address }}"
+          - "Public DNS: {{ _ec2_instance.public_dns_name }}"
+          - "Region: {{ snow_vm_region }}"
+          - "Instance Type: {{ snow_vm_instance_type }}"
+
+    - name: Publish VM details as artifacts for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_vm_instance_id: "{{ _ec2_instance.instance_id }}"
+          snow_vm_public_ip: "{{ _ec2_instance.public_ip_address }}"
+          snow_vm_public_dns: "{{ _ec2_instance.public_dns_name }}"
+          snow_vm_name: "{{ snow_vm_name }}"
+          snow_vm_region: "{{ snow_vm_region }}"
+          snow_host_name: "{{ snow_vm_name }}"
+          snow_host_ip: "{{ _ec2_instance.public_ip_address }}"
+          snow_host_os: "Red Hat Enterprise Linux 9"
+          snow_target_host: "{{ _ec2_instance.public_ip_address }}"

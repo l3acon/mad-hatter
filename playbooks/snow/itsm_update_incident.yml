@@ -1,0 +1,56 @@
+---
+# ServiceNow incident state machine:
+#   1 = New -> 2 = In Progress -> 6 = Resolved -> 7 = Closed
+#                              -> 3 = On Hold -> 2 = In Progress (resume)
+# Valid transitions enforced by this playbook:
+#   New(1)         -> In Progress(2)
+#   In Progress(2) -> On Hold(3), Resolved(6)
+#   On Hold(3)     -> In Progress(2)
+#   Resolved(6)    -> Closed(7) [use itsm_close_incident.yml]
+- name: Update incident in ServiceNow ITSM
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_incident_number: ""
+    snow_incident_state: "2 - In Progress"
+    snow_incident_work_notes: ""
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - snow_incident_number | length > 0
+        fail_msg: "snow_incident_number is required"
+
+    - name: Map state label to ServiceNow state value
+      ansible.builtin.set_fact:
+        _snow_state_map:
+          "2 - In Progress": "in_progress"
+          "3 - On Hold": "on_hold"
+          "6 - Resolved": "resolved"
+
+    - name: Resolve target state
+      ansible.builtin.set_fact:
+        _snow_target_state: "{{ _snow_state_map[snow_incident_state] }}"
+
+    - name: Update incident state
+      servicenow.itsm.incident:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        state: "{{ _snow_target_state }}"
+        number: "{{ snow_incident_number }}"
+        other: >-
+          {{
+            {'work_notes': snow_incident_work_notes}
+            if snow_incident_work_notes | length > 0
+            else {}
+          }}
+      register: snow_update_result
+
+    - name: Display update result
+      ansible.builtin.debug:
+        msg:
+          - "Incident {{ snow_incident_number }} updated"
+          - "New state: {{ snow_incident_state }}"
+          - "Work notes: {{ snow_incident_work_notes | default('(none)') }}"

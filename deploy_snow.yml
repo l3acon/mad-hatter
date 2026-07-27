@@ -1,0 +1,91 @@
+---
+# Deploy ServiceNow + AAP integration.
+# Usage:
+#   ansible-playbook deploy_snow.yml
+#   ansible-playbook deploy_snow.yml --tags casc      # AAP CasC only
+#   ansible-playbook deploy_snow.yml --tags catalog   # SNOW catalog items only
+#   ansible-playbook deploy_snow.yml --tags all       # Full deployment
+- name: Deploy ServiceNow + AAP integration
+  hosts: localhost
+  vars:
+    aap_hostname: "{{ lookup('env', 'CONTROLLER_HOST') }}"
+    aap_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+    aap_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+    snow_instance: "{{ lookup('env', 'SNOW_INSTANCE') }}"
+    snow_username: "{{ lookup('env', 'SNOW_USERNAME') }}"
+    snow_password: "{{ lookup('env', 'SNOW_PASSWORD') }}"
+  tasks:
+    # ── Preflight: validate credentials ────────────────────────────────────
+    - name: Validate environment is configured
+      tags: always
+      ansible.builtin.assert:
+        that:
+          - aap_hostname | length > 0
+          - aap_username | length > 0
+          - aap_password | length > 0
+          - snow_instance | length > 0
+          - snow_username | length > 0
+          - snow_password | length > 0
+        fail_msg: >-
+          Missing credentials. Source the .env file or set CONTROLLER_HOST, CONTROLLER_USERNAME,
+          CONTROLLER_PASSWORD, SNOW_INSTANCE, SNOW_USERNAME, SNOW_PASSWORD.
+
+    # ── AAP OAuth token ────────────────────────────────────────────────────
+    - name: Obtain gateway OAuth token for CasC modules
+      tags: [casc]
+      ansible.platform.token:
+        description: "ServiceNow CasC dispatch token"
+        scope: "write"
+        state: present
+        aap_hostname: "{{ aap_hostname }}"
+        aap_username: "{{ aap_username }}"
+        aap_password: "{{ aap_password }}"
+        aap_validate_certs: false
+      register: _casc_token_result
+
+    - name: Set controller OAuth token
+      tags: [casc]
+      ansible.builtin.set_fact:
+        controller_oauthtoken: "{{ _casc_token_result.ansible_facts.aap_token.token }}"
+
+    # ── CasC: deploy AAP configuration ────────────────────────────────────
+    - name: ServiceNow AAP configuration as code
+      tags: [casc]
+      ansible.builtin.include_role:
+        name: snow
+      vars:
+        snow_extra_controller_credentials:
+          - name: AWS
+            credential_type: Amazon Web Services
+            organization: Default
+            update_secrets: false
+
+    # ── Catalog: deploy SNOW catalog items and REST Message ────────────────
+    - name: Deploy ServiceNow catalog items
+      tags: [catalog]
+      ansible.builtin.include_tasks:
+        file: playbooks/snow/catalog_deploy.yml
+
+    # ── Summary ────────────────────────────────────────────────────────────
+    - name: Display deployment summary
+      tags: always
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════"
+          - "ServiceNow + AAP Integration Deployed"
+          - "═══════════════════════════════════════════════════════"
+          - "AAP Controller: {{ aap_hostname }}"
+          - "ServiceNow Instance: {{ snow_instance }}"
+          - "─────────────────────────────────────────────────────"
+          - "AAP Resources:"
+          - "  - Project: ServiceNow Integration (mad-hatter)"
+          - "  - Inventory: ServiceNow CMDB Inventory"
+          - "  - Credential: ServiceNow Credential"
+          - "  - Job Templates: 8 (CMDB, ITSM, Self-Service, Provisioning)"
+          - "  - Workflow: ServiceNow | Provision RHEL VM (end-to-end)"
+          - "─────────────────────────────────────────────────────"
+          - "SNOW Resources:"
+          - "  - REST Message: Ansible Automation Platform"
+          - "  - Catalog: Ansible Automation Platform"
+          - "  - Catalog Items: Order RHEL VM, Sync CMDB, Create Incident"
+          - "═══════════════════════════════════════════════════════"

@@ -5,6 +5,7 @@
     aap_operator_operator_channel: "stable-2.7"
     aap_operator_disable_lightspeed: false
     rosa_creds_file_path: "{{ playbook_dir }}/rosa.creds.yml"
+    user_creds_file_path: "{{ playbook_dir }}/user.creds.yml"
   tasks:
     # ── always: credentials, bastion, and cluster login ──────────────────
     - name: Warning this may incur high costs

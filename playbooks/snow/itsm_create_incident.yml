@@ -1,0 +1,52 @@
+---
+- name: Create incident in ServiceNow ITSM
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_incident_short_description: ""
+    snow_incident_description: ""
+    snow_incident_urgency: "2 - Medium"
+    snow_incident_impact: "2 - Medium"
+    snow_incident_category: "Software"
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - snow_incident_short_description | length > 0
+        fail_msg: "snow_incident_short_description is required"
+
+    - name: Extract numeric urgency/impact values
+      ansible.builtin.set_fact:
+        _snow_urgency: "{{ snow_incident_urgency.split(' ')[0] }}"
+        _snow_impact: "{{ snow_incident_impact.split(' ')[0] }}"
+
+    - name: Create incident
+      servicenow.itsm.incident:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        state: new
+        short_description: "{{ snow_incident_short_description }}"
+        description: "{{ snow_incident_description | default(omit) }}"
+        caller: "{{ snow_incident_caller | default(snow_username) }}"
+        urgency: "{{ _snow_urgency }}"
+        impact: "{{ _snow_impact }}"
+        other:
+          category: "{{ snow_incident_category }}"
+      register: snow_incident_result
+
+    - name: Display incident details
+      ansible.builtin.debug:
+        msg:
+          - "Incident created successfully"
+          - "Number: {{ snow_incident_result.record.number }}"
+          - "sys_id: {{ snow_incident_result.record.sys_id }}"
+          - "State: New"
+          - "Priority: {{ snow_incident_result.record.priority }}"
+
+    - name: Set incident number as artifact for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_incident_number: "{{ snow_incident_result.record.number }}"
+          snow_incident_sys_id: "{{ snow_incident_result.record.sys_id }}"

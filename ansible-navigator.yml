@@ -1,0 +1,20 @@
+---
+ansible-navigator:
+  playbook-artifact:
+    enable: false
+  mode: stdout
+  execution-environment:
+    pull:
+      policy: missing
+    volume-mounts:
+      - src: "/home/matt/keys"
+        dest: "/root/keys"
+        options: "Z"
+      - src: "/home/matt/manifests"
+        dest: "/root/manifests"
+        options: "Z"
+    environment-variables:
+      pass:
+        - AAP_MACHINE_CRED_PASSWORD
+        - CONTROLLER_PASSWORD
+        - K8S_AUTH_PASSWORD

@@ -1,0 +1,36 @@
+---
+# Acknowledge a ServiceNow catalog request item (sc_req_item).
+# Transitions the RITM from Open -> Work in Progress, indicating AAP has
+# picked up the request and is processing it.
+- name: Acknowledge ServiceNow catalog request
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_request_sys_id: ""
+  tasks:
+    - name: Validate request sys_id
+      ansible.builtin.assert:
+        that:
+          - snow_request_sys_id | length > 0
+        fail_msg: "snow_request_sys_id is required"
+
+    - name: Update catalog request item to Work in Progress
+      servicenow.itsm.api:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        resource: sc_req_item
+        action: patch
+        sys_id: "{{ snow_request_sys_id }}"
+        data:
+          state: "2"
+          work_notes: >-
+            [Ansible Automation Platform] Request acknowledged. Provisioning workflow initiated.
+      register: snow_ack_result
+
+    - name: Display acknowledgement
+      ansible.builtin.debug:
+        msg:
+          - "Catalog request {{ snow_request_sys_id }} acknowledged"
+          - "State: Work in Progress"

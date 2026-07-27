@@ -1,0 +1,47 @@
+---
+# ServiceNow CMDB inventory plugin configuration.
+# This file is referenced by the AAP inventory source (source_vars).
+# Plugin: servicenow.itsm.now
+plugin: servicenow.itsm.now
+
+table: cmdb_ci_linux_server
+
+fields:
+  - name
+  - host_name
+  - ip_address
+  - os
+  - ram
+  - cpu_count
+  - sys_class_name
+  - operational_status
+  - environment
+  - short_description
+
+selection_order:
+  - host_name
+  - name
+  - ip_address
+
+columns:
+  host_name: name
+  ip_address: ansible_host
+  os: os
+  sys_class_name: classification
+  environment: environment
+
+compose:
+  ansible_host: ip_address
+
+groups:
+  linux: sys_class_name == "cmdb_ci_linux_server"
+  rhel: "'Red Hat' in os"
+  windows: sys_class_name == "cmdb_ci_win_server"
+
+keyed_groups:
+  - key: environment | lower
+    prefix: env
+    separator: "_"
+  - key: os | regex_replace('[^a-zA-Z0-9]', '_') | lower
+    prefix: os
+    separator: "_"

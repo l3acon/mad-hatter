@@ -1,0 +1,47 @@
+---
+- name: Add host to ServiceNow CMDB
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_host_name: ""
+    snow_host_ip: ""
+    snow_host_os: "Red Hat Enterprise Linux 9"
+    snow_host_environment: "Development"
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - snow_host_name | length > 0
+          - snow_host_ip | length > 0
+        fail_msg: "snow_host_name and snow_host_ip are required"
+
+    - name: Create configuration item in CMDB
+      servicenow.itsm.configuration_item:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        state: present
+        name: "{{ snow_host_name }}"
+        sys_class_name: cmdb_ci_linux_server
+        ip_address: "{{ snow_host_ip }}"
+        other:
+          os: "{{ snow_host_os }}"
+          environment: "{{ snow_host_environment }}"
+          operational_status: "operational"
+          short_description: "Provisioned by Ansible Automation Platform"
+      register: snow_ci_result
+
+    - name: Display created CI information
+      ansible.builtin.debug:
+        msg:
+          - "CI created successfully"
+          - "sys_id: {{ snow_ci_result.record.sys_id }}"
+          - "name: {{ snow_ci_result.record.name }}"
+          - "class: {{ snow_ci_result.record.sys_class_name }}"
+
+    - name: Set CI sys_id as artifact for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_ci_sys_id: "{{ snow_ci_result.record.sys_id }}"
+          snow_ci_name: "{{ snow_ci_result.record.name }}"

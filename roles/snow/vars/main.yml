@@ -1,0 +1,480 @@
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# ServiceNow + AAP — Configuration as Code (CasC)
+# Dispatched via infra.aap_configuration.dispatch
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── Job Templates ────────────────────────────────────────────────────────────
+controller_templates:
+  # ── CMDB ──────────────────────────────────────────────────────────────────
+  - name: "ServiceNow | CMDB - Add Host"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/cmdb_add_host.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Add a new CI to the ServiceNow CMDB.
+      spec:
+        - question_name: Hostname
+          type: text
+          variable: snow_host_name
+          required: true
+        - question_name: IP Address
+          type: text
+          variable: snow_host_ip
+          required: true
+        - question_name: Operating System
+          type: multiplechoice
+          variable: snow_host_os
+          required: true
+          choices:
+            - Red Hat Enterprise Linux 9
+            - Red Hat Enterprise Linux 8
+            - Fedora
+            - Windows Server 2022
+          default: Red Hat Enterprise Linux 9
+        - question_name: Environment
+          type: multiplechoice
+          variable: snow_host_environment
+          required: false
+          choices:
+            - Production
+            - Development
+            - Test
+            - Staging
+          default: Development
+
+  - name: "ServiceNow | CMDB - Enrich Host"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/cmdb_enrich_host.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Update an existing CMDB CI with enriched configuration data (CPU, RAM, packages, etc).
+      spec:
+        - question_name: CI sys_id or hostname
+          type: text
+          variable: snow_ci_identifier
+          required: true
+        - question_name: CPU count
+          type: text
+          variable: snow_ci_cpu_count
+          required: false
+        - question_name: RAM (MB)
+          type: text
+          variable: snow_ci_ram
+          required: false
+        - question_name: Additional attributes (JSON)
+          question_description: >-
+            JSON object of key/value pairs to set on the CI record (e.g. {"short_description": "web server"}).
+          type: textarea
+          variable: snow_ci_attributes_json
+          required: false
+
+  - name: "ServiceNow | CMDB - Sync Inventory"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/cmdb_sync_inventory.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: false
+    survey_enabled: false
+
+  # ── ITSM Tickets ─────────────────────────────────────────────────────────
+  - name: "ServiceNow | ITSM - Create Incident"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/itsm_create_incident.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Create a new incident in ServiceNow ITSM.
+      spec:
+        - question_name: Short description
+          type: text
+          variable: snow_incident_short_description
+          required: true
+          min: 1
+          max: 256
+        - question_name: Description
+          type: textarea
+          variable: snow_incident_description
+          required: false
+        - question_name: Urgency
+          type: multiplechoice
+          variable: snow_incident_urgency
+          required: true
+          choices:
+            - "1 - High"
+            - "2 - Medium"
+            - "3 - Low"
+          default: "2 - Medium"
+        - question_name: Impact
+          type: multiplechoice
+          variable: snow_incident_impact
+          required: true
+          choices:
+            - "1 - High"
+            - "2 - Medium"
+            - "3 - Low"
+          default: "2 - Medium"
+        - question_name: Category
+          type: multiplechoice
+          variable: snow_incident_category
+          required: false
+          choices:
+            - Software
+            - Hardware
+            - Network
+            - Database
+          default: Software
+
+  - name: "ServiceNow | ITSM - Update Incident"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/itsm_update_incident.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Update an existing incident. Follow SNOW state machine:
+        New(1) -> In Progress(2) -> On Hold(3) or Resolved(6) -> Closed(7).
+      spec:
+        - question_name: Incident number (e.g. INC0010001)
+          type: text
+          variable: snow_incident_number
+          required: true
+        - question_name: New state
+          type: multiplechoice
+          variable: snow_incident_state
+          required: true
+          choices:
+            - "2 - In Progress"
+            - "3 - On Hold"
+            - "6 - Resolved"
+          default: "2 - In Progress"
+        - question_name: Work notes
+          type: textarea
+          variable: snow_incident_work_notes
+          required: false
+
+  - name: "ServiceNow | ITSM - Close Incident"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/itsm_close_incident.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Close an incident. The incident must be in Resolved(6) state first.
+        Transitions: Resolved(6) -> Closed(7). Requires close_code and close_notes.
+      spec:
+        - question_name: Incident number (e.g. INC0010001)
+          type: text
+          variable: snow_incident_number
+          required: true
+        - question_name: Close code
+          type: multiplechoice
+          variable: snow_incident_close_code
+          required: true
+          choices:
+            - "Solved (Permanently)"
+            - "Solved (Work Around)"
+            - "Not Solved (Not Reproducible)"
+            - "Not Solved (Too Costly)"
+            - "Closed/Resolved by Caller"
+          default: "Solved (Permanently)"
+        - question_name: Close notes
+          type: textarea
+          variable: snow_incident_close_notes
+          required: true
+
+  # ── Self-Service ─────────────────────────────────────────────────────────
+  - name: "ServiceNow | Self-Service - Acknowledge Catalog Request"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/selfservice_acknowledge_request.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "ServiceNow | Self-Service - Update Catalog Item Status"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/selfservice_update_request.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  # ── VM Provisioning (AWS) ────────────────────────────────────────────────
+  - name: "ServiceNow | Provision RHEL VM in AWS"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/provision_rhel_vm.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - "{{ snow_aws_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Provision a RHEL VM in AWS (used as workflow node).
+      spec:
+        - question_name: VM name
+          type: text
+          variable: snow_vm_name
+          required: true
+        - question_name: Instance type
+          type: multiplechoice
+          variable: snow_vm_instance_type
+          required: true
+          choices:
+            - t3.micro
+            - t3.small
+            - t3.medium
+            - t3.large
+            - t3.xlarge
+          default: t3.medium
+        - question_name: Region
+          type: multiplechoice
+          variable: snow_vm_region
+          required: true
+          choices:
+            - us-east-1
+            - us-east-2
+            - us-west-1
+            - us-west-2
+            - eu-west-1
+          default: us-east-1
+
+  - name: "ServiceNow | Post-Provision - Install Packages"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/post_provision_packages.yml
+    credentials:
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Install packages on a newly provisioned host.
+      spec:
+        - question_name: Target host
+          type: text
+          variable: snow_target_host
+          required: true
+        - question_name: Packages (comma-separated)
+          type: text
+          variable: snow_packages
+          required: false
+
+# ─── Workflows ────────────────────────────────────────────────────────────────
+controller_workflows:
+  - name: "{{ snow_provision_workflow_name }}"
+    description: >-
+      End-to-end self-service VM provisioning triggered from a ServiceNow catalog item.
+      Acknowledges the order, provisions a RHEL VM in AWS, registers it in the CMDB,
+      syncs the AAP inventory, installs requested packages, and updates the catalog
+      item with access information.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: true
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Acknowledge Request
+        unified_job_template: "ServiceNow | Self-Service - Acknowledge Catalog Request"
+        all_parents_must_converge: false
+        success_nodes:
+          - Provision VM
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Provision VM
+        unified_job_template: "ServiceNow | Provision RHEL VM in AWS"
+        all_parents_must_converge: false
+        success_nodes:
+          - Register in CMDB
+        failure_nodes:
+          - Update Request Failed
+        always_nodes: []
+
+      - identifier: Register in CMDB
+        unified_job_template: "ServiceNow | CMDB - Add Host"
+        all_parents_must_converge: false
+        success_nodes:
+          - Sync Inventory
+        failure_nodes:
+          - Update Request Failed
+        always_nodes: []
+
+      - identifier: Sync Inventory
+        unified_job_template: "ServiceNow | CMDB - Sync Inventory"
+        all_parents_must_converge: false
+        success_nodes:
+          - Install Packages
+        failure_nodes:
+          - Update Request Failed
+        always_nodes: []
+
+      - identifier: Install Packages
+        unified_job_template: "ServiceNow | Post-Provision - Install Packages"
+        all_parents_must_converge: false
+        success_nodes:
+          - Update Request Complete
+        failure_nodes:
+          - Update Request Failed
+        always_nodes: []
+
+      - identifier: Update Request Complete
+        unified_job_template: "ServiceNow | Self-Service - Update Catalog Item Status"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Update Request Failed
+        unified_job_template: "ServiceNow | Self-Service - Update Catalog Item Status"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+    survey_spec:
+      name: ""
+      description: >-
+        Parameters passed from the ServiceNow catalog item request. The workflow
+        acknowledges the request, provisions infrastructure, and updates SNOW throughout.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: snow_vm_name
+          required: true
+          min: 1
+          max: 63
+        - question_name: Instance size
+          type: multiplechoice
+          variable: snow_vm_instance_type
+          required: true
+          choices:
+            - t3.micro
+            - t3.small
+            - t3.medium
+            - t3.large
+            - t3.xlarge
+          default: t3.medium
+        - question_name: Packages to install (comma-separated)
+          type: text
+          variable: snow_packages
+          required: false
+          min: 0
+          max: 1024
+        - question_name: Catalog request sys_id
+          question_description: >-
+            The sys_id of the sc_req_item record (passed automatically from SNOW).
+          type: text
+          variable: snow_request_sys_id
+          required: true
+        - question_name: Requested by
+          type: text
+          variable: snow_requested_by
+          required: false
+
+# ─── Execution Environments ───────────────────────────────────────────────────
+controller_execution_environments:
+  - name: "{{ snow_aap_ee_name }}"
+    image: "{{ snow_aap_ee_image }}"
+    pull: always
+
+# ─── Projects ────────────────────────────────────────────────────────────────
+controller_projects:
+  - name: "{{ snow_aap_project_name }}"
+    organization: Default
+    scm_type: git
+    scm_url: "{{ snow_aap_project_scm_url }}"
+    scm_branch: "{{ snow_aap_project_scm_branch }}"
+    default_environment: "{{ snow_aap_ee_name }}"
+    allow_override: true
+    scm_update_on_launch: true
+    wait: true
+
+# ─── Hosts ────────────────────────────────────────────────────────────────────
+controller_hosts:
+  - name: localhost
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    variables:
+      ansible_connection: local
+
+# ─── RBAC ─────────────────────────────────────────────────────────────────────
+controller_roles: >-
+  {{
+    [
+      {
+        'user': snow_ssp_user_name,
+        'role': 'execute',
+        'workflow_job_template': snow_provision_workflow_name,
+        'state': 'present',
+      },
+    ]
+    if (snow_ssp_user_enabled | default(true) | bool)
+    else []
+  }}

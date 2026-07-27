@@ -1,0 +1,111 @@
+---
+- name: Assert required variables and credentials
+  ansible.builtin.assert:
+    that:
+      - aap_hostname is defined
+      - aap_username is defined
+      - aap_password is defined
+      - snow_instance | length > 0
+      - snow_username | length > 0
+      - snow_password | length > 0
+    fail_msg: >-
+      Missing required variables. Ensure aap_hostname, aap_username, aap_password,
+      and SNOW_INSTANCE/SNOW_USERNAME/SNOW_PASSWORD environment variables are set.
+
+- name: Build ServiceNow credential for dispatch
+  ansible.builtin.set_fact:
+    snow_controller_credentials:
+      - name: "{{ snow_aap_credential_name }}"
+        credential_type: ServiceNow
+        organization: Default
+        update_secrets: true
+        inputs:
+          instance: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+
+- name: Build merged controller credentials # noqa: var-naming[no-role-prefix]
+  ansible.builtin.set_fact:
+    controller_credentials: >-
+      {{
+        snow_controller_credentials
+        + (snow_extra_controller_credentials | default([]))
+      }}
+  no_log: true
+
+- name: Ensure ServiceNow CMDB inventory exists
+  ansible.controller.inventory:
+    name: "{{ snow_aap_inventory_name }}"
+    organization: Default
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+
+- name: Ensure ServiceNow Runtime inventory exists
+  ansible.controller.inventory:
+    name: "{{ snow_aap_runtime_inventory_name }}"
+    organization: Default
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+
+- name: Create self-service portal user on the controller
+  when: snow_ssp_user_enabled | bool
+  ansible.controller.user:
+    username: "{{ snow_ssp_user_name }}"
+    password: "{{ snow_ssp_user_password }}"
+    first_name: ServiceNow
+    last_name: Self-Service
+    is_superuser: false
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+
+- name: Build inventory source configuration for CMDB
+  ansible.builtin.set_fact:
+    snow_controller_inventory_sources:
+      - name: "ServiceNow CMDB Source"
+        inventory: "{{ snow_aap_inventory_name }}"
+        organization: Default
+        description: >-
+          ServiceNow CMDB dynamic inventory (servicenow.itsm.now inventory plugin).
+          Syncs {{ snow_cmdb_table }} with filter: {{ snow_cmdb_filter }}.
+        source: servicenow
+        credential: "{{ snow_aap_credential_name }}"
+        execution_environment: "{{ snow_aap_ee_name }}"
+        overwrite: true
+        update_on_launch: true
+        update_cache_timeout: 0
+        timeout: 600
+        verbosity: 1
+        source_vars:
+          plugin: servicenow.itsm.now
+          table: "{{ snow_cmdb_table }}"
+          fields: "{{ snow_cmdb_fields }}"
+          selection_order: host_name,name,ip_address
+          filter: "{{ snow_cmdb_filter }}"
+          columns:
+            host_name: name
+            ip_address: ansible_host
+            os: os
+            sys_class_name: classification
+
+- name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
+  ansible.builtin.set_fact:
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_execution_environments: "{{ controller_execution_environments }}"
+    controller_projects: "{{ controller_projects }}"
+    controller_inventories: []
+    controller_inventory_sources: "{{ snow_controller_inventory_sources }}"
+    controller_hosts: "{{ controller_hosts }}"
+    controller_workflows: "{{ controller_workflows }}"
+    controller_roles: "{{ controller_roles }}"
+    controller_schedules: []
+
+- name: Apply Automation Controller configuration (ServiceNow CasC)
+  ansible.builtin.include_role:
+    name: infra.aap_configuration.dispatch

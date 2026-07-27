@@ -1,0 +1,74 @@
+---
+- name: Enrich host configuration in ServiceNow CMDB
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_ci_identifier: ""
+    snow_ci_cpu_count: ""
+    snow_ci_ram: ""
+    snow_ci_attributes_json: ""
+  tasks:
+    - name: Validate CI identifier
+      ansible.builtin.assert:
+        that:
+          - snow_ci_identifier | length > 0
+        fail_msg: "snow_ci_identifier (sys_id or hostname) is required"
+
+    - name: Resolve CI by hostname if not a sys_id
+      when: snow_ci_identifier | length != 32
+      block:
+        - name: Query CMDB for host by name
+          servicenow.itsm.configuration_item_info:
+            instance:
+              host: "{{ snow_instance }}"
+              username: "{{ snow_username }}"
+              password: "{{ snow_password }}"
+            sys_class_name: cmdb_ci_linux_server
+            query:
+              - name: = {{ snow_ci_identifier }}
+          register: snow_ci_lookup
+
+        - name: Assert CI found
+          ansible.builtin.assert:
+            that:
+              - snow_ci_lookup.records | length > 0
+            fail_msg: "No CI found with name '{{ snow_ci_identifier }}'"
+
+        - name: Set resolved sys_id
+          ansible.builtin.set_fact:
+            snow_ci_sys_id: "{{ snow_ci_lookup.records[0].sys_id }}"
+
+    - name: Use provided sys_id directly
+      when: snow_ci_identifier | length == 32
+      ansible.builtin.set_fact:
+        snow_ci_sys_id: "{{ snow_ci_identifier }}"
+
+    - name: Build enrichment payload
+      ansible.builtin.set_fact:
+        snow_enrichment_data: >-
+          {{
+            {}
+            | combine({'cpu_count': snow_ci_cpu_count} if snow_ci_cpu_count | length > 0 else {})
+            | combine({'ram': snow_ci_ram} if snow_ci_ram | length > 0 else {})
+            | combine(snow_ci_attributes_json | from_json if snow_ci_attributes_json | length > 0 else {})
+          }}
+
+    - name: Update configuration item with enriched data
+      servicenow.itsm.configuration_item:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        state: present
+        sys_id: "{{ snow_ci_sys_id }}"
+        other: "{{ snow_enrichment_data }}"
+      register: snow_enrich_result
+      when: snow_enrichment_data | length > 0
+
+    - name: Display enrichment result
+      ansible.builtin.debug:
+        msg:
+          - "CI enriched successfully"
+          - "sys_id: {{ snow_ci_sys_id }}"
+          - "Updated fields: {{ snow_enrichment_data | to_nice_json }}"
+      when: snow_enrichment_data | length > 0

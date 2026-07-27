@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: matferna
+  description: >-
+    AAP + ServiceNow integration role — CMDB inventory sourcing, ITSM ticket management,
+    and self-service catalog items backed by AAP job templates.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: GenericLinux
+      versions:
+        - all
+
+dependencies:
+  - role: infra.aap_configuration.dispatch
