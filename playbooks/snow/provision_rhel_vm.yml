@@ -45,8 +45,10 @@
           amazon.aws.ec2_vpc_subnet_info:
             region: "{{ snow_vm_region }}"
           register: _all_subnets
+          ignore_errors: true
 
-        - name: Select first public subnet (or any subnet)
+        - name: Select public subnet from discovered subnets
+          when: _all_subnets is not failed and (_all_subnets.subnets | default([]) | length > 0)
           ansible.builtin.set_fact:
             snow_vm_subnet: >-
               {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | first).subnet_id
@@ -56,6 +58,12 @@
               {{ (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | first).vpc_id
                  if (_all_subnets.subnets | selectattr('map_public_ip_on_launch', 'equalto', true) | list | length > 0)
                  else (_all_subnets.subnets | first).vpc_id }}
+
+        - name: Use fallback subnet (ROSA consolidated public subnet)
+          when: snow_vm_subnet | default('') | length == 0
+          ansible.builtin.set_fact:
+            snow_vm_subnet: "subnet-01fc512bc29c8070f"
+            snow_vm_vpc_id: "vpc-05d12c0ce36be94ef"
 
     - name: Ensure security group exists
       amazon.aws.ec2_security_group:
