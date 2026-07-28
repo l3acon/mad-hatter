@@ -544,11 +544,27 @@ def upload_update_set(module, xml_content):
             item_sys_id = check.json()["result"][0]["sys_id"]
             results["skipped"].append(f"Catalog Item: {item['name']}")
         else:
+            # Look up the "Services" category in the main "Service Catalog"
+            cat_query = session.get(
+                f"{instance}/api/now/table/sc_category",
+                params={"sysparm_query": "title=Services^sc_catalog.title=Service Catalog", "sysparm_limit": "1"}
+            )
+            cat_results = cat_query.json().get("result", []) if cat_query.status_code == 200 else []
+            category_id = cat_results[0]["sys_id"] if cat_results else ""
+
+            catalog_query = session.get(
+                f"{instance}/api/now/table/sc_catalog",
+                params={"sysparm_query": "title=Service Catalog", "sysparm_limit": "1"}
+            )
+            catalog_results = catalog_query.json().get("result", []) if catalog_query.status_code == 200 else []
+            catalog_id = catalog_results[0]["sys_id"] if catalog_results else ""
+
             r = session.post(f"{instance}/api/now/table/sc_cat_item", json={
                 "name": item["name"],
                 "short_description": item.get("short_description", ""),
                 "description": item.get("description", ""),
-                "category": item.get("category", ""),
+                "category": category_id,
+                "sc_catalogs": catalog_id,
                 "active": "true",
                 "use_sc_layout": "true",
             })

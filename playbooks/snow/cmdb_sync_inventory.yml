@@ -1,19 +1,42 @@
 ---
-- name: Sync AAP inventory from ServiceNow CMDB
+# Add the newly provisioned host directly to the AAP inventory.
+# This replaces the full CMDB inventory source sync which is slow and error-prone
+# mid-workflow. The CMDB source sync can run on a schedule or on-demand separately.
+- name: Add host to AAP inventory
   hosts: localhost
   gather_facts: false
+  vars:
+    snow_target_host: ""
+    snow_vm_name: ""
+    snow_host_ip: ""
   tasks:
-    - name: Trigger inventory source sync in AAP
-      ansible.controller.inventory_source_update:
-        name: "ServiceNow CMDB Source"
+    - name: Determine host details from workflow artifacts
+      ansible.builtin.set_fact:
+        _host_name: "{{ snow_vm_name | default(snow_target_host, true) }}"
+        _host_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
+
+    - name: Validate we have host info
+      ansible.builtin.assert:
+        that:
+          - _host_name | length > 0
+          - _host_ip | length > 0
+        fail_msg: "snow_vm_name/snow_host_ip or snow_target_host required"
+
+    - name: Add host to ServiceNow CMDB Inventory in AAP
+      ansible.controller.host:
+        name: "{{ _host_name }}"
         inventory: "{{ snow_aap_inventory_name | default('ServiceNow CMDB Inventory') }}"
-        wait: true
+        state: present
+        enabled: true
+        variables:
+          ansible_host: "{{ _host_ip }}"
+          ansible_user: ec2-user
         controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
         controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
         controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
         validate_certs: false
-      register: snow_sync_result
+      register: _host_result
 
-    - name: Display sync result
+    - name: Display result
       ansible.builtin.debug:
-        msg: "Inventory sync completed — status: {{ snow_sync_result.status | default('complete') }}"
+        msg: "Host '{{ _host_name }}' ({{ _host_ip }}) added to AAP inventory"

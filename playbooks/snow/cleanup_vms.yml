@@ -1,0 +1,99 @@
+---
+# Cleanup: find VMs provisioned by the SNOW+AAP workflow, terminate them in AWS,
+# and remove their CMDB entries. Identifies targets by the ManagedBy=ansible-aap tag.
+- name: Cleanup SNOW+AAP provisioned VMs
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_vm_region: us-east-2
+    snow_cleanup_tag_key: ManagedBy
+    snow_cleanup_tag_value: ansible-aap
+    snow_cleanup_dry_run: false
+  tasks:
+    - name: Find EC2 instances tagged as AAP-managed
+      amazon.aws.ec2_instance_info:
+        region: "{{ snow_vm_region }}"
+        filters:
+          "tag:{{ snow_cleanup_tag_key }}": "{{ snow_cleanup_tag_value }}"
+          instance-state-name:
+            - running
+            - stopped
+      register: _managed_instances
+
+    - name: Display instances found
+      ansible.builtin.debug:
+        msg: "Found {{ _managed_instances.instances | length }} managed instance(s)"
+
+    - name: Show instances to clean up
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.instance_id }} | {{ item.tags.Name | default('unnamed') }}
+          | {{ item.public_ip_address | default('no-public-ip') }}
+          | state: {{ item.state.name }}
+      loop: "{{ _managed_instances.instances }}"
+      loop_control:
+        label: "{{ item.instance_id }}"
+
+    - name: Terminate EC2 instances
+      when: not (snow_cleanup_dry_run | bool)
+      amazon.aws.ec2_instance:
+        region: "{{ snow_vm_region }}"
+        instance_ids: "{{ _managed_instances.instances | map(attribute='instance_id') | list }}"
+        state: terminated
+        wait: true
+      register: _terminate_result
+      when: _managed_instances.instances | length > 0
+
+    - name: Remove hosts from ServiceNow CMDB
+      when:
+        - not (snow_cleanup_dry_run | bool)
+        - _managed_instances.instances | length > 0
+      block:
+        - name: Query CMDB for matching CIs
+          servicenow.itsm.configuration_item_info:
+            instance:
+              host: "{{ snow_instance }}"
+              username: "{{ snow_username }}"
+              password: "{{ snow_password }}"
+            sys_class_name: cmdb_ci_linux_server
+            query:
+              - name: "IN {{ _managed_instances.instances | map(attribute='tags') | map(attribute='Name', default='') | select() | join(',') }}"
+          register: _cmdb_cis
+
+        - name: Delete CIs from CMDB
+          servicenow.itsm.configuration_item:
+            instance:
+              host: "{{ snow_instance }}"
+              username: "{{ snow_username }}"
+              password: "{{ snow_password }}"
+            state: absent
+            sys_id: "{{ item.sys_id }}"
+          loop: "{{ _cmdb_cis.records }}"
+          loop_control:
+            label: "{{ item.name }}"
+          when: _cmdb_cis.records | length > 0
+
+    - name: Remove hosts from AAP inventory
+      when:
+        - not (snow_cleanup_dry_run | bool)
+        - _managed_instances.instances | length > 0
+      ansible.controller.host:
+        name: "{{ item.tags.Name | default(item.instance_id) }}"
+        inventory: "{{ snow_aap_inventory_name | default('ServiceNow CMDB Inventory') }}"
+        state: absent
+        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
+        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+        validate_certs: false
+      loop: "{{ _managed_instances.instances }}"
+      loop_control:
+        label: "{{ item.tags.Name | default(item.instance_id) }}"
+      ignore_errors: true
+
+    - name: Cleanup summary
+      ansible.builtin.debug:
+        msg:
+          - "Cleanup complete"
+          - "Instances terminated: {{ _managed_instances.instances | length }}"
+          - "Region: {{ snow_vm_region }}"
+          - "Dry run: {{ snow_cleanup_dry_run }}"

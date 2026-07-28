@@ -91,14 +91,13 @@ controller_templates:
   - name: "ServiceNow | CMDB - Sync Inventory"
     job_type: run
     organization: Default
-    inventory: "{{ snow_aap_inventory_name }}"
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
     playbook: playbooks/snow/cmdb_sync_inventory.yml
     credentials:
-      - "{{ snow_aap_credential_name }}"
       - Controller Credential
     execution_environment: "{{ snow_aap_ee_name }}"
-    ask_variables_on_launch: false
+    ask_variables_on_launch: true
     survey_enabled: false
 
   # ── ITSM Tickets ─────────────────────────────────────────────────────────
@@ -296,12 +295,12 @@ controller_templates:
           variable: snow_vm_region
           required: true
           choices:
-            - us-east-1
             - us-east-2
+            - us-east-1
             - us-west-1
             - us-west-2
             - eu-west-1
-          default: us-east-1
+          default: us-east-2
 
   - name: "ServiceNow | Post-Provision - Install Packages"
     job_type: run
@@ -326,6 +325,44 @@ controller_templates:
           type: text
           variable: snow_packages
           required: false
+
+  # ── Cleanup ──────────────────────────────────────────────────────────────
+  - name: "ServiceNow | Cleanup - Terminate Provisioned VMs"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/cleanup_vms.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - "{{ snow_aws_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Find and terminate all VMs provisioned by the AAP+SNOW workflow (tagged ManagedBy=ansible-aap),
+        remove them from the ServiceNow CMDB, and clean up the AAP inventory.
+      spec:
+        - question_name: AWS Region
+          type: multiplechoice
+          variable: snow_vm_region
+          required: true
+          choices:
+            - us-east-2
+            - us-east-1
+            - us-west-2
+          default: us-east-2
+        - question_name: Dry run (list only, don't terminate)
+          type: multiplechoice
+          variable: snow_cleanup_dry_run
+          required: true
+          choices:
+            - "false"
+            - "true"
+          default: "false"
 
 # ─── Workflows ────────────────────────────────────────────────────────────────
 controller_workflows:
