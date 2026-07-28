@@ -34,11 +34,34 @@
           username: "{{ snow_username }}"
           password: "{{ snow_password }}"
 
+- name: Build EC2 SSH credential if key file exists
+  ansible.builtin.set_fact:
+    _snow_ec2_ssh_credential: >-
+      {{
+        [
+          {
+            'name': snow_aap_ec2_ssh_credential_name,
+            'credential_type': 'Machine',
+            'organization': 'Default',
+            'update_secrets': true,
+            'inputs': {
+              'username': snow_aap_ec2_ssh_username,
+              'ssh_key_data': lookup('file', snow_aap_ec2_ssh_private_key_file),
+            },
+          },
+        ]
+        if (snow_aap_ec2_ssh_private_key_file is defined
+            and lookup('file', snow_aap_ec2_ssh_private_key_file, errors='ignore'))
+        else []
+      }}
+  no_log: true
+
 - name: Build merged controller credentials # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     controller_credentials: >-
       {{
         snow_controller_credentials
+        + _snow_ec2_ssh_credential
         + (snow_extra_controller_credentials | default([]))
       }}
   no_log: true

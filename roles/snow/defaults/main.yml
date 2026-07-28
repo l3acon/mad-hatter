@@ -35,6 +35,11 @@ snow_aap_credential_name: "ServiceNow Credential"
 # AWS credential (for VM provisioning use case).
 snow_aws_credential_name: "AWS"
 
+# SSH credential for post-provision access to EC2 instances.
+snow_aap_ec2_ssh_credential_name: "SNOW Demo EC2 SSH"
+snow_aap_ec2_ssh_private_key_file: /home/matt/keys/aap-snow-demo
+snow_aap_ec2_ssh_username: ec2-user
+
 # ─── ITSM ticket defaults ────────────────────────────────────────────────────
 snow_incident_caller: "matferna"
 snow_incident_category: "Software"

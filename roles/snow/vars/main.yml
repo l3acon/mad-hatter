@@ -310,6 +310,7 @@ controller_templates:
     playbook: playbooks/snow/post_provision_packages.yml
     credentials:
       - Controller Credential
+      - "{{ snow_aap_ec2_ssh_credential_name }}"
     execution_environment: "{{ snow_aap_ee_name }}"
     ask_variables_on_launch: true
     survey_enabled: false
