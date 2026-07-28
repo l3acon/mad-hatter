@@ -10,6 +10,10 @@
     snow_cleanup_tag_value: ansible-aap
     snow_cleanup_dry_run: false
   tasks:
+    - name: set fact
+      ansible.builtin.set_fact:
+        tag_string: "tag:{{ snow_cleanup_tag_key }}: {{ snow_cleanup_tag_value }}"
+
     - name: Find EC2 instances tagged as AAP-managed
       amazon.aws.ec2_instance_info:
         region: "{{ snow_vm_region }}"

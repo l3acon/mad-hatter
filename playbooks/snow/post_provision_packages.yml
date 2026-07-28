@@ -1,26 +1,60 @@
 ---
 # Post-provisioning: install packages on a newly provisioned host.
-# The host must exist in the AAP inventory (added by the Sync Inventory node).
-# The workflow passes snow_vm_name via set_stats which becomes the job limit.
-- name: Post-provision — install packages on target host
-  hosts: all
+# Uses add_host to dynamically target the VM by IP (passed via set_stats from provision step).
+# Two plays: first adds the host dynamically, second targets it for package install.
+- name: Post-provision — prepare target
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_target_host: ""
+    snow_vm_name: ""
+    snow_host_ip: ""
+    snow_packages: ""
+  tasks:
+    - name: Resolve target host
+      ansible.builtin.set_fact:
+        _target_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
+        _target_name: "{{ snow_vm_name | default('provisioned-host', true) }}"
+
+    - name: Validate target
+      ansible.builtin.assert:
+        that:
+          - _target_ip | length > 0
+        fail_msg: "No target host IP available (snow_host_ip or snow_target_host required)"
+
+    - name: Add provisioned host to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ _target_name }}"
+        ansible_host: "{{ _target_ip }}"
+        ansible_user: ec2-user
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: provisioned
+        snow_packages: "{{ snow_packages }}"
+
+    - name: Wait for SSH to become available
+      ansible.builtin.wait_for:
+        host: "{{ _target_ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+
+- name: Post-provision — install packages
+  hosts: provisioned
   gather_facts: true
   become: true
-  vars:
-    snow_packages: ""
   tasks:
     - name: Parse package list
       ansible.builtin.set_fact:
         _package_list: >-
           {{ snow_packages | split(',') | map('trim') | select() | list }}
-      when: snow_packages | length > 0
+      when: snow_packages | default('') | length > 0
 
     - name: Install requested packages
       ansible.builtin.dnf:
         name: "{{ _package_list }}"
         state: present
       when:
-        - snow_packages | length > 0
+        - snow_packages | default('') | length > 0
         - _package_list | length > 0
       register: _install_result
 
@@ -28,10 +62,10 @@
       ansible.builtin.debug:
         msg:
           - "Packages installed: {{ _package_list | default([]) | join(', ') }}"
-          - "Host: {{ inventory_hostname }} ({{ ansible_host | default('localhost') }})"
-      when: snow_packages | length > 0
+          - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
+      when: snow_packages | default('') | length > 0
 
     - name: Skip message when no packages requested
       ansible.builtin.debug:
         msg: "No packages requested — post-provision step skipped"
-      when: snow_packages | length == 0
+      when: snow_packages | default('') | length == 0
