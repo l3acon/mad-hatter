@@ -312,15 +312,14 @@ controller_templates:
       - Controller Credential
     execution_environment: "{{ snow_aap_ee_name }}"
     ask_variables_on_launch: true
+    ask_limit_on_launch: true
     survey_enabled: true
     survey_spec:
       name: ""
-      description: Install packages on a newly provisioned host.
+      description: >-
+        Install packages on a provisioned host. Set the Limit to the VM name
+        (must exist in the ServiceNow CMDB Inventory).
       spec:
-        - question_name: Target host
-          type: text
-          variable: snow_target_host
-          required: true
         - question_name: Packages (comma-separated)
           type: text
           variable: snow_packages
@@ -415,6 +414,7 @@ controller_workflows:
 
       - identifier: Install Packages
         unified_job_template: "ServiceNow | Post-Provision - Install Packages"
+        limit: "{{ snow_vm_name }}"
         all_parents_must_converge: false
         success_nodes:
           - Update Request Complete

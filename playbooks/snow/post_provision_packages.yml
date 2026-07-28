@@ -1,8 +1,9 @@
 ---
 # Post-provisioning: install packages on a newly provisioned host.
-# Runs against the target host (passed from upstream workflow node via set_stats).
+# The host must exist in the AAP inventory (added by the Sync Inventory node).
+# The workflow passes snow_vm_name via set_stats which becomes the job limit.
 - name: Post-provision — install packages on target host
-  hosts: "{{ snow_target_host | default('all') }}"
+  hosts: all
   gather_facts: true
   become: true
   vars:
@@ -27,7 +28,7 @@
       ansible.builtin.debug:
         msg:
           - "Packages installed: {{ _package_list | default([]) | join(', ') }}"
-          - "Host: {{ inventory_hostname }}"
+          - "Host: {{ inventory_hostname }} ({{ ansible_host | default('localhost') }})"
       when: snow_packages | length > 0
 
     - name: Skip message when no packages requested
