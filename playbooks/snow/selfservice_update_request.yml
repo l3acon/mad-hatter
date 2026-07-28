@@ -26,20 +26,19 @@
     - name: Determine request state from workflow context
       ansible.builtin.set_fact:
         _snow_ritm_state: >-
-          {{ snow_request_state
-             | default('3' if (snow_vm_public_ip | length > 0 or snow_vm_public_dns | length > 0) else '4') }}
+          {% if snow_request_state | default('') | length > 0 %}{{ snow_request_state }}{% elif snow_vm_public_ip | default('') | length > 0 or snow_vm_public_dns | default('') | length > 0 %}3{% else %}4{% endif %}
 
     - name: Build completion notes with access info
       ansible.builtin.set_fact:
         _snow_completion_notes: |
-          {% if snow_vm_public_dns | length > 0 %}
+          {% if snow_vm_public_dns | default('') | length > 0 %}
           [Ansible Automation Platform] Provisioning complete.
-          VM Name: {{ snow_vm_name }}
+          VM Name: {{ snow_vm_name | default('unknown') }}
           Access: ssh ec2-user@{{ snow_vm_public_dns }}
           Public IP: {{ snow_vm_public_ip | default('N/A') }}
-          {% elif snow_vm_public_ip | length > 0 %}
+          {% elif snow_vm_public_ip | default('') | length > 0 %}
           [Ansible Automation Platform] Provisioning complete.
-          VM Name: {{ snow_vm_name }}
+          VM Name: {{ snow_vm_name | default('unknown') }}
           Access: ssh ec2-user@{{ snow_vm_public_ip }}
           {% elif _snow_ritm_state == '4' %}
           [Ansible Automation Platform] Provisioning failed. Check AAP job logs for details.
