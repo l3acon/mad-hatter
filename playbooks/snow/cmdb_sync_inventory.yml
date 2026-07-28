@@ -35,6 +35,7 @@
         controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
         controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
         validate_certs: false
+        request_timeout: 30
       register: _host_result
 
     - name: Display result
