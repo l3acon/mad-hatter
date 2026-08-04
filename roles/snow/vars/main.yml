@@ -353,6 +353,101 @@ controller_templates:
             - "true"
           default: "false"
 
+  # ── Containerlab ─────────────────────────────────────────────────────────
+  - name: "ServiceNow | Containerlab | Provision Hypervisor"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/clab/provision_hypervisor.yml
+    credentials:
+      - "{{ snow_aws_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Provision an EC2 instance for containerlab.
+      spec:
+        - question_name: AWS Region
+          type: multiplechoice
+          variable: snow_clab_aws_region
+          required: true
+          default: us-east-2
+          choices:
+            - us-east-2
+            - us-west-2
+        - question_name: Instance Type
+          type: multiplechoice
+          variable: snow_clab_instance_type
+          required: true
+          default: c8i.2xlarge
+          choices:
+            - c8i.2xlarge
+            - c8i.4xlarge
+
+  - name: "ServiceNow | Containerlab | Deploy Topology"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/clab/deploy_topology.yml
+    credentials:
+      - "{{ snow_aws_credential_name }}"
+      - Containerlab SSH
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "ServiceNow | Containerlab | Configure Devices"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_clab_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/clab/configure_devices.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Containerlab Device Access
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "ServiceNow | Containerlab | Teardown Topology"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/clab/teardown_topology.yml
+    credentials:
+      - "{{ snow_aws_credential_name }}"
+      - Containerlab SSH
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "ServiceNow | Containerlab | Teardown Hypervisor"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/clab/teardown_hypervisor.yml
+    credentials:
+      - "{{ snow_aws_credential_name }}"
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Teardown all containerlab AWS resources.
+      spec:
+        - question_name: AWS Region
+          type: multiplechoice
+          variable: snow_clab_aws_region
+          required: true
+          default: us-east-2
+          choices:
+            - us-east-2
+            - us-west-2
+
 # ─── Workflows ────────────────────────────────────────────────────────────────
 controller_workflows:
   - name: "{{ snow_provision_workflow_name }}"
@@ -464,6 +559,89 @@ controller_workflows:
           type: text
           variable: snow_requested_by
           required: false
+
+  - name: "ServiceNow | Deploy Containerlab Stack"
+    description: >-
+      Provision hypervisor, deploy containerlab topology, and sync inventory.
+      Run ad-hoc before demonstrating the SNOW change request integration.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Provision Hypervisor
+        unified_job_template: "ServiceNow | Containerlab | Provision Hypervisor"
+        all_parents_must_converge: false
+        success_nodes:
+          - Deploy Topology
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Deploy Topology
+        unified_job_template: "ServiceNow | Containerlab | Deploy Topology"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+    survey_spec:
+      name: ""
+      description: Deploy a containerlab network lab on AWS.
+      spec:
+        - question_name: AWS Region
+          type: multiplechoice
+          variable: snow_clab_aws_region
+          required: true
+          default: us-east-2
+          choices:
+            - us-east-2
+            - us-west-2
+        - question_name: Instance Type
+          type: multiplechoice
+          variable: snow_clab_instance_type
+          required: true
+          default: c8i.2xlarge
+          choices:
+            - c8i.2xlarge
+            - c8i.4xlarge
+
+  - name: "ServiceNow | Destroy Containerlab Stack"
+    description: >-
+      Teardown containerlab topology and all AWS resources.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Teardown Topology
+        unified_job_template: "ServiceNow | Containerlab | Teardown Topology"
+        all_parents_must_converge: false
+        success_nodes:
+          - Teardown Hypervisor
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Teardown Hypervisor
+        unified_job_template: "ServiceNow | Containerlab | Teardown Hypervisor"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+    survey_spec:
+      name: ""
+      description: Destroy all containerlab AWS resources.
+      spec:
+        - question_name: AWS Region
+          type: multiplechoice
+          variable: snow_clab_aws_region
+          required: true
+          default: us-east-2
+          choices:
+            - us-east-2
+            - us-west-2
 
 # ─── Credential Types ─────────────────────────────────────────────────────────
 # The ServiceNow credential type is not built-in to AAP; we create it so our

@@ -1,0 +1,117 @@
+---
+# Configure containerlab network devices.
+# Triggered by a SNOW Change Request approval. Applies standard configuration
+# (banners, NTP, SNMP) to n9kv and cat8kv devices.
+- name: Configure NX-OS Device
+  hosts: clab_nxos
+  gather_facts: false
+  vars:
+    snow_change_sys_id: ""
+  tasks:
+    - name: Configure banner
+      cisco.nxos.nxos_banner:
+        banner: motd
+        text: |
+          *** MANAGED BY ANSIBLE AUTOMATION PLATFORM ***
+          Configuration applied via ServiceNow Change Request.
+          Unauthorized access is prohibited.
+        state: present
+
+    - name: Configure NTP servers
+      cisco.nxos.nxos_ntp_global:
+        config:
+          servers:
+            - server: 216.239.35.0
+            - server: 216.239.35.4
+        state: merged
+
+    - name: Configure SNMP
+      cisco.nxos.nxos_snmp_server:
+        config:
+          communities:
+            - name: public
+              ro: true
+          contact: "AAP + ServiceNow Integration"
+          location: "Containerlab on AWS"
+        state: merged
+
+    - name: Gather NX-OS facts
+      cisco.nxos.nxos_facts:
+        gather_subset:
+          - min
+      register: nxos_facts
+
+    - name: Display NX-OS result
+      ansible.builtin.debug:
+        msg:
+          - "Hostname: {{ nxos_facts.ansible_facts.ansible_net_hostname }}"
+          - "OS Version: {{ nxos_facts.ansible_facts.ansible_net_version }}"
+          - "NTP, SNMP, and banner configured successfully"
+
+- name: Configure IOS-XE Device
+  hosts: clab_ios
+  gather_facts: false
+  tasks:
+    - name: Configure banner
+      cisco.ios.ios_banner:
+        banner: motd
+        text: |
+          *** MANAGED BY ANSIBLE AUTOMATION PLATFORM ***
+          Configuration applied via ServiceNow Change Request.
+          Unauthorized access is prohibited.
+        state: present
+
+    - name: Configure NTP servers
+      cisco.ios.ios_ntp_global:
+        config:
+          servers:
+            - server: 216.239.35.0
+            - server: 216.239.35.4
+        state: merged
+
+    - name: Configure SNMP
+      cisco.ios.ios_snmp_server:
+        config:
+          communities:
+            - name: public
+              ro: true
+          contact: "AAP + ServiceNow Integration"
+          location: "Containerlab on AWS"
+        state: merged
+
+    - name: Gather IOS facts
+      cisco.ios.ios_facts:
+        gather_subset:
+          - min
+      register: ios_facts
+
+    - name: Display IOS-XE result
+      ansible.builtin.debug:
+        msg:
+          - "Hostname: {{ ios_facts.ansible_facts.ansible_net_hostname }}"
+          - "OS Version: {{ ios_facts.ansible_facts.ansible_net_version }}"
+          - "NTP, SNMP, and banner configured successfully"
+
+- name: Update Change Request in ServiceNow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    snow_change_sys_id: ""
+  tasks:
+    - name: Update CR to Review state with completion notes
+      when: snow_change_sys_id | default('') | length > 0
+      servicenow.itsm.api:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        resource: change_request
+        action: patch
+        sys_id: "{{ snow_change_sys_id }}"
+        data:
+          state: "0"
+          work_notes: >-
+            [Ansible Automation Platform] Network device configuration applied successfully.
+            Configured: NTP servers, SNMP community, MOTD banner on n9kv (NX-OS) and cat8kv (IOS-XE).
+      ignore_errors: true

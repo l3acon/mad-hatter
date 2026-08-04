@@ -629,7 +629,7 @@ def upload_update_set(module, xml_content):
         else:
             results["errors"].append(f"Script Include: {r.status_code}")
 
-    # 6. Business Rule
+    # 6. Business Rule - Catalog Orders
     br_check = session.get(
         f"{instance}/api/now/table/sys_script",
         params={"sysparm_query": "name=AAP - Launch on Catalog Order", "sysparm_limit": "1"}
@@ -654,6 +654,33 @@ def upload_update_set(module, xml_content):
             results["created"].append("Business Rule: AAP - Launch on Catalog Order")
         else:
             results["errors"].append(f"Business Rule: {r.status_code}")
+
+    # 7. Business Rule - Change Request Approval triggers Configure Devices
+    cr_br_check = session.get(
+        f"{instance}/api/now/table/sys_script",
+        params={"sysparm_query": "name=AAP - Configure on CR Implement", "sysparm_limit": "1"}
+    )
+    if cr_br_check.status_code == 200 and cr_br_check.json().get("result"):
+        results["skipped"].append("Business Rule: AAP - Configure on CR Implement")
+    else:
+        cr_br_script = _get_change_request_br_body()
+        r = session.post(f"{instance}/api/now/table/sys_script", json={
+            "name": "AAP - Configure on CR Implement",
+            "collection": "change_request",
+            "when": "after",
+            "action_insert": "false",
+            "action_update": "true",
+            "action_delete": "false",
+            "action_query": "false",
+            "active": "true",
+            "order": "100",
+            "condition": "current.state.changesTo(-1)",
+            "script": cr_br_script,
+        })
+        if r.status_code in (200, 201):
+            results["created"].append("Business Rule: AAP - Configure on CR Implement")
+        else:
+            results["errors"].append(f"Business Rule CR: {r.status_code}")
 
     return results
 
@@ -753,6 +780,43 @@ def _get_business_rule_body(catalog_items):
         current.update();
     }}
 }})(current, previous);"""
+
+
+def _get_change_request_br_body():
+    """Return the Business Rule script for Change Request -> Implement triggers AAP."""
+    return """(function executeRule(current, previous) {
+    // Only fire when state changes to Implement (-1)
+    if (current.state != '-1') return;
+    if (previous.state == '-1') return;
+
+    var aap = new AAPIntegration();
+    var crSysId = current.sys_id.toString();
+    var crNumber = current.number.toString();
+
+    // Look up the Configure Devices job template ID
+    var configureJtId = 0;
+    var jts = new GlideRecord('sc_cat_item');  // dummy, we use the REST call
+
+    try {
+        var extraVars = {
+            snow_change_sys_id: crSysId,
+            snow_change_number: crNumber
+        };
+
+        // Launch the Configure Devices job template (hardcoded ID set during CasC)
+        var result = aap.launchJobTemplate(configureJtId, extraVars);
+        if (result.status == 201 || result.status == '201') {
+            current.work_notes = '[AAP] Configuration automation launched. Job: ' + result.body.substring(0, 150);
+        } else {
+            current.work_notes = '[AAP] Launch failed (status ' + result.status + '): ' + result.body.substring(0, 200);
+        }
+        current.update();
+    } catch (e) {
+        gs.error('AAP CR integration error: ' + e.message);
+        current.work_notes = '[AAP] Integration error: ' + e.message;
+        current.update();
+    }
+})(current, previous);"""
 
 
 def find_and_commit_update_set(module, remote_us_id):

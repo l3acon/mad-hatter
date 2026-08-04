@@ -1,0 +1,198 @@
+---
+# Deploy containerlab topology on the provisioned hypervisor.
+# Mounts EBS, installs podman + containerlab, deploys the topology, waits for devices.
+- name: Deploy Containerlab — prepare target
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    snow_clab_aws_region: us-east-2
+    snow_clab_admin_user: ec2-user
+    snow_clab_purpose_tag: containerlab
+  tasks:
+    - name: Discover hypervisor IP from EC2 tags
+      amazon.aws.ec2_instance_info:
+        region: "{{ snow_clab_aws_region }}"
+        filters:
+          "tag:deployment": containerlab
+          "tag:purpose": "{{ snow_clab_purpose_tag }}"
+          instance-state-name: running
+      register: clab_discovered
+      when: clab_host_ip is not defined
+
+    - name: Set host IP from discovery
+      ansible.builtin.set_fact:
+        clab_host_ip: "{{ clab_discovered.instances[0].public_ip_address }}"
+      when:
+        - clab_host_ip is not defined
+        - clab_discovered.instances | length > 0
+
+    - name: Validate hypervisor IP
+      ansible.builtin.assert:
+        that:
+          - clab_host_ip is defined
+        fail_msg: "No running containerlab hypervisor found"
+
+    - name: Add hypervisor to inventory
+      ansible.builtin.add_host:
+        name: clab-hypervisor
+        ansible_host: "{{ clab_host_ip }}"
+        ansible_user: "{{ snow_clab_admin_user }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: clab_hosts
+
+- name: Configure Hypervisor and Deploy Topology
+  hosts: clab-hypervisor
+  become: true
+  gather_facts: true
+  vars:
+    snow_clab_ebs_mount: /mnt/data
+    snow_clab_podman_image_path: /mnt/data/images
+    snow_clab_topology: product_demos
+    snow_clab_images:
+      - "registry.gitlab.com/redhatautomation/cat8:17.13.01a"
+      - "registry.gitlab.com/redhatautomation/nexus10-ee:10.5.3.F"
+  tasks:
+    - name: Check if EBS is already mounted
+      ansible.builtin.shell:
+        cmd: "mountpoint -q {{ snow_clab_ebs_mount }} && echo mounted || echo not_mounted"
+      register: ebs_mount_check
+      changed_when: false
+
+    - name: Find EBS data volume
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          lsblk -dno NAME,SIZE --bytes |
+          awk '$2 > 50000000000 {print "/dev/" $1}' |
+          while read dev; do
+            if ! lsblk -no MOUNTPOINT "$dev" | grep -q '/'; then echo "$dev"; break; fi
+          done
+        executable: /bin/bash
+      register: ebs_detect
+      changed_when: false
+      when: ebs_mount_check.stdout == 'not_mounted'
+
+    - name: Format EBS volume
+      community.general.filesystem:
+        fstype: xfs
+        dev: "{{ ebs_detect.stdout | trim }}"
+      when: ebs_mount_check.stdout == 'not_mounted'
+
+    - name: Create mount point
+      ansible.builtin.file:
+        path: "{{ snow_clab_ebs_mount }}"
+        state: directory
+        mode: '0777'
+
+    - name: Mount EBS volume
+      ansible.posix.mount:
+        path: "{{ snow_clab_ebs_mount }}"
+        src: "{{ ebs_detect.stdout | trim }}"
+        fstype: xfs
+        state: mounted
+      when: ebs_mount_check.stdout == 'not_mounted'
+
+    - name: Install podman
+      ansible.builtin.package:
+        name: podman
+        state: present
+
+    - name: Configure podman storage
+      ansible.builtin.lineinfile:
+        path: /etc/containers/storage.conf
+        regexp: '^#?graphroot ?='
+        line: 'graphroot = "{{ snow_clab_podman_image_path }}"'
+        mode: '0644'
+        create: true
+
+    - name: Restart podman
+      ansible.builtin.systemd:
+        name: podman
+        state: restarted
+
+    - name: Enable podman socket
+      ansible.builtin.systemd:
+        name: podman.socket
+        enabled: true
+        state: started
+
+    - name: Pull container images
+      containers.podman.podman_image:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ snow_clab_images }}"
+
+    - name: Install containerlab
+      ansible.builtin.shell:
+        cmd: bash -c "$(curl -sL https://get.containerlab.dev)"
+        creates: /usr/bin/containerlab
+
+    - name: Copy topology files
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../../roles/clab/files/clab/{{ snow_clab_topology }}/"
+        dest: ~/clab/{{ snow_clab_topology }}/
+        mode: '0644'
+
+    - name: Deploy containerlab topology
+      ansible.builtin.command:
+        cmd: containerlab deploy --reconfigure --runtime podman
+        chdir: "/root/clab/{{ snow_clab_topology }}/"
+      environment:
+        DOCKER_HOST: "unix:///run/podman/podman.sock"
+      retries: 2
+      changed_when: true
+
+    - name: Wait for n9kv SSH
+      ansible.builtin.wait_for:
+        port: 2122
+        host: 0.0.0.0
+        delay: 30
+        timeout: 600
+
+    - name: Wait for cat8kv SSH
+      ansible.builtin.wait_for:
+        port: 2123
+        host: 0.0.0.0
+        delay: 30
+        timeout: 600
+
+    - name: Display device connection info
+      ansible.builtin.debug:
+        msg:
+          - "Containerlab topology '{{ snow_clab_topology }}' deployed"
+          - "n9kv:   ssh -p 2122 admin@{{ ansible_host }} (password: admin@123)"
+          - "cat8kv: ssh -p 2123 admin@{{ ansible_host }} (password: admin@123)"
+
+- name: Update ContainerLab Inventory in AAP
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Update n9kv host in AAP
+      ansible.controller.host:
+        name: n9kv
+        inventory: ContainerLab Inventory
+        variables:
+          ansible_host: "{{ clab_host_ip }}"
+        state: present
+        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
+        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+        validate_certs: false
+        request_timeout: 30
+      when: lookup('env', 'CONTROLLER_HOST') | length > 0 or controller_host is defined
+
+    - name: Update cat8kv host in AAP
+      ansible.controller.host:
+        name: cat8kv
+        inventory: ContainerLab Inventory
+        variables:
+          ansible_host: "{{ clab_host_ip }}"
+        state: present
+        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
+        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+        validate_certs: false
+        request_timeout: 30
+      when: lookup('env', 'CONTROLLER_HOST') | length > 0 or controller_host is defined

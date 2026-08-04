@@ -63,6 +63,13 @@ snow_vm_default_ami: ami-0c55b159cbfafe1f0
 # ─── AAP workflow configuration ──────────────────────────────────────────────
 snow_provision_workflow_name: "ServiceNow | Provision RHEL VM (end-to-end)"
 
+# ─── Containerlab ─────────────────────────────────────────────────────────────
+snow_clab_inventory_name: "ContainerLab Inventory"
+snow_clab_aws_region: us-east-2
+snow_clab_instance_type: c8i.2xlarge
+snow_clab_vpc_name: clab-snow-vpc
+snow_clab_purpose_tag: containerlab
+
 # Self-service portal user.
 snow_ssp_user_enabled: true
 snow_ssp_user_name: snow-user

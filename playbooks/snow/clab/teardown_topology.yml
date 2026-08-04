@@ -1,0 +1,63 @@
+---
+# Teardown containerlab topology on the hypervisor (keeps EC2 instance running).
+- name: Teardown Containerlab Topology
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    snow_clab_aws_region: us-east-2
+    snow_clab_admin_user: ec2-user
+    snow_clab_purpose_tag: containerlab
+    snow_clab_topology: product_demos
+  tasks:
+    - name: Discover hypervisor IP
+      amazon.aws.ec2_instance_info:
+        region: "{{ snow_clab_aws_region }}"
+        filters:
+          "tag:deployment": containerlab
+          "tag:purpose": "{{ snow_clab_purpose_tag }}"
+          instance-state-name: running
+      register: clab_discovered
+      when: clab_host_ip is not defined
+
+    - name: Set host IP
+      ansible.builtin.set_fact:
+        clab_host_ip: "{{ clab_discovered.instances[0].public_ip_address }}"
+      when:
+        - clab_host_ip is not defined
+        - clab_discovered.instances | length > 0
+
+    - name: Validate hypervisor
+      ansible.builtin.assert:
+        that:
+          - clab_host_ip is defined
+        fail_msg: "No running containerlab hypervisor found"
+
+    - name: Add hypervisor to inventory
+      ansible.builtin.add_host:
+        name: clab-hypervisor
+        ansible_host: "{{ clab_host_ip }}"
+        ansible_user: "{{ snow_clab_admin_user }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: clab_hosts
+
+- name: Destroy Topology on Hypervisor
+  hosts: clab-hypervisor
+  become: true
+  gather_facts: false
+  vars:
+    snow_clab_topology: product_demos
+  tasks:
+    - name: Destroy containerlab topology
+      ansible.builtin.command:
+        cmd: containerlab destroy --cleanup
+        chdir: "/root/clab/{{ snow_clab_topology }}/"
+      environment:
+        DOCKER_HOST: "unix:///run/podman/podman.sock"
+      register: clab_destroy
+      changed_when: clab_destroy.rc == 0
+      failed_when: false
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "Containerlab topology '{{ snow_clab_topology }}' destroyed"

@@ -1,0 +1,52 @@
+---
+# Helper: Create a Change Request in ServiceNow for network device configuration.
+# Run this to demonstrate the CR -> approval -> AAP automation flow.
+- name: Create Change Request for Network Device Configuration
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_change_description: |
+      Apply standard network device configuration to containerlab devices:
+      - MOTD banner (security warning)
+      - NTP servers (Google public NTP)
+      - SNMP community (read-only monitoring)
+
+      Devices: n9kv (Cisco NX-OS), cat8kv (Cisco IOS-XE)
+      Environment: Containerlab on AWS (managed by AAP)
+    snow_change_short_description: "Network Device Configuration - NTP, SNMP, Banner"
+    snow_change_category: "Network"
+    snow_change_type: standard
+  tasks:
+    - name: Create change request
+      servicenow.itsm.change_request:
+        instance:
+          host: "{{ snow_instance }}"
+          username: "{{ snow_username }}"
+          password: "{{ snow_password }}"
+        state: new
+        type: "{{ snow_change_type }}"
+        short_description: "{{ snow_change_short_description }}"
+        description: "{{ snow_change_description }}"
+        other:
+          category: "{{ snow_change_category }}"
+          assignment_group: "Service Desk"
+      register: snow_cr_result
+
+    - name: Display change request
+      ansible.builtin.debug:
+        msg:
+          - "Change Request created"
+          - "Number: {{ snow_cr_result.record.number }}"
+          - "sys_id: {{ snow_cr_result.record.sys_id }}"
+          - "State: New"
+          - ""
+          - "Next steps:"
+          - "  1. Approve the CR in ServiceNow"
+          - "  2. Move to 'Implement' state"
+          - "  3. The Business Rule will automatically trigger AAP"
+
+    - name: Set stats for downstream use
+      ansible.builtin.set_stats:
+        data:
+          snow_change_number: "{{ snow_cr_result.record.number }}"
+          snow_change_sys_id: "{{ snow_cr_result.record.sys_id }}"

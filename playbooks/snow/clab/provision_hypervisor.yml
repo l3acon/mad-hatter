@@ -1,0 +1,205 @@
+---
+# Provision a containerlab hypervisor on AWS.
+# Creates VPC, subnet, IGW, security group, keypair, and EC2 instance with nested
+# virtualization enabled. Saves the SSH key to an AAP Machine credential.
+- name: Provision Containerlab Hypervisor on AWS
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    snow_clab_aws_region: us-east-2
+    snow_clab_instance_type: c8i.2xlarge
+    snow_clab_owner_tag: aap-snow-demo
+    snow_clab_vpc_name: clab-snow-vpc
+    snow_clab_vpc_cidr: "10.200.0.0/16"
+    snow_clab_subnet_cidr: "10.200.1.0/24"
+    snow_clab_subnet_name: clab-snow-subnet
+    snow_clab_sg_name: clab-snow-sg
+    snow_clab_rt_name: clab-snow-rt
+    snow_clab_keypair_name: clab-snow-key
+    snow_clab_admin_user: ec2-user
+    snow_clab_purpose_tag: containerlab
+    snow_clab_ebs_size_gb: 80
+    snow_clab_ebs_device: /dev/xvdb
+    snow_clab_image_owners: "309956199498"
+    snow_clab_image_filter: "RHEL-9*_HVM-*-x86_64-*-Hourly2-GP3"
+    snow_clab_image_architecture: x86_64
+  tasks:
+    - name: Create VPC
+      amazon.aws.ec2_vpc_net:
+        state: present
+        name: "{{ snow_clab_vpc_name }}"
+        cidr_block: "{{ snow_clab_vpc_cidr }}"
+        region: "{{ snow_clab_aws_region }}"
+        tags:
+          owner: "{{ snow_clab_owner_tag }}"
+          purpose: "{{ snow_clab_purpose_tag }}"
+      register: clab_vpc
+
+    - name: Create internet gateway
+      amazon.aws.ec2_vpc_igw:
+        state: present
+        vpc_id: "{{ clab_vpc.vpc.id }}"
+        region: "{{ snow_clab_aws_region }}"
+        tags:
+          Name: "{{ snow_clab_vpc_name }}"
+          owner: "{{ snow_clab_owner_tag }}"
+      register: clab_igw
+
+    - name: Create security group
+      amazon.aws.ec2_security_group:
+        state: present
+        name: "{{ snow_clab_sg_name }}"
+        description: "Containerlab hypervisor - SSH and port-mapped device access"
+        region: "{{ snow_clab_aws_region }}"
+        vpc_id: "{{ clab_vpc.vpc.id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+              - 2122-2123
+            cidr_ip: 0.0.0.0/0
+          - proto: icmp
+            from_port: -1
+            to_port: -1
+            cidr_ip: 0.0.0.0/0
+        rules_egress:
+          - proto: -1
+            cidr_ip: 0.0.0.0/0
+        tags:
+          Name: "{{ snow_clab_sg_name }}"
+          owner: "{{ snow_clab_owner_tag }}"
+      register: clab_sg
+
+    - name: Create subnet
+      amazon.aws.ec2_vpc_subnet:
+        state: present
+        vpc_id: "{{ clab_vpc.vpc.id }}"
+        cidr: "{{ snow_clab_subnet_cidr }}"
+        region: "{{ snow_clab_aws_region }}"
+        map_public: true
+        tags:
+          Name: "{{ snow_clab_subnet_name }}"
+          owner: "{{ snow_clab_owner_tag }}"
+      register: clab_subnet
+
+    - name: Create route table
+      amazon.aws.ec2_vpc_route_table:
+        state: present
+        vpc_id: "{{ clab_vpc.vpc.id }}"
+        region: "{{ snow_clab_aws_region }}"
+        subnets:
+          - "{{ clab_subnet.subnet.id }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ clab_igw.gateway_id }}"
+        tags:
+          Name: "{{ snow_clab_rt_name }}"
+          owner: "{{ snow_clab_owner_tag }}"
+
+    - name: Create keypair
+      amazon.aws.ec2_key:
+        name: "{{ snow_clab_keypair_name }}"
+        region: "{{ snow_clab_aws_region }}"
+        state: present
+      register: clab_keypair
+
+    - name: Save private key to AAP credential
+      ansible.controller.credential:
+        name: Containerlab SSH
+        organization: Default
+        credential_type: Machine
+        inputs:
+          username: "{{ snow_clab_admin_user }}"
+          ssh_key_data: "{{ clab_keypair.key.private_key }}"
+        state: present
+        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
+        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+        validate_certs: false
+        request_timeout: 30
+      when: clab_keypair.changed
+
+    - name: Find RHEL 9 AMI
+      amazon.aws.ec2_ami_info:
+        region: "{{ snow_clab_aws_region }}"
+        owners:
+          - "{{ snow_clab_image_owners }}"
+        filters:
+          name: "{{ snow_clab_image_filter }}"
+          architecture: "{{ snow_clab_image_architecture }}"
+      register: clab_ami_results
+
+    - name: Select latest AMI
+      ansible.builtin.set_fact:
+        clab_ami_id: "{{ (clab_ami_results.images | sort(attribute='creation_date') | last).image_id }}"
+
+    - name: Launch EC2 instance
+      amazon.aws.ec2_instance:
+        state: running
+        name: clab-hypervisor
+        instance_type: "{{ snow_clab_instance_type }}"
+        image_id: "{{ clab_ami_id }}"
+        key_name: "{{ snow_clab_keypair_name }}"
+        region: "{{ snow_clab_aws_region }}"
+        vpc_subnet_id: "{{ clab_subnet.subnet.id }}"
+        security_group: "{{ clab_sg.group_id }}"
+        network:
+          assign_public_ip: true
+        volumes:
+          - device_name: /dev/sda1
+            ebs:
+              volume_size: 30
+              volume_type: gp3
+              delete_on_termination: true
+          - device_name: "{{ snow_clab_ebs_device }}"
+            ebs:
+              volume_size: "{{ snow_clab_ebs_size_gb }}"
+              volume_type: gp3
+              delete_on_termination: true
+        tags:
+          owner: "{{ snow_clab_owner_tag }}"
+          purpose: "{{ snow_clab_purpose_tag }}"
+          deployment: containerlab
+        wait: true
+      register: clab_ec2
+
+    - name: Get instance ID
+      ansible.builtin.set_fact:
+        clab_instance_id: "{{ clab_ec2.instances[0].instance_id }}"
+
+    - name: Get instance public IP
+      amazon.aws.ec2_instance_info:
+        instance_ids:
+          - "{{ clab_instance_id }}"
+        region: "{{ snow_clab_aws_region }}"
+      register: clab_ec2_info
+
+    - name: Set host IP
+      ansible.builtin.set_fact:
+        clab_host_ip: "{{ clab_ec2_info.instances[0].public_ip_address }}"
+
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        port: 22
+        host: "{{ clab_host_ip }}"
+        search_regex: OpenSSH
+        delay: 10
+        timeout: 300
+
+    - name: Export connection info
+      ansible.builtin.set_stats:
+        data:
+          clab_host_ip: "{{ clab_host_ip }}"
+          clab_aws_region: "{{ snow_clab_aws_region }}"
+          clab_instance_id: "{{ clab_instance_id }}"
+          clab_vpc_id: "{{ clab_vpc.vpc.id }}"
+        per_host: false
+
+    - name: Display connection info
+      ansible.builtin.debug:
+        msg:
+          - "Hypervisor public IP: {{ clab_host_ip }}"
+          - "Instance ID: {{ clab_instance_id }}"
+          - "Instance type: {{ snow_clab_instance_type }}"
+          - "Region: {{ snow_clab_aws_region }}"

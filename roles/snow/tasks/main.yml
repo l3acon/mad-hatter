@@ -84,6 +84,93 @@
     controller_oauthtoken: "{{ controller_oauthtoken }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
 
+- name: Ensure ContainerLab inventory exists
+  ansible.controller.inventory:
+    name: "{{ snow_clab_inventory_name }}"
+    organization: Default
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+
+- name: Ensure ContainerLab inventory hosts exist
+  ansible.controller.host:
+    name: "{{ item.name }}"
+    inventory: "{{ snow_clab_inventory_name }}"
+    enabled: true
+    variables: "{{ item.variables }}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+  loop:
+    - name: n9kv
+      variables:
+        ansible_port: 2122
+        ansible_network_os: cisco.nxos.nxos
+        ansible_user: admin
+        ansible_password: "admin@123"
+        ansible_connection: ansible.netcommon.network_cli
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+    - name: cat8kv
+      variables:
+        ansible_port: 2123
+        ansible_network_os: cisco.ios.ios
+        ansible_user: admin
+        ansible_password: "admin@123"
+        ansible_connection: ansible.netcommon.network_cli
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Ensure ContainerLab inventory groups exist
+  ansible.controller.group:
+    name: "{{ item.name }}"
+    inventory: "{{ snow_clab_inventory_name }}"
+    hosts: "{{ item.hosts }}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+  loop:
+    - name: clab_nxos
+      hosts:
+        - n9kv
+    - name: clab_ios
+      hosts:
+        - cat8kv
+    - name: containerlab
+      hosts:
+        - n9kv
+        - cat8kv
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Ensure Containerlab SSH credential exists (placeholder)
+  ansible.controller.credential:
+    name: Containerlab SSH
+    organization: Default
+    credential_type: Machine
+    state: exists
+    inputs:
+      username: ec2-user
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+
+- name: Ensure Containerlab Device Access credential exists
+  ansible.controller.credential:
+    name: Containerlab Device Access
+    organization: Default
+    credential_type: Machine
+    inputs:
+      username: admin
+      password: "admin@123"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+
 - name: Create self-service portal user on the controller
   when: snow_ssp_user_enabled | bool
   ansible.controller.user:
