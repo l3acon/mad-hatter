@@ -74,10 +74,10 @@
       when: ebs_mount_check.stdout == 'not_mounted'
 
     - name: Format EBS volume
-      community.general.filesystem:
-        fstype: xfs
-        dev: "{{ ebs_detect.stdout | trim }}"
+      ansible.builtin.command:
+        cmd: "mkfs.xfs {{ ebs_detect.stdout | trim }}"
       when: ebs_mount_check.stdout == 'not_mounted'
+      changed_when: true
 
     - name: Create mount point
       ansible.builtin.file:
@@ -86,7 +86,7 @@
         mode: '0777'
 
     - name: Mount EBS volume
-      ansible.posix.mount:
+      ansible.builtin.mount:
         path: "{{ snow_clab_ebs_mount }}"
         src: "{{ ebs_detect.stdout | trim }}"
         fstype: xfs
@@ -118,10 +118,10 @@
         state: started
 
     - name: Pull container images
-      containers.podman.podman_image:
-        name: "{{ item }}"
-        state: present
+      ansible.builtin.command:
+        cmd: "podman pull {{ item }}"
       loop: "{{ snow_clab_images }}"
+      changed_when: true
 
     - name: Install containerlab
       ansible.builtin.shell:
