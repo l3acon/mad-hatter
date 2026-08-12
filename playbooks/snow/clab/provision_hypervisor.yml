@@ -222,50 +222,60 @@
           - -c
           - |
             import boto3
-            from botocore.config import Config
+            from botocore.auth import SigV4Auth
+            from botocore.awsrequest import AWSRequest
+            import urllib.parse
+            import urllib.request
+            import ssl
 
             region = '{{ snow_clab_aws_region }}'
             instance_id = '{{ clab_instance_id }}'
+            endpoint = f'https://ec2.{region}.amazonaws.com/'
 
-            ec2 = boto3.client('ec2', region_name=region, config=Config(signature_version='v4'))
+            session = boto3.Session()
+            credentials = session.get_credentials().get_frozen_credentials()
 
-            # Use the low-level make_api_call to bypass model validation
-            # for the NestedVirtualization parameter (not in older boto3 models)
+            # Try ModifyInstanceCpuOptions (newer API for nested virt)
+            params = {
+                'Action': 'ModifyInstanceCpuOptions',
+                'InstanceId': instance_id,
+                'NestedVirtualization': 'enabled',
+                'Version': '2016-11-15'
+            }
+            body = urllib.parse.urlencode(params)
+            request = AWSRequest(method='POST', url=endpoint, data=body,
+                                headers={'Content-Type': 'application/x-www-form-urlencoded'})
+            SigV4Auth(credentials, 'ec2', region).add_auth(request)
+
+            ctx = ssl.create_default_context()
+            req = urllib.request.Request(endpoint, data=body.encode(),
+                                        headers=dict(request.headers))
             try:
-                ec2._make_api_call('ModifyInstanceAttribute', {
+                resp = urllib.request.urlopen(req, context=ctx)
+                print(f'ModifyInstanceCpuOptions succeeded (status: {resp.status})')
+                print(resp.read().decode()[:200])
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode()
+                print(f'ModifyInstanceCpuOptions failed ({e.code}): {error_body[:300]}')
+
+                # Fallback: try ModifyInstanceAttribute with NestedVirtualization
+                params2 = {
+                    'Action': 'ModifyInstanceAttribute',
                     'InstanceId': instance_id,
-                    'NestedVirtualization': {'Value': True}
-                })
-                print('Nested virtualization enabled via ModifyInstanceAttribute')
-            except Exception as e1:
-                # Fallback: try using requests directly with SigV4
+                    'NestedVirtualization.Value': 'true',
+                    'Version': '2016-11-15'
+                }
+                body2 = urllib.parse.urlencode(params2)
+                request2 = AWSRequest(method='POST', url=endpoint, data=body2,
+                                      headers={'Content-Type': 'application/x-www-form-urlencoded'})
+                SigV4Auth(credentials, 'ec2', region).add_auth(request2)
+                req2 = urllib.request.Request(endpoint, data=body2.encode(),
+                                             headers=dict(request2.headers))
                 try:
-                    from botocore.auth import SigV4Auth
-                    from botocore.awsrequest import AWSRequest
-                    import urllib.parse
-
-                    session = boto3.Session()
-                    credentials = session.get_credentials().get_frozen_credentials()
-                    endpoint = f'https://ec2.{region}.amazonaws.com/'
-                    params = {
-                        'Action': 'ModifyInstanceAttribute',
-                        'InstanceId': instance_id,
-                        'NestedVirtualization.Value': 'true',
-                        'Version': '2016-11-15'
-                    }
-                    body = urllib.parse.urlencode(params)
-                    request = AWSRequest(method='POST', url=endpoint, data=body,
-                                        headers={'Content-Type': 'application/x-www-form-urlencoded'})
-                    SigV4Auth(credentials, 'ec2', region).add_auth(request)
-
-                    import urllib.request
-                    req = urllib.request.Request(endpoint, data=body.encode(),
-                                                headers=dict(request.headers))
-                    resp = urllib.request.urlopen(req)
-                    print(f'Nested virtualization enabled via raw API (status: {resp.status})')
-                except Exception as e2:
-                    print(f'WARNING: Could not enable nested virt: {e1} / {e2}')
-                    print('Instance may already support nested virt natively')
+                    resp2 = urllib.request.urlopen(req2, context=ctx)
+                    print(f'ModifyInstanceAttribute fallback succeeded ({resp2.status})')
+                except urllib.error.HTTPError as e2:
+                    print(f'Both methods failed. Last error: {e2.read().decode()[:200]}')
       changed_when: true
 
     - name: Start instance
