@@ -794,8 +794,7 @@ def _get_change_request_br_body():
     var crNumber = current.number.toString();
 
     // Look up the Configure Devices job template ID
-    var configureJtId = 0;
-    var jts = new GlideRecord('sc_cat_item');  // dummy, we use the REST call
+    var configureJtId = 22;
 
     try {
         var extraVars = {
@@ -804,7 +803,7 @@ def _get_change_request_br_body():
         };
 
         // Launch the Configure Devices job template (hardcoded ID set during CasC)
-        var result = aap.launchJobTemplate(configureJtId, extraVars);
+        var result = aap.launchJobTemplate(22, extraVars);
         if (result.status == 201 || result.status == '201') {
             current.work_notes = '[AAP] Configuration automation launched. Job: ' + result.body.substring(0, 150);
         } else {
