@@ -215,23 +215,57 @@
         region: "{{ snow_clab_aws_region }}"
         wait: true
 
-    - name: Enable nested virtualization
+    - name: Enable nested virtualization via raw EC2 API
       ansible.builtin.command:
         argv:
           - "{{ ansible_playbook_python }}"
           - -c
           - |
-            import boto3, json
-            ec2 = boto3.client('ec2', region_name='{{ snow_clab_aws_region }}')
+            import boto3
+            from botocore.config import Config
+
+            region = '{{ snow_clab_aws_region }}'
+            instance_id = '{{ clab_instance_id }}'
+
+            ec2 = boto3.client('ec2', region_name=region, config=Config(signature_version='v4'))
+
+            # Use the low-level make_api_call to bypass model validation
+            # for the NestedVirtualization parameter (not in older boto3 models)
             try:
-                ec2.modify_instance_attribute(
-                    InstanceId='{{ clab_instance_id }}',
-                    NestedVirtualization={'Value': True}
-                )
-                print('Nested virtualization enabled via NestedVirtualization attribute')
-            except Exception as e:
-                print(f'NestedVirtualization attribute not supported: {e}')
-                print('Instance type may support nested virt natively')
+                ec2._make_api_call('ModifyInstanceAttribute', {
+                    'InstanceId': instance_id,
+                    'NestedVirtualization': {'Value': True}
+                })
+                print('Nested virtualization enabled via ModifyInstanceAttribute')
+            except Exception as e1:
+                # Fallback: try using requests directly with SigV4
+                try:
+                    from botocore.auth import SigV4Auth
+                    from botocore.awsrequest import AWSRequest
+                    import urllib.parse
+
+                    session = boto3.Session()
+                    credentials = session.get_credentials().get_frozen_credentials()
+                    endpoint = f'https://ec2.{region}.amazonaws.com/'
+                    params = {
+                        'Action': 'ModifyInstanceAttribute',
+                        'InstanceId': instance_id,
+                        'NestedVirtualization.Value': 'true',
+                        'Version': '2016-11-15'
+                    }
+                    body = urllib.parse.urlencode(params)
+                    request = AWSRequest(method='POST', url=endpoint, data=body,
+                                        headers={'Content-Type': 'application/x-www-form-urlencoded'})
+                    SigV4Auth(credentials, 'ec2', region).add_auth(request)
+
+                    import urllib.request
+                    req = urllib.request.Request(endpoint, data=body.encode(),
+                                                headers=dict(request.headers))
+                    resp = urllib.request.urlopen(req)
+                    print(f'Nested virtualization enabled via raw API (status: {resp.status})')
+                except Exception as e2:
+                    print(f'WARNING: Could not enable nested virt: {e1} / {e2}')
+                    print('Instance may already support nested virt natively')
       changed_when: true
 
     - name: Start instance
