@@ -123,6 +123,16 @@
       loop: "{{ snow_clab_images }}"
       changed_when: true
 
+    - name: Load KVM kernel module for nested virtualization
+      ansible.builtin.shell:
+        cmd: modprobe kvm_intel nested=1 || modprobe kvm_amd nested=1 || true
+      changed_when: true
+
+    - name: Verify KVM is available
+      ansible.builtin.command:
+        cmd: ls /dev/kvm
+      changed_when: false
+
     - name: Install containerlab
       ansible.builtin.shell:
         cmd: bash -c "$(curl -sL https://get.containerlab.dev)"
