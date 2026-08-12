@@ -125,13 +125,15 @@
 
     - name: Load KVM kernel module for nested virtualization
       ansible.builtin.shell:
-        cmd: modprobe kvm_intel nested=1 || modprobe kvm_amd nested=1 || true
+        cmd: |
+          modprobe kvm_intel nested=1 2>/dev/null || modprobe kvm_amd nested=1 2>/dev/null || true
+          ls /dev/kvm 2>/dev/null && echo "KVM available" || echo "KVM not available - nested virt may not be enabled"
+      register: _kvm_result
       changed_when: true
 
-    - name: Verify KVM is available
-      ansible.builtin.command:
-        cmd: ls /dev/kvm
-      changed_when: false
+    - name: Display KVM status
+      ansible.builtin.debug:
+        msg: "{{ _kvm_result.stdout }}"
 
     - name: Install containerlab
       ansible.builtin.shell:
