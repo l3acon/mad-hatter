@@ -508,6 +508,8 @@ controller_workflows:
 
       - identifier: Update Request Complete
         unified_job_template: "ServiceNow | Self-Service - Update Catalog Item Status"
+        extra_data:
+          snow_request_state: "3"
         all_parents_must_converge: false
         success_nodes: []
         failure_nodes: []
@@ -515,6 +517,8 @@ controller_workflows:
 
       - identifier: Update Request Failed
         unified_job_template: "ServiceNow | Self-Service - Update Catalog Item Status"
+        extra_data:
+          snow_request_state: "4"
         all_parents_must_converge: false
         success_nodes: []
         failure_nodes: []
