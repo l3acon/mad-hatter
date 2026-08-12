@@ -36,6 +36,31 @@
         - n9kv
         - cat8kv
 
+- name: Wait for devices to be SSH-ready
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Wait for n9kv SSH (port 2122)
+      ansible.builtin.wait_for:
+        host: "{{ hostvars['n9kv']['ansible_host'] }}"
+        port: 2122
+        delay: 5
+        timeout: 300
+        sleep: 10
+
+    - name: Wait for cat8kv SSH (port 2123)
+      ansible.builtin.wait_for:
+        host: "{{ hostvars['cat8kv']['ansible_host'] }}"
+        port: 2123
+        delay: 5
+        timeout: 300
+        sleep: 10
+
+    - name: Additional settle time for device SSH subsystems
+      ansible.builtin.pause:
+        seconds: 15
+
 - name: Configure NX-OS Device
   hosts: clab_nxos
   gather_facts: false
