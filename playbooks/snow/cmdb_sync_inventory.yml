@@ -1,7 +1,7 @@
 ---
-# Add the newly provisioned host directly to the AAP inventory.
-# This replaces the full CMDB inventory source sync which is slow and error-prone
-# mid-workflow. The CMDB source sync can run on a schedule or on-demand separately.
+# Add the newly provisioned host directly to the AAP inventory via REST API.
+# Uses uri module instead of ansible.controller.host to avoid auth issues
+# when running inside an AAP workflow with injected credentials.
 - name: Add host to AAP inventory
   hosts: localhost
   gather_facts: false
@@ -14,30 +14,80 @@
       ansible.builtin.set_fact:
         _host_name: "{{ snow_vm_name | default(snow_target_host, true) }}"
         _host_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
+        _controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
+        _controller_user: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+        _controller_pass: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
 
     - name: Validate we have host info
       ansible.builtin.assert:
         that:
           - _host_name | length > 0
           - _host_ip | length > 0
-        fail_msg: "snow_vm_name/snow_host_ip or snow_target_host required"
+          - _controller_host | length > 0
+        fail_msg: "snow_vm_name/snow_host_ip and controller credentials required"
 
-    - name: Add host to ServiceNow CMDB Inventory in AAP
-      ansible.controller.host:
-        name: "{{ _host_name }}"
-        inventory: "{{ snow_aap_inventory_name | default('ServiceNow CMDB Inventory') }}"
-        state: present
-        enabled: true
-        variables:
-          ansible_host: "{{ _host_ip }}"
-          ansible_user: ec2-user
-        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
-        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
-        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+    - name: Look up inventory ID
+      ansible.builtin.uri:
+        url: "{{ _controller_host | regex_replace('/$', '') }}/api/controller/v2/inventories/?name={{ snow_aap_inventory_name | default('ServiceNow CMDB Inventory') | urlencode }}"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
         validate_certs: false
-        request_timeout: 30
-      register: _host_result
+        return_content: true
+      register: _inv_lookup
+
+    - name: Set inventory ID
+      ansible.builtin.set_fact:
+        _inventory_id: "{{ (_inv_lookup.json.results | first).id }}"
+
+    - name: Check if host already exists
+      ansible.builtin.uri:
+        url: "{{ _controller_host | regex_replace('/$', '') }}/api/controller/v2/inventories/{{ _inventory_id }}/hosts/?name={{ _host_name | urlencode }}"
+        method: GET
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _host_check
+
+    - name: Create host in inventory
+      when: _host_check.json.count == 0
+      ansible.builtin.uri:
+        url: "{{ _controller_host | regex_replace('/$', '') }}/api/controller/v2/inventories/{{ _inventory_id }}/hosts/"
+        method: POST
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: json
+        body:
+          name: "{{ _host_name }}"
+          enabled: true
+          variables: "{{ {'ansible_host': _host_ip, 'ansible_user': 'ec2-user'} | to_json }}"
+        status_code:
+          - 200
+          - 201
+      register: _host_created
+
+    - name: Update existing host
+      when: _host_check.json.count > 0
+      ansible.builtin.uri:
+        url: "{{ _controller_host | regex_replace('/$', '') }}/api/controller/v2/hosts/{{ (_host_check.json.results | first).id }}/"
+        method: PATCH
+        user: "{{ _controller_user }}"
+        password: "{{ _controller_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: json
+        body:
+          enabled: true
+          variables: "{{ {'ansible_host': _host_ip, 'ansible_user': 'ec2-user'} | to_json }}"
+        status_code:
+          - 200
+      register: _host_updated
 
     - name: Display result
       ansible.builtin.debug:
-        msg: "Host '{{ _host_name }}' ({{ _host_ip }}) added to AAP inventory"
+        msg: "Host '{{ _host_name }}' ({{ _host_ip }}) {{ 'created in' if (_host_check.json.count == 0) else 'updated in' }} AAP inventory"
