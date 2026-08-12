@@ -105,20 +105,59 @@
       register: clab_keypair
 
     - name: Save private key to AAP credential
-      ansible.controller.credential:
-        name: Containerlab SSH
-        organization: Default
-        credential_type: Machine
-        inputs:
-          username: "{{ snow_clab_admin_user }}"
-          ssh_key_data: "{{ clab_keypair.key.private_key }}"
-        state: present
-        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
-        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
-        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
-        validate_certs: false
-        request_timeout: 30
       when: clab_keypair.changed
+      block:
+        - name: Set controller connection vars
+          ansible.builtin.set_fact:
+            _ctrl_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) | regex_replace('/$', '') }}"
+            _ctrl_user: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+            _ctrl_pass: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+
+        - name: Look up Containerlab SSH credential
+          ansible.builtin.uri:
+            url: "{{ _ctrl_host }}/api/controller/v2/credentials/?name=Containerlab+SSH"
+            method: GET
+            user: "{{ _ctrl_user }}"
+            password: "{{ _ctrl_pass }}"
+            force_basic_auth: true
+            validate_certs: false
+          register: _cred_lookup
+
+        - name: Update existing credential with new key
+          when: _cred_lookup.json.count > 0
+          ansible.builtin.uri:
+            url: "{{ _ctrl_host }}/api/controller/v2/credentials/{{ (_cred_lookup.json.results | first).id }}/"
+            method: PATCH
+            user: "{{ _ctrl_user }}"
+            password: "{{ _ctrl_pass }}"
+            force_basic_auth: true
+            validate_certs: false
+            body_format: json
+            body:
+              inputs:
+                username: "{{ snow_clab_admin_user }}"
+                ssh_key_data: "{{ clab_keypair.key.private_key }}"
+
+        - name: Create credential if not found
+          when: _cred_lookup.json.count == 0
+          ansible.builtin.uri:
+            url: "{{ _ctrl_host }}/api/controller/v2/credentials/"
+            method: POST
+            user: "{{ _ctrl_user }}"
+            password: "{{ _ctrl_pass }}"
+            force_basic_auth: true
+            validate_certs: false
+            body_format: json
+            body:
+              name: Containerlab SSH
+              organization: 1
+              credential_type: 7
+              inputs:
+                username: "{{ snow_clab_admin_user }}"
+                ssh_key_data: "{{ clab_keypair.key.private_key }}"
+            status_code:
+              - 200
+              - 201
 
     - name: Find RHEL 9 AMI
       amazon.aws.ec2_ami_info:
