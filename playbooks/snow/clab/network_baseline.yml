@@ -6,35 +6,41 @@
   hosts: clab_nxos
   gather_facts: false
   tasks:
-    - name: Get current banner config
-      cisco.nxos.nxos_banner:
-        banner: motd
-        state: present
-      check_mode: true
+    - name: Check for MOTD banner
+      cisco.nxos.nxos_command:
+        commands:
+          - show banner motd
       register: _nxos_banner
 
-    - name: Record compliance status
+    - name: Evaluate NX-OS compliance
       ansible.builtin.set_stats:
         data:
-          nxos_motd_compliant: "{{ not _nxos_banner.changed }}"
+          nxos_motd_compliant: "{{ _nxos_banner.stdout[0] | length > 0 }}"
         per_host: false
+
+    - name: Display NX-OS banner status
+      ansible.builtin.debug:
+        msg: "NX-OS MOTD: {{ 'configured' if (_nxos_banner.stdout[0] | length > 0) else 'MISSING' }}"
 
 - name: Network Baseline — Check MOTD on IOS-XE
   hosts: clab_ios
   gather_facts: false
   tasks:
-    - name: Get current banner config
-      cisco.ios.ios_banner:
-        banner: motd
-        state: present
-      check_mode: true
+    - name: Check for MOTD banner
+      cisco.ios.ios_command:
+        commands:
+          - show banner motd
       register: _ios_banner
 
-    - name: Record compliance status
+    - name: Evaluate IOS-XE compliance
       ansible.builtin.set_stats:
         data:
-          ios_motd_compliant: "{{ not _ios_banner.changed }}"
+          ios_motd_compliant: "{{ _ios_banner.stdout[0] | length > 0 }}"
         per_host: false
+
+    - name: Display IOS-XE banner status
+      ansible.builtin.debug:
+        msg: "IOS-XE MOTD: {{ 'configured' if (_ios_banner.stdout[0] | length > 0) else 'MISSING' }}"
 
 - name: Network Baseline — Evaluate and Remediate
   hosts: localhost
