@@ -105,7 +105,7 @@
       register: clab_keypair
 
     - name: Save private key to AAP credential
-      when: clab_keypair.changed
+      when: clab_keypair.key.private_key is defined and clab_keypair.key.private_key | length > 0
       block:
         - name: Set controller connection vars
           ansible.builtin.set_fact:
