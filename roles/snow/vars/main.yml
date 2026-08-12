@@ -400,6 +400,18 @@ controller_templates:
     execution_environment: "{{ snow_aap_ee_name }}"
     ask_variables_on_launch: true
 
+  - name: "ServiceNow | Containerlab | Network Baseline"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_clab_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/clab/network_baseline.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - Containerlab Device Access
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: false
+
   - name: "ServiceNow | Containerlab | Configure Devices"
     job_type: run
     organization: Default
@@ -409,6 +421,17 @@ controller_templates:
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Containerlab Device Access
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+
+  - name: "ServiceNow | Containerlab | Create Change Request"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/clab/create_change_request.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
     execution_environment: "{{ snow_aap_ee_name }}"
     ask_variables_on_launch: true
 
