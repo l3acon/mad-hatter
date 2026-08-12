@@ -2,6 +2,40 @@
 # Configure containerlab network devices.
 # Triggered by a SNOW Change Request approval. Applies standard configuration
 # (banners, NTP, SNMP) to n9kv and cat8kv devices.
+# First discovers the hypervisor IP from AWS if hosts lack ansible_host.
+- name: Discover Containerlab Hypervisor
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    snow_clab_aws_region: us-east-2
+    snow_clab_purpose_tag: containerlab
+  tasks:
+    - name: Check if hosts already have ansible_host
+      ansible.builtin.set_fact:
+        _need_discovery: "{{ hostvars['n9kv']['ansible_host'] | default('') | length == 0 }}"
+
+    - name: Discover hypervisor IP from EC2 tags
+      when: _need_discovery | bool
+      amazon.aws.ec2_instance_info:
+        region: "{{ snow_clab_aws_region }}"
+        filters:
+          "tag:deployment": containerlab
+          "tag:purpose": "{{ snow_clab_purpose_tag }}"
+          instance-state-name: running
+      register: _clab_instances
+
+    - name: Update host variables with discovered IP
+      when:
+        - _need_discovery | bool
+        - _clab_instances.instances | default([]) | length > 0
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        ansible_host: "{{ _clab_instances.instances[0].public_ip_address }}"
+      loop:
+        - n9kv
+        - cat8kv
+
 - name: Configure NX-OS Device
   hosts: clab_nxos
   gather_facts: false
