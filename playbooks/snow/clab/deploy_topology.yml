@@ -180,31 +180,62 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    _ctrl_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) | regex_replace('/$', '') }}"
+    _ctrl_user: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
+    _ctrl_pass: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
   tasks:
-    - name: Update n9kv host in AAP
-      ansible.controller.host:
-        name: n9kv
-        inventory: ContainerLab Inventory
-        variables:
-          ansible_host: "{{ clab_host_ip }}"
-        state: present
-        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
-        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
-        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+    - name: Look up ContainerLab Inventory ID
+      ansible.builtin.uri:
+        url: "{{ _ctrl_host }}/api/controller/v2/inventories/?name={{ 'ContainerLab Inventory' | urlencode }}"
+        method: GET
+        user: "{{ _ctrl_user }}"
+        password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
         validate_certs: false
-        request_timeout: 30
-      when: lookup('env', 'CONTROLLER_HOST') | length > 0 or controller_host is defined
+      register: _inv_lookup
 
-    - name: Update cat8kv host in AAP
-      ansible.controller.host:
-        name: cat8kv
-        inventory: ContainerLab Inventory
-        variables:
-          ansible_host: "{{ clab_host_ip }}"
-        state: present
-        controller_host: "{{ controller_host | default(lookup('env', 'CONTROLLER_HOST')) }}"
-        controller_username: "{{ controller_username | default(lookup('env', 'CONTROLLER_USERNAME')) }}"
-        controller_password: "{{ controller_password | default(lookup('env', 'CONTROLLER_PASSWORD')) }}"
+    - name: Update device hosts with hypervisor IP
+      ansible.builtin.uri:
+        url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ item.id }}/"
+        method: PATCH
+        user: "{{ _ctrl_user }}"
+        password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
         validate_certs: false
-        request_timeout: 30
-      when: lookup('env', 'CONTROLLER_HOST') | length > 0 or controller_host is defined
+        body_format: json
+        body:
+          variables: "{{ item.vars | to_json }}"
+      loop:
+        - id: "{{ (_inv_lookup.json.results[0].id | string) }}"
+          name: placeholder
+          vars: {}
+      when: false
+
+    - name: Get hosts in inventory
+      ansible.builtin.uri:
+        url: "{{ _ctrl_host }}/api/controller/v2/inventories/{{ _inv_lookup.json.results[0].id }}/hosts/"
+        method: GET
+        user: "{{ _ctrl_user }}"
+        password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: _hosts
+
+    - name: Update each host with hypervisor IP
+      ansible.builtin.uri:
+        url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ item.id }}/"
+        method: PATCH
+        user: "{{ _ctrl_user }}"
+        password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: json
+        body:
+          variables: "{{ (item.variables | from_json | default({})) | combine({'ansible_host': clab_host_ip}) | to_json }}"
+      loop: "{{ _hosts.json.results }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - _ctrl_host | length > 0
+        - clab_host_ip is defined
