@@ -196,49 +196,48 @@
         validate_certs: false
       register: _inv_lookup
 
-    - name: Update device hosts with hypervisor IP
+    - name: Update n9kv host with hypervisor IP
       ansible.builtin.uri:
-        url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ item.id }}/"
-        method: PATCH
-        user: "{{ _ctrl_user }}"
-        password: "{{ _ctrl_pass }}"
-        force_basic_auth: true
-        validate_certs: false
-        body_format: json
-        body:
-          variables: "{{ item.vars | to_json }}"
-      loop:
-        - id: "{{ (_inv_lookup.json.results[0].id | string) }}"
-          name: placeholder
-          vars: {}
-      when: false
-
-    - name: Get hosts in inventory
-      ansible.builtin.uri:
-        url: "{{ _ctrl_host }}/api/controller/v2/inventories/{{ _inv_lookup.json.results[0].id }}/hosts/"
+        url: "{{ _ctrl_host }}/api/controller/v2/inventories/{{ _inv_lookup.json.results[0].id }}/hosts/?name=n9kv"
         method: GET
         user: "{{ _ctrl_user }}"
         password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
-      register: _hosts
+      register: _n9kv_host
 
-    - name: Update each host with hypervisor IP
+    - name: Patch n9kv ansible_host
       ansible.builtin.uri:
-        url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ item.id }}/"
+        url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ _n9kv_host.json.results[0].id }}/"
         method: PATCH
         user: "{{ _ctrl_user }}"
         password: "{{ _ctrl_pass }}"
         force_basic_auth: true
         validate_certs: false
         body_format: json
-        body:
-          variables: >-
-            {{ ((item.variables | from_json) if (item.variables | length > 2) else {})
-               | combine({'ansible_host': clab_host_ip}) | to_json }}
-      loop: "{{ _hosts.json.results }}"
-      loop_control:
-        label: "{{ item.name }}"
-      when:
-        - _ctrl_host | length > 0
-        - clab_host_ip is defined
+        body: |
+          {"variables": "{{ {'ansible_host': clab_host_ip, 'ansible_port': 2122, 'ansible_network_os': 'cisco.nxos.nxos', 'ansible_user': 'admin', 'ansible_password': 'admin@123', 'ansible_connection': 'ansible.netcommon.network_cli', 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'} | to_json }}"}
+      when: clab_host_ip is defined
+
+    - name: Update cat8kv host with hypervisor IP
+      ansible.builtin.uri:
+        url: "{{ _ctrl_host }}/api/controller/v2/inventories/{{ _inv_lookup.json.results[0].id }}/hosts/?name=cat8kv"
+        method: GET
+        user: "{{ _ctrl_user }}"
+        password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: _cat8kv_host
+
+    - name: Patch cat8kv ansible_host
+      ansible.builtin.uri:
+        url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ _cat8kv_host.json.results[0].id }}/"
+        method: PATCH
+        user: "{{ _ctrl_user }}"
+        password: "{{ _ctrl_pass }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: json
+        body: |
+          {"variables": "{{ {'ansible_host': clab_host_ip, 'ansible_port': 2123, 'ansible_network_os': 'cisco.ios.ios', 'ansible_user': 'admin', 'ansible_password': 'admin@123', 'ansible_connection': 'ansible.netcommon.network_cli', 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'} | to_json }}"}
+      when: clab_host_ip is defined
