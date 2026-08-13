@@ -233,7 +233,9 @@
         validate_certs: false
         body_format: json
         body:
-          variables: "{{ (item.variables | from_json | default({})) | combine({'ansible_host': clab_host_ip}) | to_json }}"
+          variables: >-
+            {{ ((item.variables | from_json) if (item.variables | length > 2) else {})
+               | combine({'ansible_host': clab_host_ip}) | to_json }}
       loop: "{{ _hosts.json.results }}"
       loop_control:
         label: "{{ item.name }}"
