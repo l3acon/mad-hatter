@@ -196,7 +196,27 @@
         validate_certs: false
       register: _inv_lookup
 
-    - name: Update n9kv host with hypervisor IP
+    - name: Build host variables JSON
+      ansible.builtin.set_fact:
+        _n9kv_vars:
+          ansible_host: "{{ clab_host_ip }}"
+          ansible_port: 2122
+          ansible_network_os: cisco.nxos.nxos
+          ansible_user: admin
+          ansible_password: "admin@123"
+          ansible_connection: ansible.netcommon.network_cli
+          ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        _cat8kv_vars:
+          ansible_host: "{{ clab_host_ip }}"
+          ansible_port: 2123
+          ansible_network_os: cisco.ios.ios
+          ansible_user: admin
+          ansible_password: "admin@123"
+          ansible_connection: ansible.netcommon.network_cli
+          ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+      when: clab_host_ip is defined
+
+    - name: Update n9kv host
       ansible.builtin.uri:
         url: "{{ _ctrl_host }}/api/controller/v2/inventories/{{ _inv_lookup.json.results[0].id }}/hosts/?name=n9kv"
         method: GET
@@ -206,7 +226,7 @@
         validate_certs: false
       register: _n9kv_host
 
-    - name: Patch n9kv ansible_host
+    - name: Patch n9kv
       ansible.builtin.uri:
         url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ _n9kv_host.json.results[0].id }}/"
         method: PATCH
@@ -215,11 +235,11 @@
         force_basic_auth: true
         validate_certs: false
         body_format: json
-        body: |
-          {"variables": "{{ {'ansible_host': clab_host_ip, 'ansible_port': 2122, 'ansible_network_os': 'cisco.nxos.nxos', 'ansible_user': 'admin', 'ansible_password': 'admin@123', 'ansible_connection': 'ansible.netcommon.network_cli', 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'} | to_json }}"}
+        body:
+          variables: "{{ _n9kv_vars | to_json }}"
       when: clab_host_ip is defined
 
-    - name: Update cat8kv host with hypervisor IP
+    - name: Update cat8kv host
       ansible.builtin.uri:
         url: "{{ _ctrl_host }}/api/controller/v2/inventories/{{ _inv_lookup.json.results[0].id }}/hosts/?name=cat8kv"
         method: GET
@@ -229,7 +249,7 @@
         validate_certs: false
       register: _cat8kv_host
 
-    - name: Patch cat8kv ansible_host
+    - name: Patch cat8kv
       ansible.builtin.uri:
         url: "{{ _ctrl_host }}/api/controller/v2/hosts/{{ _cat8kv_host.json.results[0].id }}/"
         method: PATCH
@@ -238,6 +258,6 @@
         force_basic_auth: true
         validate_certs: false
         body_format: json
-        body: |
-          {"variables": "{{ {'ansible_host': clab_host_ip, 'ansible_port': 2123, 'ansible_network_os': 'cisco.ios.ios', 'ansible_user': 'admin', 'ansible_password': 'admin@123', 'ansible_connection': 'ansible.netcommon.network_cli', 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'} | to_json }}"}
+        body:
+          variables: "{{ _cat8kv_vars | to_json }}"
       when: clab_host_ip is defined
