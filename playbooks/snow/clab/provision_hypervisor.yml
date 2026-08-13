@@ -18,6 +18,8 @@
     snow_clab_rt_name: clab-snow-rt
     snow_clab_keypair_name: clab-snow-key
     snow_clab_admin_user: ec2-user
+    snow_clab_ssh_public_key_file: /home/matt/keys/id_rsa.pub
+    snow_clab_ssh_private_key_file: /home/matt/keys/id_rsa
     snow_clab_purpose_tag: containerlab
     snow_clab_ebs_size_gb: 80
     snow_clab_ebs_device: /dev/xvdb
@@ -97,15 +99,14 @@
           Name: "{{ snow_clab_rt_name }}"
           owner: "{{ snow_clab_owner_tag }}"
 
-    - name: Create keypair
+    - name: Import known public key to AWS keypair
       amazon.aws.ec2_key:
         name: "{{ snow_clab_keypair_name }}"
         region: "{{ snow_clab_aws_region }}"
+        key_material: "{{ lookup('file', snow_clab_ssh_public_key_file) }}"
         state: present
-      register: clab_keypair
 
-    - name: Save private key to AAP credential
-      when: clab_keypair.key.private_key is defined and clab_keypair.key.private_key | length > 0
+    - name: Save private key to AAP Containerlab SSH credential
       block:
         - name: Set controller connection vars
           ansible.builtin.set_fact:
@@ -123,7 +124,7 @@
             validate_certs: false
           register: _cred_lookup
 
-        - name: Update existing credential with new key
+        - name: Update credential with known private key
           when: _cred_lookup.json.count > 0
           ansible.builtin.uri:
             url: "{{ _ctrl_host }}/api/controller/v2/credentials/{{ (_cred_lookup.json.results | first).id }}/"
@@ -136,7 +137,7 @@
             body:
               inputs:
                 username: "{{ snow_clab_admin_user }}"
-                ssh_key_data: "{{ clab_keypair.key.private_key }}"
+                ssh_key_data: "{{ lookup('file', snow_clab_ssh_private_key_file) }}"
 
         - name: Create credential if not found
           when: _cred_lookup.json.count == 0
@@ -154,7 +155,7 @@
               credential_type: 7
               inputs:
                 username: "{{ snow_clab_admin_user }}"
-                ssh_key_data: "{{ clab_keypair.key.private_key }}"
+                ssh_key_data: "{{ lookup('file', snow_clab_ssh_private_key_file) }}"
             status_code:
               - 200
               - 201

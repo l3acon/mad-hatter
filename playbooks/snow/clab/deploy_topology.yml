@@ -38,6 +38,7 @@
         name: clab-hypervisor
         ansible_host: "{{ clab_host_ip }}"
         ansible_user: "{{ snow_clab_admin_user }}"
+        ansible_ssh_private_key_file: "{{ snow_clab_ssh_private_key_file | default('/home/matt/keys/id_rsa') }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
         groups: clab_hosts
 
