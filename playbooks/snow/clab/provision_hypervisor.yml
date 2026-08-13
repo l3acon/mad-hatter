@@ -18,8 +18,8 @@
     snow_clab_rt_name: clab-snow-rt
     snow_clab_keypair_name: clab-snow-key
     snow_clab_admin_user: ec2-user
-    snow_clab_ssh_public_key_file: /home/matt/keys/id_rsa.pub
-    snow_clab_ssh_private_key_file: /home/matt/keys/id_rsa
+    snow_clab_ssh_public_key_file: "{{ '/root/keys/id_rsa.pub' if lookup('file', '/root/keys/id_rsa.pub', errors='ignore') else '/home/matt/keys/id_rsa.pub' }}"
+    snow_clab_ssh_private_key_file: "{{ '/root/keys/id_rsa' if lookup('file', '/root/keys/id_rsa', errors='ignore') else '/home/matt/keys/id_rsa' }}"
     snow_clab_purpose_tag: containerlab
     snow_clab_ebs_size_gb: 80
     snow_clab_ebs_device: /dev/xvdb
