@@ -74,9 +74,10 @@
 
     - name: Parse pass/fail counts from ARF results
       ansible.builtin.shell: |
-        set -o pipefail
-        pass=$(grep -c 'result="pass"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || echo 0)
-        fail=$(grep -c 'result="fail"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || echo 0)
+        pass=$(grep -c 'result="pass"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || true)
+        fail=$(grep -c 'result="fail"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || true)
+        pass=${pass:-0}
+        fail=${fail:-0}
         total=$((pass + fail))
         if [ "$total" -gt 0 ]; then
           score=$((pass * 100 / total))
