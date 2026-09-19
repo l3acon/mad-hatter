@@ -74,8 +74,8 @@
 
     - name: Parse pass/fail counts from ARF results
       ansible.builtin.shell: |
-        pass=$(grep -c 'result="pass"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || true)
-        fail=$(grep -c 'result="fail"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || true)
+        pass=$(grep -c '<result>pass</result>' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || true)
+        fail=$(grep -c '<result>fail</result>' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || true)
         pass=${pass:-0}
         fail=${fail:-0}
         total=$((pass + fail))
@@ -115,11 +115,18 @@
           snow_compliance_fail: "{{ _compliance.fail }}"
           snow_compliance_total: "{{ _compliance.total }}"
           snow_compliance_profile: "{{ oscap_profile }}"
-          snow_compliance_host: "{{ inventory_hostname }}"
+          snow_compliance_host: "{{ ansible_host }}"
           snow_compliance_failed: "{{ (_compliance.score | int) < (oscap_fail_threshold | int) }}"
-          snow_ci_identifier: "{{ inventory_hostname }}"
+          snow_ci_identifier: "{{ hostvars['localhost']['_target_name'] | default(ansible_host) }}"
           snow_ci_attributes_json: >-
             {{ {
               "short_description": "Compliance: " + _compliance.score | string + "% (" + oscap_profile + ")",
               "attributes": "oscap_score=" + _compliance.score | string + ";oscap_profile=" + oscap_profile
             } | to_json }}
+          snow_incident_short_description: >-
+            Compliance scan failed on {{ ansible_host }} — score {{ _compliance.score }}% (threshold {{ oscap_fail_threshold }}%)
+          snow_incident_description: >-
+            OpenSCAP compliance scan results for {{ ansible_host }}:
+            Profile: {{ oscap_profile }}
+            Score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail)
+            Threshold: {{ oscap_fail_threshold }}%
