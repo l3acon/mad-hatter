@@ -1,0 +1,161 @@
+---
+# Check a provisioned host for configuration drift from the golden baseline.
+# Collects all drift items without failing fast — publishes the full list
+# so the wrapping workflow can create a SNOW incident with details.
+#
+# Two-play structure:
+#   Play 1 (localhost): resolve target, add to inventory
+#   Play 2 (target):    run drift assertions, collect results
+- name: Config drift check — prepare target
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_target_host: ""
+    snow_vm_name: ""
+    snow_host_ip: ""
+    drift_baseline_packages:
+      - openscap-scanner
+      - scap-security-guide
+    drift_baseline_services:
+      - sshd
+      - chronyd
+    drift_baseline_sshd_settings:
+      PermitRootLogin: "no"
+      PasswordAuthentication: "no"
+    drift_baseline_file_permissions:
+      - path: /etc/ssh/sshd_config
+        mode: "0600"
+      - path: /etc/passwd
+        mode: "0644"
+      - path: /etc/shadow
+        mode: "0000"
+  tasks:
+    - name: Resolve target host
+      ansible.builtin.set_fact:
+        _target_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
+        _target_name: "{{ snow_vm_name | default('drift-target', true) }}"
+
+    - name: Validate target
+      ansible.builtin.assert:
+        that:
+          - _target_ip | length > 0
+        fail_msg: "No target host IP available (snow_host_ip or snow_target_host required)"
+
+    - name: Add target to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ _target_name }}"
+        ansible_host: "{{ _target_ip }}"
+        ansible_user: ec2-user
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: drift_targets
+        drift_baseline_packages: "{{ drift_baseline_packages }}"
+        drift_baseline_services: "{{ drift_baseline_services }}"
+        drift_baseline_sshd_settings: "{{ drift_baseline_sshd_settings }}"
+        drift_baseline_file_permissions: "{{ drift_baseline_file_permissions }}"
+
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        host: "{{ _target_ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+
+- name: Config drift check — evaluate baseline
+  hosts: drift_targets
+  gather_facts: true
+  become: true
+  vars:
+    _drift_items: []
+  tasks:
+    # ── Package checks ──────────────────────────────────────────────────────
+    - name: Check required packages are installed
+      ansible.builtin.command: "rpm -q {{ item }}"
+      loop: "{{ drift_baseline_packages }}"
+      register: _pkg_checks
+      failed_when: false
+      changed_when: false
+
+    - name: Record missing packages
+      ansible.builtin.set_fact:
+        _drift_items: >-
+          {{ _drift_items + ['Package missing: ' + item.item] }}
+      loop: "{{ _pkg_checks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.rc != 0
+
+    # ── Service checks ──────────────────────────────────────────────────────
+    - name: Check required services are running and enabled
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+      loop: "{{ drift_baseline_services }}"
+      register: _svc_checks
+      failed_when: false
+      changed_when: false
+
+    - name: Record services not running or not enabled
+      ansible.builtin.set_fact:
+        _drift_items: >-
+          {{ _drift_items + ['Service drift: ' + item.item + ' (active=' + (item.status.ActiveState | default('unknown')) + ', enabled=' + (item.status.UnitFileState | default('unknown')) + ')'] }}
+      loop: "{{ _svc_checks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: >-
+        (item.status.ActiveState | default('inactive')) != 'active'
+        or (item.status.UnitFileState | default('disabled')) != 'enabled'
+
+    # ── SSHD configuration checks ──────────────────────────────────────────
+    - name: Read sshd_config
+      ansible.builtin.slurp:
+        src: /etc/ssh/sshd_config
+      register: _sshd_config
+
+    - name: Check sshd hardening settings
+      ansible.builtin.set_fact:
+        _drift_items: >-
+          {{ _drift_items + ['SSHD drift: ' + item.key + ' is not set to ' + item.value] }}
+      loop: "{{ drift_baseline_sshd_settings | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: >-
+        (_sshd_config.content | b64decode) is not
+        regex('(?m)^\s*' + item.key + '\s+' + item.value + '\s*$')
+
+    # ── File permission checks ──────────────────────────────────────────────
+    - name: Stat baseline files
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      loop: "{{ drift_baseline_file_permissions }}"
+      register: _file_stats
+
+    - name: Record file permission drift
+      ansible.builtin.set_fact:
+        _drift_items: >-
+          {{ _drift_items + ['File permission drift: ' + item.item.path + ' expected=' + item.item.mode + ' actual=' + (item.stat.mode | default('missing'))[-4:]] }}
+      loop: "{{ _file_stats.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+      when: >-
+        not item.stat.exists | default(false)
+        or (item.stat.mode | default('0000'))[-4:] != item.item.mode
+
+    # ── Summary ─────────────────────────────────────────────────────────────
+    - name: Display drift results
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
+          - "Drift items found: {{ _drift_items | length }}"
+          - "Details: {{ _drift_items }}"
+
+    - name: Publish drift results for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_drift_host: "{{ inventory_hostname }}"
+          snow_drift_found: "{{ _drift_items | length > 0 }}"
+          snow_drift_count: "{{ _drift_items | length }}"
+          snow_drift_items: "{{ _drift_items }}"
+          snow_incident_short_description: >-
+            Configuration drift detected on {{ inventory_hostname }} ({{ _drift_items | length }} items)
+          snow_incident_description: >-
+            Ansible config drift check found {{ _drift_items | length }} deviation(s) from baseline:
+            {{ _drift_items | join('\n') }}

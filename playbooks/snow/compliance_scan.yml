@@ -1,0 +1,124 @@
+---
+# OpenSCAP compliance scan against a provisioned host.
+# Triggered by AAP schedule or external tool — NOT from SNOW catalog.
+# Writes results back to SNOW: enriches CMDB CI with compliance status and
+# creates an incident if the scan fails the threshold.
+#
+# Two-play structure:
+#   Play 1 (localhost): resolve target, add to in-memory inventory
+#   Play 2 (target):    install scanner, run oscap, collect results
+#   Play 3 (localhost): enrich CMDB, optionally create incident
+- name: Compliance scan — prepare target
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_target_host: ""
+    snow_vm_name: ""
+    snow_host_ip: ""
+    oscap_profile: "xccdf_org.ssgproject.content_profile_cis_server_l1"
+    oscap_datastream: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
+    oscap_fail_threshold: 80
+  tasks:
+    - name: Resolve target host
+      ansible.builtin.set_fact:
+        _target_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
+        _target_name: "{{ snow_vm_name | default('scanned-host', true) }}"
+
+    - name: Validate target
+      ansible.builtin.assert:
+        that:
+          - _target_ip | length > 0
+        fail_msg: "No target host IP available (snow_host_ip or snow_target_host required)"
+
+    - name: Add target to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ _target_name }}"
+        ansible_host: "{{ _target_ip }}"
+        ansible_user: ec2-user
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: scan_targets
+        oscap_profile: "{{ oscap_profile }}"
+        oscap_datastream: "{{ oscap_datastream }}"
+
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        host: "{{ _target_ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+
+- name: Compliance scan — run OpenSCAP on target
+  hosts: scan_targets
+  gather_facts: true
+  become: true
+  vars:
+    _report_dir: /tmp
+  tasks:
+    - name: Ensure OpenSCAP packages are installed
+      ansible.builtin.dnf:
+        name:
+          - openscap-scanner
+          - scap-security-guide
+        state: present
+
+    - name: Run OpenSCAP evaluation
+      ansible.builtin.command: >-
+        oscap xccdf eval
+          --profile {{ oscap_profile }}
+          --results-arf {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml
+          --report {{ _report_dir }}/oscap-report-{{ inventory_hostname }}.html
+          {{ oscap_datastream }}
+      register: _oscap_result
+      failed_when: _oscap_result.rc not in [0, 2]
+      changed_when: false
+
+    - name: Parse pass/fail counts from ARF results
+      ansible.builtin.shell: |
+        set -o pipefail
+        pass=$(grep -c 'result="pass"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || echo 0)
+        fail=$(grep -c 'result="fail"' {{ _report_dir }}/oscap-arf-{{ inventory_hostname }}.xml || echo 0)
+        total=$((pass + fail))
+        if [ "$total" -gt 0 ]; then
+          score=$((pass * 100 / total))
+        else
+          score=0
+        fi
+        echo "{\"pass\": $pass, \"fail\": $fail, \"total\": $total, \"score\": $score}"
+      register: _oscap_counts
+      changed_when: false
+
+    - name: Set compliance facts
+      ansible.builtin.set_fact:
+        _compliance: "{{ _oscap_counts.stdout | from_json }}"
+        _oscap_rc: "{{ _oscap_result.rc }}"
+
+    - name: Fetch HTML report to controller
+      ansible.builtin.fetch:
+        src: "{{ _report_dir }}/oscap-report-{{ inventory_hostname }}.html"
+        dest: "/tmp/oscap-report-{{ inventory_hostname }}.html"
+        flat: true
+
+    - name: Display compliance summary
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
+          - "Profile: {{ oscap_profile }}"
+          - "Score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail)"
+          - "oscap exit code: {{ _oscap_rc }} (0=all pass, 2=some failures)"
+
+    - name: Publish compliance results for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_compliance_score: "{{ _compliance.score }}"
+          snow_compliance_pass: "{{ _compliance.pass }}"
+          snow_compliance_fail: "{{ _compliance.fail }}"
+          snow_compliance_total: "{{ _compliance.total }}"
+          snow_compliance_profile: "{{ oscap_profile }}"
+          snow_compliance_host: "{{ inventory_hostname }}"
+          snow_compliance_failed: "{{ (_compliance.score | int) < (oscap_fail_threshold | int) }}"
+          snow_ci_identifier: "{{ inventory_hostname }}"
+          snow_ci_attributes_json: >-
+            {{ {
+              "short_description": "Compliance: " + _compliance.score | string + "% (" + oscap_profile + ")",
+              "attributes": "oscap_score=" + _compliance.score | string + ";oscap_profile=" + oscap_profile
+            } | to_json }}

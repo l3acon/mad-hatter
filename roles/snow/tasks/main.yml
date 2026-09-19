@@ -232,7 +232,7 @@
     controller_hosts: "{{ controller_hosts }}"
     controller_workflows: "{{ controller_workflows }}"
     controller_roles: "{{ controller_roles }}"
-    controller_schedules: []
+    controller_schedules: "{{ controller_schedules }}"
 
 - name: Apply Automation Controller configuration (ServiceNow CasC)
   ansible.builtin.include_role:

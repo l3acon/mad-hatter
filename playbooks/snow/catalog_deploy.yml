@@ -122,7 +122,7 @@
     - name: Look up AAP resource IDs for catalog items
       ansible.builtin.uri:
         url: >-
-          {{ snow_aap_base_url }}/api/v2/{{ item.aap_resource_type }}s/?name={{ item.aap_resource_name | urlencode }}
+          {{ snow_aap_base_url }}/api/controller/v2/{{ item.aap_resource_type }}s/?name={{ item.aap_resource_name | urlencode }}
         method: GET
         user: "{{ snow_aap_api_user }}"
         password: "{{ snow_aap_api_password }}"

@@ -70,6 +70,37 @@ snow_clab_instance_type: c8i.2xlarge
 snow_clab_vpc_name: clab-snow-vpc
 snow_clab_purpose_tag: containerlab
 
+# ─── OpenSCAP compliance scanning ─────────────────────────────────────────────
+snow_oscap_profile: "xccdf_org.ssgproject.content_profile_cis_server_l1"
+snow_oscap_datastream: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
+snow_oscap_fail_threshold: 80
+
+# ─── Patching ─────────────────────────────────────────────────────────────────
+snow_patch_default_scope: "security"
+
+# ─── Config drift baseline ───────────────────────────────────────────────────
+snow_drift_baseline_packages:
+  - openscap-scanner
+  - scap-security-guide
+snow_drift_baseline_services:
+  - sshd
+  - chronyd
+snow_drift_baseline_sshd_settings:
+  PermitRootLogin: "no"
+  PasswordAuthentication: "no"
+snow_drift_baseline_file_permissions:
+  - path: /etc/ssh/sshd_config
+    mode: "0600"
+  - path: /etc/passwd
+    mode: "0644"
+  - path: /etc/shadow
+    mode: "0000"
+
+# ─── AAP workflow names (Day 1/Day N) ────────────────────────────────────────
+snow_compliance_workflow_name: "ServiceNow | Compliance Scan"
+snow_patch_workflow_name: "ServiceNow | Patch RHEL VM (end-to-end)"
+snow_drift_workflow_name: "ServiceNow | Config Drift Check and Remediate"
+
 # Self-service portal user.
 snow_ssp_user_enabled: true
 snow_ssp_user_name: snow-user

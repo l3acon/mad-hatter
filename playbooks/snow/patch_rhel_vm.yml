@@ -1,0 +1,125 @@
+---
+# Patch a RHEL VM. Captures before/after state and publishes a summary
+# for the wrapping workflow to feed back to SNOW.
+#
+# Two-play structure:
+#   Play 1 (localhost): resolve target, add to inventory
+#   Play 2 (target):    apply patches, capture delta
+- name: Patch RHEL VM — prepare target
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_target_host: ""
+    snow_vm_name: ""
+    snow_host_ip: ""
+    snow_patch_scope: "security"
+  tasks:
+    - name: Resolve target host
+      ansible.builtin.set_fact:
+        _target_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
+        _target_name: "{{ snow_vm_name | default('patched-host', true) }}"
+
+    - name: Validate target
+      ansible.builtin.assert:
+        that:
+          - _target_ip | length > 0
+        fail_msg: "No target host IP available (snow_host_ip or snow_target_host required)"
+
+    - name: Add target to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ _target_name }}"
+        ansible_host: "{{ _target_ip }}"
+        ansible_user: ec2-user
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: patch_targets
+        snow_patch_scope: "{{ snow_patch_scope }}"
+
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        host: "{{ _target_ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+
+- name: Patch RHEL VM — apply updates
+  hosts: patch_targets
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Capture pre-patch kernel version
+      ansible.builtin.command: uname -r
+      register: _pre_kernel
+      changed_when: false
+
+    - name: Capture pre-patch package count
+      ansible.builtin.command: rpm -qa --qf '%{NAME}\n'
+      register: _pre_packages
+      changed_when: false
+
+    - name: Apply security patches
+      when: snow_patch_scope | default('security') == 'security'
+      ansible.builtin.dnf:
+        security: true
+        state: latest
+        update_only: true
+      register: _patch_security
+
+    - name: Apply all patches
+      when: snow_patch_scope | default('security') == 'all'
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_only: true
+      register: _patch_all
+
+    - name: Capture post-patch kernel version
+      ansible.builtin.command: uname -r
+      register: _post_kernel
+      changed_when: false
+
+    - name: Capture post-patch package list
+      ansible.builtin.command: rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n'
+      register: _post_packages
+      changed_when: false
+
+    - name: Determine if reboot is needed
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: _reboot_flag
+      ignore_errors: true
+
+    - name: Check needs-restarting (RHEL)
+      ansible.builtin.command: needs-restarting -r
+      register: _needs_restart
+      failed_when: false
+      changed_when: false
+
+    - name: Set patch summary facts
+      ansible.builtin.set_fact:
+        _reboot_needed: "{{ _needs_restart.rc | default(0) == 1 }}"
+        _kernel_changed: "{{ _pre_kernel.stdout != _post_kernel.stdout }}"
+        _patch_result: "{{ _patch_security if (snow_patch_scope | default('security') == 'security') else _patch_all }}"
+
+    - name: Display patch summary
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
+          - "Scope: {{ snow_patch_scope | default('security') }}"
+          - "Kernel: {{ _pre_kernel.stdout }} -> {{ _post_kernel.stdout }}"
+          - "Kernel changed: {{ _kernel_changed }}"
+          - "Reboot needed: {{ _reboot_needed }}"
+
+    - name: Publish patch results for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_patch_host: "{{ inventory_hostname }}"
+          snow_patch_scope: "{{ snow_patch_scope | default('security') }}"
+          snow_patch_kernel_before: "{{ _pre_kernel.stdout }}"
+          snow_patch_kernel_after: "{{ _post_kernel.stdout }}"
+          snow_patch_kernel_changed: "{{ _kernel_changed }}"
+          snow_patch_reboot_needed: "{{ _reboot_needed }}"
+          snow_ci_identifier: "{{ inventory_hostname }}"
+          snow_ci_attributes_json: >-
+            {{ {
+              "short_description": "Patched (" + snow_patch_scope | default("security") + ") - kernel " + _post_kernel.stdout
+            } | to_json }}

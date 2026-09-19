@@ -353,6 +353,157 @@ controller_templates:
             - "true"
           default: "false"
 
+  # ── Compliance (Day 1) ────────────────────────────────────────────────────
+  - name: "ServiceNow | Compliance - OpenSCAP Scan"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/compliance_scan.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - "{{ snow_aap_ec2_ssh_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Run an OpenSCAP compliance scan against a CMDB-managed host. Results are
+        written back to the CMDB CI and an incident is created if the score is below threshold.
+      spec:
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+        - question_name: SCAP profile
+          type: multiplechoice
+          variable: oscap_profile
+          required: true
+          choices:
+            - xccdf_org.ssgproject.content_profile_cis_server_l1
+            - xccdf_org.ssgproject.content_profile_cis
+            - xccdf_org.ssgproject.content_profile_stig
+          default: xccdf_org.ssgproject.content_profile_cis_server_l1
+        - question_name: Fail threshold (percent)
+          type: integer
+          variable: oscap_fail_threshold
+          required: false
+          default: 80
+          min: 0
+          max: 100
+
+  # ── Patching (Day N) ────────────────────────────────────────────────────
+  - name: "ServiceNow | Patching - Pre-Patch Snapshot"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_runtime_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/patch_pre_snapshot.yml
+    credentials:
+      - "{{ snow_aws_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Create an AMI snapshot before patching.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: snow_vm_name
+          required: true
+        - question_name: AWS Region
+          type: multiplechoice
+          variable: snow_vm_region
+          required: true
+          choices:
+            - us-east-2
+            - us-east-1
+            - us-west-2
+          default: us-east-2
+
+  - name: "ServiceNow | Patching - Apply Patches"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/patch_rhel_vm.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - "{{ snow_aap_ec2_ssh_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Apply OS patches to a RHEL VM.
+      spec:
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+        - question_name: Patch scope
+          type: multiplechoice
+          variable: snow_patch_scope
+          required: true
+          choices:
+            - security
+            - all
+          default: security
+
+  # ── Config Drift (Day N) ────────────────────────────────────────────────
+  - name: "ServiceNow | Config Drift - Check"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/config_drift_check.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - "{{ snow_aap_ec2_ssh_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Check a host for configuration drift from the golden baseline.
+        If drift is detected, downstream workflow nodes create a SNOW incident.
+      spec:
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+
+  - name: "ServiceNow | Config Drift - Remediate"
+    job_type: run
+    organization: Default
+    inventory: "{{ snow_aap_inventory_name }}"
+    project: "{{ snow_aap_project_name }}"
+    playbook: playbooks/snow/config_drift_remediate.yml
+    credentials:
+      - "{{ snow_aap_credential_name }}"
+      - "{{ snow_aap_ec2_ssh_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ snow_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Enforce the golden-config baseline on a host, remediating any detected drift.
+        Idempotent — safe to run repeatedly.
+      spec:
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+
   # ── Containerlab ─────────────────────────────────────────────────────────
   - name: "ServiceNow | Containerlab | Provision Hypervisor"
     job_type: run
@@ -671,6 +822,291 @@ controller_workflows:
           choices:
             - us-east-2
             - us-west-2
+
+  # ── Day 1: Compliance Scan Workflow ──────────────────────────────────────
+  - name: "{{ snow_compliance_workflow_name }}"
+    description: >-
+      Scheduled compliance scan. Runs OpenSCAP against a CMDB-managed host,
+      enriches the CMDB CI with compliance status, and creates a SNOW incident
+      if the score falls below the configured threshold.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: true
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: OpenSCAP_Scan
+        unified_job_template: "ServiceNow | Compliance - OpenSCAP Scan"
+        all_parents_must_converge: false
+        success_nodes:
+          - Enrich_CMDB_Compliance
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Enrich_CMDB_Compliance
+        unified_job_template: "ServiceNow | CMDB - Enrich Host"
+        all_parents_must_converge: false
+        success_nodes:
+          - Create_Compliance_Incident
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Create_Compliance_Incident
+        unified_job_template: "ServiceNow | ITSM - Create Incident"
+        extra_data:
+          snow_incident_category: "Software"
+          snow_incident_urgency: "2 - Medium"
+          snow_incident_impact: "2 - Medium"
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+    survey_spec:
+      name: ""
+      description: >-
+        Compliance scan parameters. Typically populated by a schedule or external trigger.
+      spec:
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+        - question_name: SCAP profile
+          type: multiplechoice
+          variable: oscap_profile
+          required: false
+          choices:
+            - xccdf_org.ssgproject.content_profile_cis_server_l1
+            - xccdf_org.ssgproject.content_profile_cis
+            - xccdf_org.ssgproject.content_profile_stig
+          default: xccdf_org.ssgproject.content_profile_cis_server_l1
+
+  # ── Day N: Patch RHEL VM Workflow ────────────────────────────────────────
+  - name: "{{ snow_patch_workflow_name }}"
+    description: >-
+      End-to-end patching workflow. Creates a SNOW change request, takes an AMI
+      snapshot, applies patches, re-scans compliance, enriches the CMDB, and
+      closes the change request. Every step writes back to ServiceNow.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Create_Change_Request
+        unified_job_template: "ServiceNow | ITSM - Create Incident"
+        extra_data:
+          snow_incident_short_description: "Patching change request"
+          snow_incident_category: "Software"
+          snow_incident_urgency: "2 - Medium"
+          snow_incident_impact: "2 - Medium"
+        all_parents_must_converge: false
+        success_nodes:
+          - Pre_Patch_Snapshot
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Pre_Patch_Snapshot
+        unified_job_template: "ServiceNow | Patching - Pre-Patch Snapshot"
+        all_parents_must_converge: false
+        success_nodes:
+          - Apply_Patches
+        failure_nodes:
+          - Update_Change_Failed
+        always_nodes: []
+
+      - identifier: Apply_Patches
+        unified_job_template: "ServiceNow | Patching - Apply Patches"
+        all_parents_must_converge: false
+        success_nodes:
+          - Post_Patch_Compliance
+        failure_nodes:
+          - Update_Change_Failed
+        always_nodes: []
+
+      - identifier: Post_Patch_Compliance
+        unified_job_template: "ServiceNow | Compliance - OpenSCAP Scan"
+        all_parents_must_converge: false
+        success_nodes:
+          - Enrich_CMDB_Patch
+        failure_nodes:
+          - Update_Change_Failed
+        always_nodes: []
+
+      - identifier: Enrich_CMDB_Patch
+        unified_job_template: "ServiceNow | CMDB - Enrich Host"
+        all_parents_must_converge: false
+        success_nodes:
+          - Close_Change_Request
+        failure_nodes:
+          - Update_Change_Failed
+        always_nodes: []
+
+      - identifier: Close_Change_Request
+        unified_job_template: "ServiceNow | ITSM - Close Incident"
+        extra_data:
+          snow_incident_close_code: "Solved (Permanently)"
+          snow_incident_close_notes: "[Ansible Automation Platform] Patching complete. Compliance re-scan passed. CMDB updated."
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Update_Change_Failed
+        unified_job_template: "ServiceNow | ITSM - Update Incident"
+        extra_data:
+          snow_incident_state: "2 - In Progress"
+          snow_incident_work_notes: "[Ansible Automation Platform] Patching workflow encountered an error. Manual review required."
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+    survey_spec:
+      name: ""
+      description: >-
+        Patching workflow parameters. Provide the target host and patch scope.
+      spec:
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+        - question_name: VM name (for AMI snapshot tag)
+          type: text
+          variable: snow_vm_name
+          required: true
+        - question_name: AWS Region
+          type: multiplechoice
+          variable: snow_vm_region
+          required: true
+          choices:
+            - us-east-2
+            - us-east-1
+            - us-west-2
+          default: us-east-2
+        - question_name: Patch scope
+          type: multiplechoice
+          variable: snow_patch_scope
+          required: true
+          choices:
+            - security
+            - all
+          default: security
+
+  # ── Day N: Config Drift Check and Remediate Workflow ─────────────────────
+  - name: "{{ snow_drift_workflow_name }}"
+    description: >-
+      Detects configuration drift from the golden baseline. If drift is found,
+      creates a SNOW incident, remediates the host, re-checks drift, then
+      resolves and closes the incident. Every state transition is recorded in SNOW.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Check_Drift
+        unified_job_template: "ServiceNow | Config Drift - Check"
+        all_parents_must_converge: false
+        success_nodes:
+          - Create_Drift_Incident
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Create_Drift_Incident
+        unified_job_template: "ServiceNow | ITSM - Create Incident"
+        extra_data:
+          snow_incident_category: "Software"
+          snow_incident_urgency: "2 - Medium"
+          snow_incident_impact: "2 - Medium"
+        all_parents_must_converge: false
+        success_nodes:
+          - Update_Incident_In_Progress
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Update_Incident_In_Progress
+        unified_job_template: "ServiceNow | ITSM - Update Incident"
+        extra_data:
+          snow_incident_state: "2 - In Progress"
+          snow_incident_work_notes: "[Ansible Automation Platform] Automated remediation in progress."
+        all_parents_must_converge: false
+        success_nodes:
+          - Remediate_Drift
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Remediate_Drift
+        unified_job_template: "ServiceNow | Config Drift - Remediate"
+        all_parents_must_converge: false
+        success_nodes:
+          - Recheck_Drift
+        failure_nodes:
+          - Update_Incident_Failed
+        always_nodes: []
+
+      - identifier: Recheck_Drift
+        unified_job_template: "ServiceNow | Config Drift - Check"
+        all_parents_must_converge: false
+        success_nodes:
+          - Close_Drift_Incident
+        failure_nodes:
+          - Update_Incident_Failed
+        always_nodes: []
+
+      - identifier: Close_Drift_Incident
+        unified_job_template: "ServiceNow | ITSM - Close Incident"
+        extra_data:
+          snow_incident_close_code: "Solved (Permanently)"
+          snow_incident_close_notes: "[Ansible Automation Platform] Configuration drift remediated and verified. Baseline restored."
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Update_Incident_Failed
+        unified_job_template: "ServiceNow | ITSM - Update Incident"
+        extra_data:
+          snow_incident_state: "2 - In Progress"
+          snow_incident_work_notes: "[Ansible Automation Platform] Automated remediation failed. Manual intervention required."
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+    survey_spec:
+      name: ""
+      description: >-
+        Config drift check parameters. Typically triggered by schedule.
+      spec:
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+
+# ─── Schedules ─────────────────────────────────────────────────────────────────
+# Schedules need extra_data to satisfy required survey variables.
+# Set snow_target_host to a provisioned host after Day 0.
+controller_schedules:
+  - name: "Daily Compliance Scan"
+    unified_job_template: "{{ snow_compliance_workflow_name }}"
+    rrule: "DTSTART:20260101T020000Z RRULE:FREQ=DAILY;INTERVAL=1"
+    enabled: false
+    description: >-
+      Runs a compliance scan daily at 02:00 UTC. Enable after provisioning
+      a target host and setting extra_data.snow_target_host.
+    extra_data:
+      snow_target_host: "placeholder-enable-after-day0"
+
+  - name: "Daily Config Drift Check"
+    unified_job_template: "{{ snow_drift_workflow_name }}"
+    rrule: "DTSTART:20260101T030000Z RRULE:FREQ=DAILY;INTERVAL=1"
+    enabled: false
+    description: >-
+      Checks for configuration drift daily at 03:00 UTC. Enable after
+      provisioning a target host and setting extra_data.snow_target_host.
+    extra_data:
+      snow_target_host: "placeholder-enable-after-day0"
 
 # ─── Credential Types ─────────────────────────────────────────────────────────
 # The ServiceNow credential type is not built-in to AAP; we create it so our

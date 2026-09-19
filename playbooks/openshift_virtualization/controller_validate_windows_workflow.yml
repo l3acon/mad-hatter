@@ -93,7 +93,7 @@
       rescue:
         - name: Query latest workflow job for this template (diagnostics)
           ansible.builtin.uri:
-            url: "{{ aap_hostname }}/api/v2/workflow_jobs/?workflow_job_template__name=OpenShift+Virtualization+%7C+Provision+Windows+VM+and+install+package&order_by=-id&page_size=1"
+            url: "{{ aap_hostname }}/api/controller/v2/workflow_jobs/?workflow_job_template__name=OpenShift+Virtualization+%7C+Provision+Windows+VM+and+install+package&order_by=-id&page_size=1"
             method: GET
             user: "{{ aap_username }}"
             password: "{{ aap_password }}"
@@ -109,7 +109,7 @@
               Latest workflow job id={{ (ocpv_win_wf_diag.json.results[0].id | default('?')) }}
               status={{ (ocpv_win_wf_diag.json.results[0].status | default('?')) }} —
               inspect nodes in the controller UI or GET
-              {{ aap_hostname }}/api/v2/workflow_jobs/{{ ocpv_win_wf_diag.json.results[0].id | default('') }}/workflow_nodes/
+              {{ aap_hostname }}/api/controller/v2/workflow_jobs/{{ ocpv_win_wf_diag.json.results[0].id | default('') }}/workflow_nodes/
 
         - name: Fail with troubleshooting hints
           ansible.builtin.fail:

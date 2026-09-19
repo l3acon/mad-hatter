@@ -1,0 +1,60 @@
+---
+# Create an AMI snapshot of an EC2 instance before patching.
+# Runs on localhost with AWS credentials. Publishes the snapshot AMI ID
+# for rollback reference. Tags with SNOW change request if available.
+- name: Pre-patch AMI snapshot
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_vm_name: ""
+    snow_vm_instance_id: ""
+    snow_vm_region: us-east-2
+    snow_change_request_number: ""
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - snow_vm_instance_id | length > 0 or snow_vm_name | length > 0
+        fail_msg: "snow_vm_instance_id or snow_vm_name is required"
+
+    - name: Look up instance by name if no instance ID provided
+      when: snow_vm_instance_id | default('') | length == 0
+      amazon.aws.ec2_instance_info:
+        region: "{{ snow_vm_region }}"
+        filters:
+          "tag:Name": "{{ snow_vm_name }}"
+          instance-state-name: running
+      register: _ec2_lookup
+
+    - name: Set instance ID from lookup
+      when: snow_vm_instance_id | default('') | length == 0
+      ansible.builtin.set_fact:
+        snow_vm_instance_id: "{{ _ec2_lookup.instances[0].instance_id }}"
+
+    - name: Create AMI snapshot
+      amazon.aws.ec2_ami:
+        instance_id: "{{ snow_vm_instance_id }}"
+        region: "{{ snow_vm_region }}"
+        name: "pre-patch-{{ snow_vm_name | default(snow_vm_instance_id) }}-{{ ansible_date_time.date | default(lookup('pipe', 'date +%Y-%m-%d')) }}"
+        wait: true
+        tags:
+          Name: "pre-patch-{{ snow_vm_name | default(snow_vm_instance_id) }}"
+          ManagedBy: ansible-aap
+          Purpose: pre-patch-snapshot
+          ChangeRequest: "{{ snow_change_request_number | default('manual') }}"
+          SourceInstance: "{{ snow_vm_instance_id }}"
+      register: _ami_result
+
+    - name: Display snapshot details
+      ansible.builtin.debug:
+        msg:
+          - "AMI snapshot created successfully"
+          - "AMI ID: {{ _ami_result.image_id }}"
+          - "Source instance: {{ snow_vm_instance_id }}"
+          - "Change request: {{ snow_change_request_number | default('N/A') }}"
+
+    - name: Publish snapshot details for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_snapshot_ami_id: "{{ _ami_result.image_id }}"
+          snow_vm_instance_id: "{{ snow_vm_instance_id }}"

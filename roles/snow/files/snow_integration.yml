@@ -101,7 +101,7 @@ snow_script_include:
         _getWorkflowId: function(name) {
             var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Get Job Status');
             // Override endpoint for lookup
-            sm.setEndpoint(sm.getEndpoint().replace('/api/v2/jobs/${job_id}/', '/api/v2/workflow_job_templates/?name=' + encodeURIComponent(name)));
+            sm.setEndpoint(sm.getEndpoint().replace('/api/controller/v2/jobs/${job_id}/', '/api/controller/v2/workflow_job_templates/?name=' + encodeURIComponent(name)));
             var response = sm.execute();
             var body = JSON.parse(response.getBody());
             if (body.results && body.results.length > 0) {
@@ -112,7 +112,7 @@ snow_script_include:
 
         _getTemplateId: function(name) {
             var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Get Job Status');
-            sm.setEndpoint(sm.getEndpoint().replace('/api/v2/jobs/${job_id}/', '/api/v2/job_templates/?name=' + encodeURIComponent(name)));
+            sm.setEndpoint(sm.getEndpoint().replace('/api/controller/v2/jobs/${job_id}/', '/api/controller/v2/job_templates/?name=' + encodeURIComponent(name)));
             var response = sm.execute();
             var body = JSON.parse(response.getBody());
             if (body.results && body.results.length > 0) {

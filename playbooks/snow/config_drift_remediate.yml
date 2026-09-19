@@ -1,0 +1,164 @@
+---
+# Remediate configuration drift by enforcing the golden baseline.
+# Fully idempotent — safe to run repeatedly. The wrapping workflow
+# re-runs config_drift_check.yml after this to confirm, then closes
+# the SNOW incident.
+#
+# Two-play structure:
+#   Play 1 (localhost): resolve target, add to inventory
+#   Play 2 (target):    enforce baseline
+- name: Config drift remediate — prepare target
+  hosts: localhost
+  gather_facts: false
+  vars:
+    snow_target_host: ""
+    snow_vm_name: ""
+    snow_host_ip: ""
+    drift_baseline_packages:
+      - openscap-scanner
+      - scap-security-guide
+    drift_baseline_services:
+      - sshd
+      - chronyd
+    drift_baseline_sshd_settings:
+      PermitRootLogin: "no"
+      PasswordAuthentication: "no"
+    drift_baseline_file_permissions:
+      - path: /etc/ssh/sshd_config
+        mode: "0600"
+      - path: /etc/passwd
+        mode: "0644"
+      - path: /etc/shadow
+        mode: "0000"
+  tasks:
+    - name: Resolve target host
+      ansible.builtin.set_fact:
+        _target_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
+        _target_name: "{{ snow_vm_name | default('remediate-target', true) }}"
+
+    - name: Validate target
+      ansible.builtin.assert:
+        that:
+          - _target_ip | length > 0
+        fail_msg: "No target host IP available (snow_host_ip or snow_target_host required)"
+
+    - name: Add target to in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ _target_name }}"
+        ansible_host: "{{ _target_ip }}"
+        ansible_user: ec2-user
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: remediate_targets
+        drift_baseline_packages: "{{ drift_baseline_packages }}"
+        drift_baseline_services: "{{ drift_baseline_services }}"
+        drift_baseline_sshd_settings: "{{ drift_baseline_sshd_settings }}"
+        drift_baseline_file_permissions: "{{ drift_baseline_file_permissions }}"
+
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        host: "{{ _target_ip }}"
+        port: 22
+        delay: 5
+        timeout: 120
+
+- name: Config drift remediate — enforce baseline
+  hosts: remediate_targets
+  gather_facts: true
+  become: true
+  vars:
+    _remediation_actions: []
+  tasks:
+    # ── Enforce required packages ───────────────────────────────────────────
+    - name: Ensure baseline packages are installed
+      ansible.builtin.dnf:
+        name: "{{ drift_baseline_packages }}"
+        state: present
+      register: _pkg_enforce
+
+    - name: Record package remediation
+      when: _pkg_enforce is changed
+      ansible.builtin.set_fact:
+        _remediation_actions: >-
+          {{ _remediation_actions + ['Installed missing packages'] }}
+
+    # ── Enforce required services ───────────────────────────────────────────
+    - name: Ensure baseline services are started and enabled
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop: "{{ drift_baseline_services }}"
+      register: _svc_enforce
+
+    - name: Record service remediation
+      ansible.builtin.set_fact:
+        _remediation_actions: >-
+          {{ _remediation_actions + ['Enabled/started service: ' + item.item] }}
+      loop: "{{ _svc_enforce.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item is changed
+
+    # ── Enforce sshd hardening ──────────────────────────────────────────────
+    - name: Enforce sshd configuration settings
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*{{ item.key }}\s'
+        line: "{{ item.key }} {{ item.value }}"
+        validate: "sshd -t -f %s"
+      loop: "{{ drift_baseline_sshd_settings | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: _sshd_enforce
+      notify: restart sshd
+
+    - name: Record sshd remediation
+      ansible.builtin.set_fact:
+        _remediation_actions: >-
+          {{ _remediation_actions + ['Enforced sshd setting: ' + item.item.key + '=' + item.item.value] }}
+      loop: "{{ _sshd_enforce.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+      when: item is changed
+
+    # ── Enforce file permissions ────────────────────────────────────────────
+    - name: Enforce file permissions
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        mode: "{{ item.mode }}"
+      loop: "{{ drift_baseline_file_permissions }}"
+      register: _file_enforce
+
+    - name: Record file permission remediation
+      ansible.builtin.set_fact:
+        _remediation_actions: >-
+          {{ _remediation_actions + ['Fixed permissions on ' + item.item.path + ' to ' + item.item.mode] }}
+      loop: "{{ _file_enforce.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+      when: item is changed
+
+    # ── Summary ─────────────────────────────────────────────────────────────
+    - name: Display remediation summary
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
+          - "Actions taken: {{ _remediation_actions | length }}"
+          - "Details: {{ _remediation_actions }}"
+
+    - name: Publish remediation results for downstream workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          snow_remediation_host: "{{ inventory_hostname }}"
+          snow_remediation_applied: "{{ _remediation_actions | length > 0 }}"
+          snow_remediation_count: "{{ _remediation_actions | length }}"
+          snow_remediation_actions: "{{ _remediation_actions }}"
+          snow_incident_work_notes: >-
+            [Ansible Automation Platform] Remediation applied: {{ _remediation_actions | length }} action(s).
+            {{ _remediation_actions | join('; ') }}
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted
