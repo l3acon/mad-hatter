@@ -1,0 +1,43 @@
+---
+# Resolve a survey target to inventory hostname + reachable IP.
+#
+# Survey field snow_target_host may be either:
+#   - an inventory hostname (e.g. test123) whose ansible_host holds the IP, or
+#   - a literal IP / DNS name
+# Prefer explicit snow_host_ip when provided.
+#
+# Sets facts: _target_name, _target_ip
+- name: Resolve target name
+  ansible.builtin.set_fact:
+    _target_name: >-
+      {{ snow_vm_name | default(snow_target_host, true) | default(resolve_default_name | default('target-host'), true) }}
+
+- name: Resolve target IP from inventory ansible_host when survey value is a hostname
+  ansible.builtin.set_fact:
+    _target_ip: >-
+      {{
+        snow_host_ip
+        if (snow_host_ip | default('') | length > 0)
+        else (
+          hostvars[snow_target_host]['ansible_host']
+          if (
+            (snow_target_host | default('') | length > 0)
+            and (snow_target_host in hostvars)
+            and (hostvars[snow_target_host]['ansible_host'] is defined)
+            and (hostvars[snow_target_host]['ansible_host'] | string | length > 0)
+          )
+          else (snow_target_host | default(''))
+        )
+      }}
+
+- name: Validate resolved target
+  ansible.builtin.assert:
+    that:
+      - _target_ip | length > 0
+    fail_msg: >-
+      No target host IP available. Pass snow_host_ip, or snow_target_host as an
+      inventory hostname (with ansible_host set) or as an IP/DNS name.
+
+- name: Show resolved target
+  ansible.builtin.debug:
+    msg: "Target {{ _target_name }} -> {{ _target_ip }}"

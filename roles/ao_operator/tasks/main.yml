@@ -1,0 +1,193 @@
+---
+# --- CloudNativePG operator (AO dependency) ----------------------------
+- name: Check for existing OperatorGroup in openshift-operators
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1
+    kind: OperatorGroup
+    namespace: openshift-operators
+  register: r_cnpg_existing_og
+
+- name: Install CloudNativePG operator
+  ansible.builtin.include_role:
+    name: install_operator
+  vars:
+    install_operator_action: install
+    install_operator_namespace: openshift-operators
+    install_operator_name: "{{ ao_operator_cnpg_name }}"
+    install_operator_csv_nameprefix: "{{ ao_operator_cnpg_csv_nameprefix }}"
+    install_operator_channel: "{{ ao_operator_cnpg_channel }}"
+    install_operator_catalog: "{{ ao_operator_cnpg_catalog }}"
+    install_operator_automatic_install_plan_approval: true
+    install_operator_starting_csv: ""
+    install_operator_catalogsource_setup: false
+    install_operator_skip_operatorgroup: >-
+      {{ (r_cnpg_existing_og.resources | length > 0) | bool }}
+
+# --- Automation Orchestrator operator (AllNamespaces mode) --------------
+# AO operator only supports AllNamespaces install mode, so it must be
+# installed into the global openshift-operators namespace.
+- name: Install Automation Orchestrator operator
+  ansible.builtin.include_role:
+    name: install_operator
+  vars:
+    install_operator_action: install
+    install_operator_namespace: openshift-operators
+    install_operator_name: "{{ ao_operator_name }}"
+    install_operator_csv_nameprefix: "{{ ao_operator_csv_nameprefix }}"
+    install_operator_channel: "{{ ao_operator_channel }}"
+    install_operator_catalog: "{{ ao_operator_catalog }}"
+    install_operator_automatic_install_plan_approval: >-
+      {{ ao_operator_automatic_install_plan_approval }}
+    install_operator_starting_csv: "{{ ao_operator_starting_csv }}"
+    install_operator_catalogsource_setup: false
+    install_operator_skip_operatorgroup: true
+
+# --- Wait for operator deployment to be ready --------------------------
+- name: Get AO operator deployment names
+  ansible.builtin.command: >-
+    oc get deployment -n openshift-operators
+    -l app.kubernetes.io/name=automation-orchestrator-operator
+    -o jsonpath='{.items[*].metadata.name}'
+  changed_when: false
+  register: r_ao_operator_dep_names
+  until: r_ao_operator_dep_names.stdout | trim | length > 0
+  retries: 30
+  delay: 10
+
+- name: Wait for each AO operator deployment rollout
+  ansible.builtin.command: >-
+    oc rollout status deployment/{{ item }}
+    -n openshift-operators --timeout=300s
+  changed_when: false
+  loop: "{{ r_ao_operator_dep_names.stdout.split() }}"
+  loop_control:
+    label: "{{ item }}"
+
+# --- Create namespace for AO instance ----------------------------------
+- name: Ensure AO namespace exists
+  kubernetes.core.k8s:
+    state: present
+    api_version: v1
+    kind: Namespace
+    name: "{{ ao_operator_project }}"
+
+# --- Provision CloudNativePG cluster -----------------------------------
+- name: Create CloudNativePG cluster
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'cnpg_cluster.j2') }}"
+
+- name: Wait for CNPG cluster to be ready
+  kubernetes.core.k8s_info:
+    api_version: postgresql.cnpg.io/v1
+    kind: Cluster
+    name: "{{ ao_operator_cnpg_cluster_name }}"
+    namespace: "{{ ao_operator_project }}"
+  register: r_cnpg_cluster
+  until: >-
+    r_cnpg_cluster.resources | default([]) | length > 0
+    and (r_cnpg_cluster.resources[0].status.phase | default('') == 'Cluster in healthy state')
+  retries: 60
+  delay: 15
+
+# --- Read CNPG-generated credentials and create AO db secrets ----------
+- name: Get CNPG superuser secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ ao_operator_cnpg_cluster_name }}-superuser"
+    namespace: "{{ ao_operator_project }}"
+  register: r_cnpg_superuser
+
+- name: Set CNPG credentials fact
+  ansible.builtin.set_fact:
+    _cnpg_username: "{{ r_cnpg_superuser.resources[0].data.username | b64decode }}"
+    _cnpg_password: "{{ r_cnpg_superuser.resources[0].data.password | b64decode }}"
+  no_log: true
+
+- name: Create AO backend database secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: ao-backend-db-secret
+        namespace: "{{ ao_operator_project }}"
+      type: Opaque
+      stringData:
+        database: "{{ ao_operator_cnpg_backend_db }}"
+        username: "{{ _cnpg_username }}"
+        password: "{{ _cnpg_password }}"
+  no_log: true
+
+- name: Create AO temporal database secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: ao-temporal-db-secret
+        namespace: "{{ ao_operator_project }}"
+      type: Opaque
+      stringData:
+        database: "{{ ao_operator_cnpg_temporal_db }}"
+        username: "{{ _cnpg_username }}"
+        password: "{{ _cnpg_password }}"
+  no_log: true
+
+# --- Create AutomationOrchestrator CR ----------------------------------
+- name: Create AutomationOrchestrator instance
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'ao.j2') }}"
+
+# --- Wait for the Route ------------------------------------------------
+- name: Wait for the Automation Orchestrator Route
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ ao_operator_project }}"
+  register: ao_routes
+  until: ao_routes.resources | default([]) | length > 0
+  retries: 60
+  delay: 10
+
+- name: Set AO route hostname
+  ansible.builtin.set_fact:
+    ao_hostname: "{{ ao_routes.resources[0].spec.host }}"
+  when: ao_routes.resources | default([]) | length > 0
+
+# --- Retrieve admin password -------------------------------------------
+- name: Get AO admin password secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: "{{ ao_operator_app_name }}-initial-admin-password"
+    namespace: "{{ ao_operator_project }}"
+  register: ao_admin_secret
+  until: ao_admin_secret.resources | default([]) | length > 0
+  retries: 60
+  delay: 10
+  ignore_errors: true
+
+# --- Display access info -----------------------------------------------
+- name: Display AO access information
+  ansible.builtin.debug:
+    msg:
+      - "Automation Orchestrator deployment complete."
+      - "URL: https://{{ ao_hostname }}"
+      - "Username: {{ ao_operator_admin_username }}"
+      - "Password: {{ ao_admin_secret.resources[0].data.password | b64decode }}"
+      - "Note: login may fail for a minute or two after deploy — retry if it errors."
+  when:
+    - ao_routes.resources | default([]) | length > 0
+    - ao_admin_secret.resources | default([]) | length > 0
+
+- name: Warn if no Route appeared
+  ansible.builtin.debug:
+    msg: >-
+      Operator installed but no Route was found in {{ ao_operator_project }} yet.
+      Check status with: oc get csv,pods -n {{ ao_operator_project }}
+  when: ao_routes.resources | default([]) | length == 0

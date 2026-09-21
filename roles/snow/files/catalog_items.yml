@@ -25,6 +25,8 @@ snow_catalog_items:
     catalog: Ansible Automation Platform
     aap_resource_type: workflow_job_template
     aap_resource_name: "ServiceNow | Provision RHEL VM (end-to-end)"
+    # Optional override; catalog_deploy_updateset.yml resolves this from AAP by name when unset.
+    # aap_resource_id: "32"
     variables:
       - name: snow_vm_name
         label: VM Name
@@ -138,3 +140,10 @@ snow_rest_message:
       endpoint: "/api/controller/v2/jobs/${job_id}/"
       headers:
         Content-Type: application/json
+
+    # Name lookup without setEndpoint() — overriding the endpoint drops basic auth (HTTP 401).
+    - name: "Lookup Resource"
+      http_method: GET
+      endpoint: "/api/controller/v2/${resource_type}/?name=${resource_name}"
+      headers:
+        Accept: application/json

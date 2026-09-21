@@ -19,22 +19,16 @@
     oscap_datastream: "/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml"
     oscap_fail_threshold: 80
   tasks:
-    - name: Resolve target host
-      ansible.builtin.set_fact:
-        _target_ip: "{{ snow_host_ip | default(snow_target_host, true) }}"
-        _target_name: "{{ snow_vm_name | default('scanned-host', true) }}"
-
-    - name: Validate target
-      ansible.builtin.assert:
-        that:
-          - _target_ip | length > 0
-        fail_msg: "No target host IP available (snow_host_ip or snow_target_host required)"
+    - name: Resolve target from survey / inventory
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/resolve_target.yml"
+      vars:
+        resolve_default_name: scanned-host
 
     - name: Add target to in-memory inventory
       ansible.builtin.add_host:
         name: "{{ _target_name }}"
         ansible_host: "{{ _target_ip }}"
-        ansible_user: ec2-user
+        ansible_user: "{{ hostvars[_target_name]['ansible_user'] | default('ec2-user') }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
         groups: scan_targets
         oscap_profile: "{{ oscap_profile }}"

@@ -1,0 +1,18 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ ao_operator_cnpg_cluster_name }}
+  namespace: {{ ao_operator_project }}
+spec:
+  instances: {{ ao_operator_cnpg_instances }}
+  storage:
+    size: {{ ao_operator_cnpg_storage_size }}
+  bootstrap:
+    initdb:
+      database: {{ ao_operator_cnpg_backend_db }}
+      owner: {{ ao_operator_cnpg_db_user }}
+      postInitSQL:
+        - CREATE DATABASE {{ ao_operator_cnpg_temporal_db }} OWNER {{ ao_operator_cnpg_db_user }};
+        - CREATE DATABASE {{ ao_operator_cnpg_temporal_visibility_db }} OWNER {{ ao_operator_cnpg_db_user }};
+  enableSuperuserAccess: true

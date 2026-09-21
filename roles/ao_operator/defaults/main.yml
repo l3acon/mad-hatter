@@ -1,0 +1,40 @@
+---
+# ---------------------------------------------------------------
+# Namespace
+# ---------------------------------------------------------------
+ao_operator_project: automation-orchestrator
+
+# ---------------------------------------------------------------
+# CloudNativePG operator (dependency)
+# ---------------------------------------------------------------
+ao_operator_cnpg_name: cloudnative-pg
+ao_operator_cnpg_csv_nameprefix: cloudnative-pg
+ao_operator_cnpg_channel: "stable-v1"
+ao_operator_cnpg_catalog: certified-operators
+
+# ---------------------------------------------------------------
+# Automation Orchestrator operator
+# ---------------------------------------------------------------
+ao_operator_name: automation-orchestrator-operator
+ao_operator_csv_nameprefix: automation-orchestrator-operator
+ao_operator_channel: "stable"
+ao_operator_catalog: redhat-operators
+ao_operator_automatic_install_plan_approval: true
+ao_operator_starting_csv: ""
+
+# ---------------------------------------------------------------
+# CloudNativePG cluster
+# ---------------------------------------------------------------
+ao_operator_cnpg_cluster_name: ao-postgres
+ao_operator_cnpg_instances: 1
+ao_operator_cnpg_storage_size: 10Gi
+ao_operator_cnpg_db_user: ao
+ao_operator_cnpg_backend_db: orchestrator
+ao_operator_cnpg_temporal_db: temporal
+ao_operator_cnpg_temporal_visibility_db: temporal_visibility
+
+# ---------------------------------------------------------------
+# AutomationOrchestrator CR
+# ---------------------------------------------------------------
+ao_operator_app_name: automation-orchestrator
+ao_operator_admin_username: admin

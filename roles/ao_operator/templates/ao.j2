@@ -1,0 +1,22 @@
+---
+apiVersion: aap.ansible.com/v1alpha1
+kind: AutomationOrchestrator
+metadata:
+  name: {{ ao_operator_app_name }}
+  namespace: {{ ao_operator_project }}
+spec:
+  ingress:
+    type: Route
+  postgres:
+    host: {{ ao_operator_cnpg_cluster_name }}-rw.{{ ao_operator_project }}.svc
+    port: 5432
+    sslMode: require
+    caCertSecretRef:
+      name: {{ ao_operator_cnpg_cluster_name }}-ca
+      key: ca.crt
+    backendDatabase:
+      secretRef:
+        name: ao-backend-db-secret
+    temporalDatabase:
+      secretRef:
+        name: ao-temporal-db-secret

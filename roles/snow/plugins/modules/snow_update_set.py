@@ -282,14 +282,26 @@ AAPIntegration.prototype = {
 
     _getResourceId: function(resourceType, name) {
         var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Get Job Status');
-        var baseUrl = sm.getEndpoint().replace(/\/api\/v2\/jobs\/\$\{job_id\}\/$/, '');
-        sm.setEndpoint(baseUrl + '/api/v2/' + resourceType + '/?name=' + encodeURIComponent(name));
+        var endpoint = sm.getEndpoint() || '';
+        // Strip /api/... (including empty ${job_id} substitution) to get AAP base URL
+        var baseUrl = endpoint.replace(/\/api\/.*$/, '').replace(/\/$/, '');
+        if (!baseUrl) {
+            throw new Error('Unable to resolve AAP base URL from REST Message endpoint: ' + endpoint);
+        }
+        sm.setEndpoint(baseUrl + '/api/controller/v2/' + resourceType + '/?name=' + encodeURIComponent(name));
         var response = sm.execute();
-        var body = JSON.parse(response.getBody());
+        var status = response.getStatusCode();
+        var raw = response.getBody() || '';
+        var body;
+        try {
+            body = JSON.parse(raw);
+        } catch (e) {
+            throw new Error('AAP lookup HTTP ' + status + ' non-JSON: ' + raw.substring(0, 200));
+        }
         if (body.results && body.results.length > 0) {
             return body.results[0].id.toString();
         }
-        throw new Error('Resource not found: ' + resourceType + '/' + name);
+        throw new Error('Resource not found: ' + resourceType + '/' + name + ' (HTTP ' + status + ')');
     },
 
     type: 'AAPIntegration'
@@ -473,25 +485,46 @@ def upload_update_set(module, xml_content):
 
     results = {"created": [], "errors": [], "skipped": []}
 
-    # 1. REST Message — find or create
+    # 0. Resolve AAP resource IDs (launch-by-id; avoids name lookup + auth on GET)
+    catalog_items = resolve_aap_resource_ids(module, results)
+    if any(not item.get("aap_resource_id") for item in catalog_items):
+        missing = [i["name"] for i in catalog_items if not i.get("aap_resource_id")]
+        module.fail_json(
+            msg=f"Could not resolve AAP resource ids for: {missing}",
+            **results,
+        )
+
+    # 0b. Store AAP API credentials as system properties for Script Include setBasicAuth()
+    ensure_aap_sys_properties(module, results)
+
+    # 1. REST Message — find or create; always refresh endpoint/auth for new AAP
     rest_msg = params["rest_message"]
+    aap_host = params["aap_host"].rstrip("/")
     resp = session.get(
         f"{instance}/api/now/table/sys_rest_message",
         params={"sysparm_query": f"name={rest_msg['name']}", "sysparm_limit": "1"}
     )
     existing = resp.json().get("result", [])
+    rest_msg_body = {
+        "name": rest_msg["name"],
+        "description": rest_msg.get("description", ""),
+        "rest_endpoint": aap_host,
+        "authentication_type": "basic",
+        "basic_auth_user": params["aap_username"],
+        "basic_auth_password": params["aap_password"],
+    }
     if existing:
         msg_sys_id = existing[0]["sys_id"]
-        results["skipped"].append(f"REST Message '{rest_msg['name']}' already exists")
+        r = session.put(
+            f"{instance}/api/now/table/sys_rest_message/{msg_sys_id}",
+            json=rest_msg_body,
+        )
+        if r.status_code in (200, 201):
+            results["created"].append(f"REST Message updated: {rest_msg['name']} -> {aap_host}")
+        else:
+            results["errors"].append(f"REST Message update: {r.status_code}")
     else:
-        r = session.post(f"{instance}/api/now/table/sys_rest_message", json={
-            "name": rest_msg["name"],
-            "description": rest_msg.get("description", ""),
-            "rest_endpoint": params["aap_host"],
-            "authentication_type": "basic",
-            "basic_auth_user": params["aap_username"],
-            "basic_auth_password": params["aap_password"],
-        })
+        r = session.post(f"{instance}/api/now/table/sys_rest_message", json=rest_msg_body)
         if r.status_code in (200, 201):
             msg_sys_id = r.json()["result"]["sys_id"]
             results["created"].append(f"REST Message: {rest_msg['name']}")
@@ -499,10 +532,10 @@ def upload_update_set(module, xml_content):
             msg_sys_id = None
             results["errors"].append(f"REST Message: {r.status_code}")
 
-    # 2. REST Message HTTP Methods
+    # 2. REST Message HTTP Methods — create or update endpoints to current AAP
     if msg_sys_id:
         for method in rest_msg.get("http_methods", []):
-            # Check if already exists
+            endpoint = aap_host + method["endpoint"]
             check = session.get(
                 f"{instance}/api/now/table/sys_rest_message_fn",
                 params={
@@ -510,19 +543,37 @@ def upload_update_set(module, xml_content):
                     "sysparm_limit": "1"
                 }
             )
-            if check.status_code == 200 and check.json().get("result"):
-                results["skipped"].append(f"HTTP Method: {method['name']}")
-                continue
-
-            endpoint = params["aap_host"].rstrip("/") + method["endpoint"]
+            # Set basic auth on each method explicitly. inherit_from_parent + setEndpoint()
+            # has been observed to omit the Authorization header (HTTP 401 from AAP).
             fn_data = {
                 "function_name": method["name"],
                 "rest_message": msg_sys_id,
                 "http_method": method["http_method"],
                 "rest_endpoint": endpoint,
                 "content": method.get("request_body", ""),
-                "authentication_type": "inherit_from_parent",
+                "authentication_type": "basic",
+                "basic_auth_user": params["aap_username"],
+                "basic_auth_password": params["aap_password"],
             }
+            if check.status_code == 200 and check.json().get("result"):
+                fn_sys_id = check.json()["result"][0]["sys_id"]
+                r = session.put(
+                    f"{instance}/api/now/table/sys_rest_message_fn/{fn_sys_id}",
+                    json=fn_data,
+                )
+                if r.status_code in (200, 201):
+                    results["created"].append(f"HTTP Method updated: {method['name']}")
+                else:
+                    detail = ""
+                    try:
+                        detail = r.json().get("error", {}).get("message", "")
+                    except Exception:
+                        detail = r.text[:200]
+                    results["errors"].append(
+                        f"HTTP Method update '{method['name']}': {r.status_code} - {detail}"
+                    )
+                continue
+
             r = session.post(f"{instance}/api/now/table/sys_rest_message_fn", json=fn_data)
             if r.status_code in (200, 201):
                 results["created"].append(f"HTTP Method: {method['name']}")
@@ -533,7 +584,6 @@ def upload_update_set(module, xml_content):
                 except Exception:
                     detail = r.text[:200]
                 results["errors"].append(f"HTTP Method '{method['name']}': {r.status_code} - {detail}")
-
     # 3. Catalog Items
     for item in params["catalog_items"]:
         check = session.get(
@@ -606,55 +656,72 @@ def upload_update_set(module, xml_content):
                 else:
                     results["errors"].append(f"Variable '{var['name']}': {r.status_code}")
 
-    # 5. Script Include
+    # 5. Script Include — create or refresh (AAP 2.7 controller API paths)
+    si_script = _get_script_include_body(aap_host)
+    si_body = {
+        "name": "AAPIntegration",
+        "api_name": "global.AAPIntegration",
+        "script": si_script,
+        "description": "Utility to launch AAP job templates/workflows from catalog item orders",
+        "active": "true",
+        "access": "public",
+        "client_callable": "false",
+    }
     si_check = session.get(
         f"{instance}/api/now/table/sys_script_include",
         params={"sysparm_query": "name=AAPIntegration", "sysparm_limit": "1"}
     )
     if si_check.status_code == 200 and si_check.json().get("result"):
-        results["skipped"].append("Script Include: AAPIntegration")
+        si_sys_id = si_check.json()["result"][0]["sys_id"]
+        r = session.put(
+            f"{instance}/api/now/table/sys_script_include/{si_sys_id}",
+            json=si_body,
+        )
+        if r.status_code in (200, 201):
+            results["created"].append("Script Include updated: AAPIntegration")
+        else:
+            results["errors"].append(f"Script Include update: {r.status_code}")
     else:
-        si_script = _get_script_include_body(params["aap_host"])
-        r = session.post(f"{instance}/api/now/table/sys_script_include", json={
-            "name": "AAPIntegration",
-            "api_name": "global.AAPIntegration",
-            "script": si_script,
-            "description": "Utility to launch AAP job templates/workflows from catalog item orders",
-            "active": "true",
-            "access": "public",
-            "client_callable": "false",
-        })
+        r = session.post(f"{instance}/api/now/table/sys_script_include", json=si_body)
         if r.status_code in (200, 201):
             results["created"].append("Script Include: AAPIntegration")
         else:
             results["errors"].append(f"Script Include: {r.status_code}")
 
-    # 6. Business Rule - Catalog Orders
+    # 6. Business Rule - Catalog Orders — create or refresh catalog→AAP mapping
+    br_script = _get_business_rule_body(catalog_items)
+    br_body = {
+        "name": "AAP - Launch on Catalog Order",
+        "collection": "sc_req_item",
+        "when": "after",
+        "action_insert": "true",
+        "action_update": "false",
+        "action_delete": "false",
+        "action_query": "false",
+        "active": "true",
+        "order": "100",
+        "script": br_script,
+    }
     br_check = session.get(
         f"{instance}/api/now/table/sys_script",
         params={"sysparm_query": "name=AAP - Launch on Catalog Order", "sysparm_limit": "1"}
     )
     if br_check.status_code == 200 and br_check.json().get("result"):
-        results["skipped"].append("Business Rule: AAP - Launch on Catalog Order")
+        br_sys_id = br_check.json()["result"][0]["sys_id"]
+        r = session.put(
+            f"{instance}/api/now/table/sys_script/{br_sys_id}",
+            json=br_body,
+        )
+        if r.status_code in (200, 201):
+            results["created"].append("Business Rule updated: AAP - Launch on Catalog Order")
+        else:
+            results["errors"].append(f"Business Rule update: {r.status_code}")
     else:
-        br_script = _get_business_rule_body(params["catalog_items"])
-        r = session.post(f"{instance}/api/now/table/sys_script", json={
-            "name": "AAP - Launch on Catalog Order",
-            "collection": "sc_req_item",
-            "when": "after",
-            "action_insert": "true",
-            "action_update": "false",
-            "action_delete": "false",
-            "action_query": "false",
-            "active": "true",
-            "order": "100",
-            "script": br_script,
-        })
+        r = session.post(f"{instance}/api/now/table/sys_script", json=br_body)
         if r.status_code in (200, 201):
             results["created"].append("Business Rule: AAP - Launch on Catalog Order")
         else:
             results["errors"].append(f"Business Rule: {r.status_code}")
-
     # 7. Business Rule - Change Request Approval triggers Configure Devices
     cr_br_check = session.get(
         f"{instance}/api/now/table/sys_script",
@@ -685,44 +752,171 @@ def upload_update_set(module, xml_content):
     return results
 
 
+def resolve_aap_resource_ids(module, results):
+    """Look up AAP job/workflow template ids by name; allow YAML override via aap_resource_id."""
+    try:
+        import requests
+        from requests.auth import HTTPBasicAuth
+    except ImportError:
+        module.fail_json(msg="python 'requests' library is required")
+
+    params = module.params
+    aap_host = params["aap_host"].rstrip("/")
+    session = requests.Session()
+    session.auth = HTTPBasicAuth(params["aap_username"], params["aap_password"])
+    session.verify = False
+    session.headers.update({"Accept": "application/json"})
+
+    enriched = []
+    for item in params["catalog_items"]:
+        item = dict(item)
+        if item.get("aap_resource_id"):
+            results["skipped"].append(
+                f"AAP id override: {item['name']} -> {item['aap_resource_id']}"
+            )
+            enriched.append(item)
+            continue
+
+        resource_type = item["aap_resource_type"]  # job_template | workflow_job_template
+        name = item["aap_resource_name"]
+        url = f"{aap_host}/api/controller/v2/{resource_type}s/"
+        r = session.get(url, params={"name": name})
+        if r.status_code != 200:
+            results["errors"].append(
+                f"AAP lookup '{name}': HTTP {r.status_code}"
+            )
+            enriched.append(item)
+            continue
+        matches = r.json().get("results") or []
+        if not matches:
+            results["errors"].append(f"AAP lookup '{name}': no results")
+            enriched.append(item)
+            continue
+        item["aap_resource_id"] = str(matches[0]["id"])
+        results["created"].append(
+            f"AAP id resolved: {item['name']} -> {item['aap_resource_id']} ({name})"
+        )
+        enriched.append(item)
+    return enriched
+
+
+def ensure_aap_sys_properties(module, results):
+    """Upsert aap.api.username / aap.api.password for Script Include setBasicAuth()."""
+    try:
+        import requests
+        from requests.auth import HTTPBasicAuth
+    except ImportError:
+        module.fail_json(msg="python 'requests' library is required")
+
+    params = module.params
+    instance = params["instance"].rstrip("/")
+    session = requests.Session()
+    session.auth = HTTPBasicAuth(params["username"], params["password"])
+    session.verify = False
+    session.headers.update({"Accept": "application/json", "Content-Type": "application/json"})
+
+    props = [
+        {
+            "name": "aap.api.username",
+            "value": params["aap_username"],
+            "description": "AAP API username for catalog launch (AAPIntegration Script Include)",
+            "type": "string",
+        },
+        {
+            "name": "aap.api.password",
+            "value": params["aap_password"],
+            "description": "AAP API password for catalog launch (AAPIntegration Script Include)",
+            "type": "password2",
+        },
+    ]
+    for prop in props:
+        check = session.get(
+            f"{instance}/api/now/table/sys_properties",
+            params={"sysparm_query": f"name={prop['name']}", "sysparm_limit": "1"},
+        )
+        existing = check.json().get("result", []) if check.status_code == 200 else []
+        body = {
+            "name": prop["name"],
+            "value": prop["value"],
+            "description": prop["description"],
+            "type": prop["type"],
+        }
+        if existing:
+            r = session.put(
+                f"{instance}/api/now/table/sys_properties/{existing[0]['sys_id']}",
+                json=body,
+            )
+            label = "updated"
+        else:
+            r = session.post(f"{instance}/api/now/table/sys_properties", json=body)
+            label = "created"
+        if r.status_code in (200, 201):
+            results["created"].append(f"sys_property {label}: {prop['name']}")
+        else:
+            results["errors"].append(
+                f"sys_property {prop['name']}: HTTP {r.status_code}"
+            )
+
+
 def _get_script_include_body(aap_host):
     """Return the AAPIntegration Script Include script."""
+    # aap_host kept for call-site compatibility; endpoints come from the REST Message.
+    _ = aap_host
     return r"""var AAPIntegration = Class.create();
 AAPIntegration.prototype = {
     initialize: function() {
         this.REST_MESSAGE = 'Ansible Automation Platform';
     },
 
-    launchWorkflow: function(workflowName, extraVars, ritmSysId) {
-        var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Launch Workflow');
-        extraVars.snow_request_sys_id = ritmSysId;
-        var wfId = this._getResourceId('workflow_job_templates', workflowName);
-        sm.setStringParameterNoEscape('workflow_id', wfId);
-        sm.setStringParameterNoEscape('extra_vars', JSON.stringify(extraVars));
-        var response = sm.execute();
-        return { status: response.getStatusCode(), body: response.getBody() };
-    },
-
-    launchJobTemplate: function(templateName, extraVars, ritmSysId) {
-        var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Launch Job Template');
-        extraVars.snow_request_sys_id = ritmSysId;
-        var jtId = this._getResourceId('job_templates', templateName);
-        sm.setStringParameterNoEscape('job_template_id', jtId);
-        sm.setStringParameterNoEscape('extra_vars', JSON.stringify(extraVars));
-        var response = sm.execute();
-        return { status: response.getStatusCode(), body: response.getBody() };
-    },
-
-    _getResourceId: function(resourceType, name) {
-        var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Get Job Status');
-        var baseUrl = sm.getEndpoint().replace(/\/api\/v2\/jobs\/\$\{job_id\}\/$/, '');
-        sm.setEndpoint(baseUrl + '/api/v2/' + resourceType + '/?name=' + encodeURIComponent(name));
-        var response = sm.execute();
-        var body = JSON.parse(response.getBody());
-        if (body.results && body.results.length > 0) {
-            return body.results[0].id.toString();
+    /**
+     * Apply basic auth from sys_properties. REST Message use_basic_auth stays false
+     * on some instances, which causes AAP to return HTTP 401.
+     */
+    _applyAuth: function(sm) {
+        var user = gs.getProperty('aap.api.username');
+        var pass = gs.getProperty('aap.api.password');
+        if (!user || !pass) {
+            throw new Error('Missing aap.api.username / aap.api.password system properties');
         }
-        throw new Error('Resource not found: ' + resourceType + '/' + name);
+        sm.setBasicAuth(user, pass);
+        sm.setRequestHeader('Accept', 'application/json');
+        sm.setRequestHeader('Content-Type', 'application/json');
+    },
+
+    /**
+     * Launch a workflow job template by numeric AAP id (no name lookup).
+     * @param {string|number} workflowId
+     * @param {object} extraVars
+     * @param {string} ritmSysId
+     */
+    launchWorkflow: function(workflowId, extraVars, ritmSysId) {
+        var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Launch Workflow');
+        this._applyAuth(sm);
+        if (ritmSysId) {
+            extraVars.snow_request_sys_id = ritmSysId;
+        }
+        sm.setStringParameterNoEscape('workflow_id', workflowId.toString());
+        sm.setStringParameterNoEscape('extra_vars', JSON.stringify(extraVars));
+        var response = sm.execute();
+        return { status: response.getStatusCode(), body: response.getBody() };
+    },
+
+    /**
+     * Launch a job template by numeric AAP id (no name lookup).
+     * @param {string|number} templateId
+     * @param {object} extraVars
+     * @param {string} ritmSysId
+     */
+    launchJobTemplate: function(templateId, extraVars, ritmSysId) {
+        var sm = new sn_ws.RESTMessageV2(this.REST_MESSAGE, 'Launch Job Template');
+        this._applyAuth(sm);
+        if (ritmSysId) {
+            extraVars.snow_request_sys_id = ritmSysId;
+        }
+        sm.setStringParameterNoEscape('job_template_id', templateId.toString());
+        sm.setStringParameterNoEscape('extra_vars', JSON.stringify(extraVars));
+        var response = sm.execute();
+        return { status: response.getStatusCode(), body: response.getBody() };
     },
 
     type: 'AAPIntegration'
@@ -730,12 +924,19 @@ AAPIntegration.prototype = {
 
 
 def _get_business_rule_body(catalog_items):
-    """Return the Business Rule script."""
+    """Return the Business Rule script. catalog_items must include aap_resource_id."""
     mapping_lines = []
     for item in catalog_items:
         resource_type = "workflow" if item["aap_resource_type"] == "workflow_job_template" else "job_template"
+        resource_id = item.get("aap_resource_id")
+        if resource_id is None or resource_id == "":
+            raise ValueError(
+                f"Catalog item '{item['name']}' is missing aap_resource_id "
+                "(resolve from AAP before generating the business rule)"
+            )
         mapping_lines.append(
-            f"        '{item['name']}': {{ type: '{resource_type}', name: '{item['aap_resource_name']}' }}"
+            f"        '{item['name']}': {{ type: '{resource_type}', "
+            f"id: '{resource_id}', name: '{item['aap_resource_name']}' }}"
         )
     mapping_str = ",\n".join(mapping_lines)
 
@@ -763,15 +964,15 @@ def _get_business_rule_body(catalog_items):
     try {{
         var result;
         if (config.type === 'workflow') {{
-            result = aap.launchWorkflow(config.name, extraVars, ritmSysId);
+            result = aap.launchWorkflow(config.id, extraVars, ritmSysId);
         }} else {{
-            result = aap.launchJobTemplate(config.name, extraVars, ritmSysId);
+            result = aap.launchJobTemplate(config.id, extraVars, ritmSysId);
         }}
-        if (result.status == 201) {{
-            current.work_notes = 'AAP automation launched successfully';
+        if (result.status == 201 || result.status == '201') {{
+            current.work_notes = 'AAP automation launched successfully (id=' + config.id + ', ' + config.name + '): ' + result.body.substring(0, 200);
             current.state = '2';
         }} else {{
-            current.work_notes = 'AAP launch failed: ' + result.body;
+            current.work_notes = 'AAP launch failed (HTTP ' + result.status + ', id=' + config.id + '): ' + result.body;
         }}
         current.update();
     }} catch (e) {{
