@@ -927,11 +927,10 @@ controller_workflows:
       - identifier: Enrich_CMDB_Fail
         unified_job_template: "ServiceNow | CMDB - Enrich Host"
         all_parents_must_converge: false
-        success_nodes:
+        success_nodes: []
+        failure_nodes: []
+        always_nodes:
           - Update_Incident_Below_Threshold
-        failure_nodes:
-          - Update_Incident_Below_Threshold
-        always_nodes: []
 
       - identifier: Close_Incident
         unified_job_template: "ServiceNow | ITSM - Close Incident"
