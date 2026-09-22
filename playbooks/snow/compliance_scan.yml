@@ -124,3 +124,13 @@
             Profile: {{ oscap_profile }}
             Score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail)
             Threshold: {{ oscap_fail_threshold }}%
+          snow_incident_close_code: >-
+            {{ 'Solved (Permanently)'
+               if (_compliance.score | int) >= (oscap_fail_threshold | int)
+               else 'Solved (Work Around)' }}
+          snow_incident_close_notes: >-
+            [Ansible Automation Platform] Compliance scan completed on {{ ansible_host }}.
+            Profile: {{ oscap_profile }}.
+            Score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail).
+            Threshold: {{ oscap_fail_threshold }}%.
+            Result: {{ 'PASS' if (_compliance.score | int) >= (oscap_fail_threshold | int) else 'BELOW THRESHOLD — review recommended' }}.

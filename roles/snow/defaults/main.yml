@@ -98,6 +98,7 @@ snow_drift_baseline_file_permissions:
 
 # ─── AAP workflow names (Day 1/Day N) ────────────────────────────────────────
 snow_compliance_workflow_name: "ServiceNow | Compliance Scan"
+snow_compliance_incident_workflow_name: "ServiceNow | Compliance Scan from Incident"
 snow_patch_workflow_name: "ServiceNow | Patch RHEL VM (end-to-end)"
 snow_drift_workflow_name: "ServiceNow | Config Drift Check and Remediate"
 

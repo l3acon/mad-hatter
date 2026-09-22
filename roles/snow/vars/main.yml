@@ -881,6 +881,100 @@ controller_workflows:
             - xccdf_org.ssgproject.content_profile_stig
           default: xccdf_org.ssgproject.content_profile_cis_server_l1
 
+  # ── Day 1: Compliance Scan from existing Incident ────────────────────────
+  - name: "{{ snow_compliance_incident_workflow_name }}"
+    description: >-
+      Re-run OpenSCAP against a host for an existing ServiceNow incident, enrich
+      the CMDB CI with the score, then close the incident. Survey provides the
+      incident number, target host, and SCAP profile.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: true
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Acknowledge_Incident
+        unified_job_template: "ServiceNow | ITSM - Update Incident"
+        extra_data:
+          snow_incident_state: "2 - In Progress"
+          snow_incident_work_notes: >-
+            [Ansible Automation Platform] Compliance scan workflow started.
+            OpenSCAP evaluation in progress.
+        all_parents_must_converge: false
+        success_nodes:
+          - OpenSCAP_Scan
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: OpenSCAP_Scan
+        unified_job_template: "ServiceNow | Compliance - OpenSCAP Scan"
+        all_parents_must_converge: false
+        success_nodes:
+          - Enrich_CMDB_Compliance
+        failure_nodes:
+          - Update_Incident_Failed
+        always_nodes: []
+
+      - identifier: Enrich_CMDB_Compliance
+        unified_job_template: "ServiceNow | CMDB - Enrich Host"
+        all_parents_must_converge: false
+        success_nodes:
+          - Close_Incident
+        failure_nodes:
+          - Update_Incident_Failed
+        always_nodes: []
+
+      - identifier: Close_Incident
+        unified_job_template: "ServiceNow | ITSM - Close Incident"
+        # close_code / close_notes come from OpenSCAP scan set_stats artifacts
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Update_Incident_Failed
+        unified_job_template: "ServiceNow | ITSM - Update Incident"
+        extra_data:
+          snow_incident_state: "2 - In Progress"
+          snow_incident_work_notes: >-
+            [Ansible Automation Platform] Compliance scan workflow failed.
+            Manual review required.
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+    survey_spec:
+      name: ""
+      description: >-
+        Provide the ServiceNow incident to close out, the host to scan, and the
+        OpenSCAP profile to evaluate.
+      spec:
+        - question_name: Incident number (e.g. INC0010001)
+          type: text
+          variable: snow_incident_number
+          required: true
+        - question_name: Target host (hostname or IP)
+          type: text
+          variable: snow_target_host
+          required: true
+        - question_name: SCAP profile
+          type: multiplechoice
+          variable: oscap_profile
+          required: true
+          choices:
+            - xccdf_org.ssgproject.content_profile_cis_server_l1
+            - xccdf_org.ssgproject.content_profile_cis
+            - xccdf_org.ssgproject.content_profile_stig
+          default: xccdf_org.ssgproject.content_profile_cis_server_l1
+        - question_name: Fail threshold (percent)
+          type: integer
+          variable: oscap_fail_threshold
+          required: false
+          default: 80
+          min: 0
+          max: 100
+
   # ── Day N: Patch RHEL VM Workflow ────────────────────────────────────────
   - name: "{{ snow_patch_workflow_name }}"
     description: >-

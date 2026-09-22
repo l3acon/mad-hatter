@@ -29,9 +29,15 @@
         close_notes: "{{ snow_incident_close_notes }}"
       register: snow_close_result
 
+    - name: Build incident view URL
+      ansible.builtin.set_fact:
+        _snow_incident_url: >-
+          {{ snow_instance | regex_replace('/$', '') }}/nav_to.do?uri=incident.do?sys_id={{ snow_close_result.record.sys_id | default('') }}
+
     - name: Display close result
       ansible.builtin.debug:
         msg:
           - "Incident {{ snow_incident_number }} closed"
           - "Close code: {{ snow_incident_close_code }}"
           - "Close notes: {{ snow_incident_close_notes }}"
+          - "View: {{ _snow_incident_url }}"

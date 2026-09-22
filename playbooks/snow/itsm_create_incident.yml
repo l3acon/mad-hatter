@@ -36,6 +36,11 @@
           category: "{{ snow_incident_category }}"
       register: snow_incident_result
 
+    - name: Build incident view URL
+      ansible.builtin.set_fact:
+        _snow_incident_url: >-
+          {{ snow_instance | regex_replace('/$', '') }}/nav_to.do?uri=incident.do?sys_id={{ snow_incident_result.record.sys_id }}
+
     - name: Display incident details
       ansible.builtin.debug:
         msg:
@@ -44,9 +49,11 @@
           - "sys_id: {{ snow_incident_result.record.sys_id }}"
           - "State: New"
           - "Priority: {{ snow_incident_result.record.priority }}"
+          - "View: {{ _snow_incident_url }}"
 
     - name: Set incident number as artifact for downstream workflow nodes
       ansible.builtin.set_stats:
         data:
           snow_incident_number: "{{ snow_incident_result.record.number }}"
           snow_incident_sys_id: "{{ snow_incident_result.record.sys_id }}"
+          snow_incident_url: "{{ _snow_incident_url }}"
