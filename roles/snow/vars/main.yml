@@ -354,7 +354,7 @@ controller_templates:
           default: "false"
 
   # ── Compliance (Day 1) ────────────────────────────────────────────────────
-  - name: "ServiceNow | Compliance - OpenSCAP Scan"
+  - name: "ServiceNow | Compliance - OpenSCAP Remediate"
     job_type: run
     organization: Default
     inventory: "{{ snow_aap_inventory_name }}"
@@ -370,8 +370,9 @@ controller_templates:
     survey_spec:
       name: ""
       description: >-
-        Run an OpenSCAP compliance scan against a CMDB-managed host. Results are
-        written back to the CMDB CI and an incident is created if the score is below threshold.
+        Run OpenSCAP remediation against a CMDB-managed host. Applies the selected
+        SCAP profile with --remediate, then re-scans to verify. Results are written
+        back to the CMDB CI.
       spec:
         - question_name: Target host (hostname or IP)
           type: text
@@ -836,7 +837,7 @@ controller_workflows:
     destroy_current_nodes: true
     simplified_workflow_nodes:
       - identifier: OpenSCAP_Scan
-        unified_job_template: "ServiceNow | Compliance - OpenSCAP Scan"
+        unified_job_template: "ServiceNow | Compliance - OpenSCAP Remediate"
         all_parents_must_converge: false
         success_nodes:
           - Enrich_CMDB_Compliance
@@ -884,9 +885,9 @@ controller_workflows:
   # ── Day 1: Compliance Scan from existing Incident ────────────────────────
   - name: "{{ snow_compliance_incident_workflow_name }}"
     description: >-
-      Re-run OpenSCAP against a host for an existing ServiceNow incident, enrich
-      the CMDB CI with the score, then close the incident. Survey provides the
-      incident number, target host, and SCAP profile.
+      Remediate OpenSCAP findings on a host for an existing ServiceNow incident.
+      Applies the SCAP profile with --remediate, enriches the CMDB CI, then closes
+      the incident only if the post-remediation score meets the threshold.
     organization: Default
     survey_enabled: true
     ask_variables_on_launch: true
@@ -898,35 +899,54 @@ controller_workflows:
         extra_data:
           snow_incident_state: "2 - In Progress"
           snow_incident_work_notes: >-
-            [Ansible Automation Platform] Compliance scan workflow started.
-            OpenSCAP evaluation in progress.
+            [Ansible Automation Platform] Compliance remediation workflow started.
+            OpenSCAP --remediate in progress.
         all_parents_must_converge: false
         success_nodes:
-          - OpenSCAP_Scan
+          - OpenSCAP_Remediate
         failure_nodes: []
         always_nodes: []
 
-      - identifier: OpenSCAP_Scan
-        unified_job_template: "ServiceNow | Compliance - OpenSCAP Scan"
+      - identifier: OpenSCAP_Remediate
+        unified_job_template: "ServiceNow | Compliance - OpenSCAP Remediate"
         all_parents_must_converge: false
         success_nodes:
-          - Enrich_CMDB_Compliance
+          - Enrich_CMDB_Pass
         failure_nodes:
-          - Update_Incident_Failed
+          - Enrich_CMDB_Fail
         always_nodes: []
 
-      - identifier: Enrich_CMDB_Compliance
+      - identifier: Enrich_CMDB_Pass
         unified_job_template: "ServiceNow | CMDB - Enrich Host"
         all_parents_must_converge: false
         success_nodes:
           - Close_Incident
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Enrich_CMDB_Fail
+        unified_job_template: "ServiceNow | CMDB - Enrich Host"
+        all_parents_must_converge: false
+        success_nodes:
+          - Update_Incident_Below_Threshold
         failure_nodes:
-          - Update_Incident_Failed
+          - Update_Incident_Below_Threshold
         always_nodes: []
 
       - identifier: Close_Incident
         unified_job_template: "ServiceNow | ITSM - Close Incident"
-        # close_code / close_notes come from OpenSCAP scan set_stats artifacts
+        all_parents_must_converge: false
+        success_nodes: []
+        failure_nodes: []
+        always_nodes: []
+
+      - identifier: Update_Incident_Below_Threshold
+        unified_job_template: "ServiceNow | ITSM - Update Incident"
+        extra_data:
+          snow_incident_state: "2 - In Progress"
+          snow_incident_work_notes: >-
+            [Ansible Automation Platform] Compliance remediation completed but
+            score remains below threshold. Incident left open for manual review.
         all_parents_must_converge: false
         success_nodes: []
         failure_nodes: []
@@ -937,7 +957,7 @@ controller_workflows:
         extra_data:
           snow_incident_state: "2 - In Progress"
           snow_incident_work_notes: >-
-            [Ansible Automation Platform] Compliance scan workflow failed.
+            [Ansible Automation Platform] Compliance remediation workflow failed.
             Manual review required.
         all_parents_must_converge: false
         success_nodes: []
@@ -947,8 +967,8 @@ controller_workflows:
     survey_spec:
       name: ""
       description: >-
-        Provide the ServiceNow incident to close out, the host to scan, and the
-        OpenSCAP profile to evaluate.
+        Provide the ServiceNow incident, the host to remediate, and the
+        OpenSCAP profile to apply.
       spec:
         - question_name: Incident number (e.g. INC0010001)
           type: text
@@ -1019,7 +1039,7 @@ controller_workflows:
         always_nodes: []
 
       - identifier: Post_Patch_Compliance
-        unified_job_template: "ServiceNow | Compliance - OpenSCAP Scan"
+        unified_job_template: "ServiceNow | Compliance - OpenSCAP Remediate"
         all_parents_must_converge: false
         success_nodes:
           - Enrich_CMDB_Patch

@@ -82,7 +82,7 @@
           - "Day 1 — Compliance Hardening:"
           - "  - Workflow: ServiceNow | Compliance Scan"
           - "  - Workflow: ServiceNow | Compliance Scan from Incident"
-          - "  - Job Template: Compliance - OpenSCAP Scan"
+          - "  - Job Template: Compliance - OpenSCAP Remediate"
           - "  - Schedule: Daily at 02:00 UTC"
           - "─────────────────────────────────────────────────────"
           - "Day N — Patching & Config Drift:"

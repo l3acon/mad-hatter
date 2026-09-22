@@ -1,14 +1,13 @@
 ---
-# OpenSCAP compliance scan against a provisioned host.
-# Triggered by AAP schedule or external tool — NOT from SNOW catalog.
-# Writes results back to SNOW: enriches CMDB CI with compliance status and
-# creates an incident if the scan fails the threshold.
+# OpenSCAP compliance remediation against a provisioned host.
+# Applies the selected SCAP profile with --remediate, then re-scans to
+# produce a post-remediation score. Results are published via set_stats
+# for downstream workflow nodes (CMDB enrich, incident close/update).
 #
-# Two-play structure:
+# Three-play structure:
 #   Play 1 (localhost): resolve target, add to in-memory inventory
-#   Play 2 (target):    install scanner, run oscap, collect results
-#   Play 3 (localhost): enrich CMDB, optionally create incident
-- name: Compliance scan — prepare target
+#   Play 2 (target):    install scanner, remediate, re-scan, collect results
+- name: Compliance remediation — prepare target
   hosts: localhost
   gather_facts: false
   vars:
@@ -22,7 +21,7 @@
     - name: Resolve target from survey / inventory
       ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/resolve_target.yml"
       vars:
-        resolve_default_name: scanned-host
+        resolve_default_name: remediated-host
 
     - name: Add target to in-memory inventory
       ansible.builtin.add_host:
@@ -33,6 +32,7 @@
         groups: scan_targets
         oscap_profile: "{{ oscap_profile }}"
         oscap_datastream: "{{ oscap_datastream }}"
+        oscap_fail_threshold: "{{ oscap_fail_threshold }}"
 
     - name: Wait for SSH
       ansible.builtin.wait_for:
@@ -41,7 +41,7 @@
         delay: 5
         timeout: 120
 
-- name: Compliance scan — run OpenSCAP on target
+- name: Compliance remediation — apply profile and verify
   hosts: scan_targets
   gather_facts: true
   become: true
@@ -55,7 +55,26 @@
           - scap-security-guide
         state: present
 
-    - name: Run OpenSCAP evaluation
+    # ── Step 1: Remediate ──────────────────────────────────────────────────
+    - name: Apply OpenSCAP remediation
+      ansible.builtin.command: >-
+        oscap xccdf eval
+          --remediate
+          --profile {{ oscap_profile }}
+          --results-arf {{ _report_dir }}/oscap-remediate-arf-{{ inventory_hostname }}.xml
+          {{ oscap_datastream }}
+      register: _oscap_remediate
+      failed_when: _oscap_remediate.rc not in [0, 2]
+      changed_when: _oscap_remediate.rc == 2
+
+    - name: Display remediation result
+      ansible.builtin.debug:
+        msg: >-
+          Remediation exit code: {{ _oscap_remediate.rc }}
+          (0=all pass/fixed, 2=some findings remain)
+
+    # ── Step 2: Re-scan to get post-remediation score ──────────────────────
+    - name: Run post-remediation compliance scan
       ansible.builtin.command: >-
         oscap xccdf eval
           --profile {{ oscap_profile }}
@@ -98,8 +117,9 @@
         msg:
           - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
           - "Profile: {{ oscap_profile }}"
-          - "Score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail)"
-          - "oscap exit code: {{ _oscap_rc }} (0=all pass, 2=some failures)"
+          - "Post-remediation score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail)"
+          - "Threshold: {{ oscap_fail_threshold }}%"
+          - "Result: {{ 'PASS' if (_compliance.score | int) >= (oscap_fail_threshold | int) else 'BELOW THRESHOLD' }}"
 
     - name: Publish compliance results for downstream workflow nodes
       ansible.builtin.set_stats:
@@ -114,23 +134,30 @@
           snow_ci_identifier: "{{ hostvars['localhost']['_target_name'] | default(ansible_host) }}"
           snow_ci_attributes_json: >-
             {{ {
-              "short_description": "Compliance: " + _compliance.score | string + "% (" + oscap_profile + ")",
+              "short_description": "Compliance: " + _compliance.score | string + "% (" + oscap_profile + ") [remediated]",
               "attributes": "oscap_score=" + _compliance.score | string + ";oscap_profile=" + oscap_profile
             } | to_json }}
           snow_incident_short_description: >-
-            Compliance scan failed on {{ ansible_host }} — score {{ _compliance.score }}% (threshold {{ oscap_fail_threshold }}%)
+            Compliance remediation on {{ ansible_host }} — post-score {{ _compliance.score }}% (threshold {{ oscap_fail_threshold }}%)
           snow_incident_description: >-
-            OpenSCAP compliance scan results for {{ ansible_host }}:
+            OpenSCAP remediation results for {{ ansible_host }}:
             Profile: {{ oscap_profile }}
-            Score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail)
+            Post-remediation score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail)
             Threshold: {{ oscap_fail_threshold }}%
           snow_incident_close_code: >-
             {{ 'Solved (Permanently)'
                if (_compliance.score | int) >= (oscap_fail_threshold | int)
                else 'Solved (Work Around)' }}
           snow_incident_close_notes: >-
-            [Ansible Automation Platform] Compliance scan completed on {{ ansible_host }}.
+            [Ansible Automation Platform] Compliance remediation completed on {{ ansible_host }}.
             Profile: {{ oscap_profile }}.
-            Score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail).
+            Post-remediation score: {{ _compliance.score }}% ({{ _compliance.pass }} pass / {{ _compliance.fail }} fail).
             Threshold: {{ oscap_fail_threshold }}%.
             Result: {{ 'PASS' if (_compliance.score | int) >= (oscap_fail_threshold | int) else 'BELOW THRESHOLD — review recommended' }}.
+
+    - name: Fail play if score is below threshold (drives workflow branching)
+      ansible.builtin.fail:
+        msg: >-
+          Post-remediation score {{ _compliance.score }}% is below threshold {{ oscap_fail_threshold }}%.
+          Incident will not be closed automatically.
+      when: (_compliance.score | int) < (oscap_fail_threshold | int)
