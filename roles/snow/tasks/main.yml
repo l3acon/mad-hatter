@@ -72,7 +72,8 @@
     organization: Default
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
 
 - name: Ensure ServiceNow Runtime inventory exists
@@ -81,7 +82,8 @@
     organization: Default
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
 
 - name: Ensure ContainerLab inventory exists
@@ -90,7 +92,8 @@
     organization: Default
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
 
 - name: Ensure ContainerLab inventory hosts exist
@@ -101,7 +104,8 @@
     variables: "{{ item.variables }}"
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
   loop:
     - name: n9kv
@@ -130,7 +134,8 @@
     hosts: "{{ item.hosts }}"
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
   loop:
     - name: clab_nxos
@@ -155,7 +160,8 @@
     inputs:
       username: ec2-user
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
 
 - name: Ensure Containerlab Device Access credential exists
@@ -168,7 +174,8 @@
       password: "admin@123"
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
 
 - name: Create self-service portal user on the controller
@@ -181,7 +188,8 @@
     is_superuser: false
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
   register: _snow_user_result
   ignore_errors: true
@@ -223,7 +231,10 @@
 - name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
   ansible.builtin.set_fact:
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    aap_username: "{{ aap_username }}"
+    aap_password: "{{ aap_password }}"
     controller_credential_types: "{{ controller_credential_types }}"
     controller_execution_environments: "{{ controller_execution_environments }}"
     controller_projects: "{{ controller_projects }}"
