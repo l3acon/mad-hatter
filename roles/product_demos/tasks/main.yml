@@ -12,7 +12,24 @@
       Missing required variables. Ensure apd_aap_hostname, apd_aws_access_key,
       apd_aws_secret_key, and apd_machine_credential_ssh_key are set.
 
-# ── Organization ────────────────────────────────────────────────────────────
+# ── Query AAP version for EE image tag ──────────────────────────────────────
+- name: Query AAP version from gateway
+  ansible.builtin.uri:
+    url: "{{ apd_aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/ping/"
+    method: GET
+    validate_certs: "{{ apd_aap_validate_certs }}"
+    url_username: "{{ apd_aap_username }}"
+    url_password: "{{ apd_aap_password }}"
+    force_basic_auth: true
+  register: _apd_gw_ping
+
+- name: Set AAP version and EE image facts
+  ansible.builtin.set_fact:
+    _apd_aap_version: "{{ _apd_gw_ping.json.version }}"
+    _apd_ee_image: "quay.io/ansible-product-demos/apd-ee-{{ _apd_gw_ping.json.version | replace('.', '') }}:latest"
+
+# ── Create organization directly (gateway async workaround) ─────────────────
+# ── Create organization (skip for Default — gateway sync can fail on fresh installs)
 - name: Ensure APD organization exists
   ansible.controller.organization:
     name: "{{ apd_organization }}"
@@ -23,137 +40,148 @@
     validate_certs: "{{ apd_aap_validate_certs }}"
   when: apd_organization != 'Default'
 
-# ── Project ─────────────────────────────────────────────────────────────────
-- name: Ensure product-demos project exists
-  ansible.controller.project:
-    name: "{{ apd_project_name }}"
-    organization: "{{ apd_organization }}"
-    scm_type: git
-    scm_url: "{{ apd_project_scm_url }}"
-    scm_branch: "{{ apd_project_scm_branch }}"
-    scm_update_on_launch: true
-    state: present
+# ── Bootstrap via infra.aap_configuration.dispatch ──────────────────────────
+# Mirrors install-apd.yml + common/bootstrap-vars.yml from the product-demos
+# repo, but injects ROSA AWS keys and the local SSH key instead of env vars.
+- name: Apply APD bootstrap CasC via dispatch
+  ansible.builtin.include_role:
+    name: infra.aap_configuration.dispatch
+  vars:
     controller_host: "{{ apd_aap_hostname }}"
     controller_username: "{{ apd_aap_username }}"
     controller_password: "{{ apd_aap_password }}"
     validate_certs: "{{ apd_aap_validate_certs }}"
-  register: _apd_project
+    controller_dependency_check: false
 
-- name: Sync product-demos project
-  ansible.controller.project_update:
-    project: "{{ apd_project_name }}"
-    organization: "{{ apd_organization }}"
-    wait: true
-    timeout: 300
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
-    validate_certs: "{{ apd_aap_validate_certs }}"
+    # Disable async for gateway roles (ansible.platform 2.7 workaround)
+    gateway_configuration_async_retries: 0
+    controller_configuration_projects_async_retries: 90
 
-# ── Credentials ─────────────────────────────────────────────────────────────
-- name: Ensure AWS credential exists
-  ansible.controller.credential:
-    name: "{{ apd_aws_credential_name }}"
-    organization: "{{ apd_organization }}"
-    credential_type: "Amazon Web Services"
-    state: present
-    inputs:
-      username: "{{ apd_aws_access_key }}"
-      password: "{{ apd_aws_secret_key }}"
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
-    validate_certs: "{{ apd_aap_validate_certs }}"
+    # Organization already created above (gateway async workaround)
 
-- name: Ensure APD Machine credential exists
-  ansible.controller.credential:
-    name: "{{ apd_machine_credential_name }}"
-    organization: "{{ apd_organization }}"
-    credential_type: "Machine"
-    state: present
-    inputs:
-      username: "{{ apd_machine_credential_username }}"
-      ssh_key_data: "{{ apd_machine_credential_ssh_key }}"
-      become_method: sudo
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
-    validate_certs: "{{ apd_aap_validate_certs }}"
+    # ── Credentials ───────────────────────────────────────────────────────
+    controller_credentials:
+      - name: AAP Credential
+        credential_type: Red Hat Ansible Automation Platform
+        organization: "{{ apd_organization }}"
+        update_secrets: false
+        state: exists
+        inputs:
+          host: "{{ apd_aap_hostname }}"
+          username: "{{ apd_aap_username }}"
+          password: "{{ apd_aap_password }}"
+          verify_ssl: "{{ apd_aap_validate_certs }}"
 
-- name: Ensure extra credentials exist
-  ansible.controller.credential:
-    name: "{{ item.name }}"
-    organization: "{{ apd_organization }}"
-    credential_type: "{{ item.credential_type }}"
-    state: "{{ item.state | default('present') }}"
-    inputs: "{{ item.inputs | default(omit) }}"
-    update_secrets: "{{ item.update_secrets | default(true) }}"
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
-    validate_certs: "{{ apd_aap_validate_certs }}"
-  loop: "{{ apd_extra_credentials }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: apd_extra_credentials | length > 0
+      - name: APD Machine Credential
+        description: Machine credential for Linux (SSH key) and Windows (password) instances
+        credential_type: Machine
+        organization: "{{ apd_organization }}"
+        update_secrets: true
+        inputs:
+          username: "{{ apd_machine_credential_username }}"
+          ssh_key_data: "{{ apd_machine_credential_ssh_key }}"
+          password: "{{ apd_machine_credential_password | default(omit) }}"
 
-# ── Inventory + EC2 source ──────────────────────────────────────────────────
-- name: Ensure APD inventory exists
-  ansible.controller.inventory:
-    name: "{{ apd_inventory_name }}"
-    organization: "{{ apd_organization }}"
-    state: present
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
-    validate_certs: "{{ apd_aap_validate_certs }}"
+      - name: AWS
+        credential_type: Amazon Web Services
+        organization: "{{ apd_organization }}"
+        update_secrets: true
+        inputs:
+          username: "{{ apd_aws_access_key }}"
+          password: "{{ apd_aws_secret_key }}"
 
-- name: Ensure AWS EC2 inventory source exists
-  ansible.controller.inventory_source:
-    name: "AWS Inventory"
-    inventory: "{{ apd_inventory_name }}"
-    organization: "{{ apd_organization }}"
-    source: ec2
-    credential: "{{ apd_aws_credential_name }}"
-    overwrite: true
-    source_vars:
-      filters:
-        tag:managed-by: aap-product-demos
-        tag:apd: "true"
-        instance-state-name: running
-      hostnames:
-        - "tag:Name"
-      compose:
-        ansible_host: public_ip_address
-        ansible_user: ec2-user
-      groups:
-        cloud_aws: true
-        os_linux: "platform_details == 'Red Hat Enterprise Linux'"
-        os_windows: "platform_details == 'Windows'"
-      keyed_groups:
-        - key: tags.blueprint
-          prefix: blueprint
-        - key: tags.owner
-          prefix: owner
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
-    validate_certs: "{{ apd_aap_validate_certs }}"
+    # ── Inventory ─────────────────────────────────────────────────────────
+    controller_inventories:
+      - name: "{{ apd_inventory_name }}"
+        organization: "{{ apd_organization }}"
+
+    # ── Execution Environment ─────────────────────────────────────────────
+    controller_execution_environments:
+      - name: "{{ apd_ee_name }}"
+        image: "{{ _apd_ee_image }}"
+
+    # ── Project ───────────────────────────────────────────────────────────
+    controller_projects:
+      - name: "{{ apd_project_name }}"
+        organization: "{{ apd_organization }}"
+        scm_type: git
+        scm_url: "{{ apd_project_scm_url }}"
+        scm_branch: "{{ apd_project_scm_branch }}"
+        default_environment: "{{ apd_ee_name }}"
+        wait: true
+
+    # ── Setup Job Templates ───────────────────────────────────────────────
+    controller_templates:
+      - name: "APD | Single demo setup"
+        job_type: run
+        inventory: "{{ apd_inventory_name }}"
+        project: "{{ apd_project_name }}"
+        playbook: setup_demo.yml
+        credentials: AAP Credential
+        execution_environment: "{{ apd_ee_name }}"
+        allow_simultaneous: true
+        survey_enabled: true
+        survey_spec:
+          name: ""
+          description: ""
+          spec:
+            - type: multiplechoice
+              question_name: Demo Category
+              variable: demo
+              required: true
+              choices:
+                - linux
+                - windows
+                - cloud
+                - network
+                - openshift
+                - infrastructure
+                - satellite
+
+      - name: "APD | Multi-demo setup"
+        job_type: run
+        inventory: "{{ apd_inventory_name }}"
+        project: "{{ apd_project_name }}"
+        playbook: multi_select_setup.yml
+        credentials: AAP Credential
+        execution_environment: "{{ apd_ee_name }}"
+        survey_enabled: true
+        survey_spec:
+          name: ""
+          description: ""
+          spec:
+            - question_name: "Which demos do you want to configure?"
+              type: multiselect
+              variable: demos
+              required: true
+              default: "cloud\ninfrastructure\nlinux\nnetwork\nopenshift\nwindows"
+              choices:
+                - cloud
+                - infrastructure
+                - linux
+                - network
+                - openshift
+                - satellite
+                - windows
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 - name: Display APD deployment summary
   ansible.builtin.debug:
     msg:
       - "═══════════════════════════════════════════════════════"
-      - "Ansible Product Demos deployed"
+      - "Ansible Product Demos bootstrapped"
       - "═══════════════════════════════════════════════════════"
       - "AAP: {{ apd_aap_hostname }}"
       - "Organization: {{ apd_organization }}"
       - "Project: {{ apd_project_name }} ({{ apd_project_scm_url }})"
+      - "EE: {{ _apd_ee_image }}"
       - "Inventory: {{ apd_inventory_name }}"
-      - "AWS Credential: {{ apd_aws_credential_name }} (region {{ apd_aws_region }})"
-      - "Machine Credential: {{ apd_machine_credential_name }}"
+      - "AWS Credential: injected from ROSA creds"
+      - "Machine Credential: APD Machine Credential"
       - "─────────────────────────────────────────────────────"
-      - "Run setup_demo.yml from the AAP UI with -e demo=cloud"
-      - "to create Cloud job templates."
+      - "Setup JTs created:"
+      - "  - APD | Single demo setup (survey: demo category)"
+      - "  - APD | Multi-demo setup (survey: multi-select)"
+      - "Run 'APD | Single demo setup' with demo=cloud to create"
+      - "Cloud job templates (Create VPC, Create VM, etc.)"
       - "═══════════════════════════════════════════════════════"
