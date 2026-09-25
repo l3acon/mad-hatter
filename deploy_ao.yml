@@ -1,0 +1,22 @@
+---
+# Deploy Automation Orchestrator on OpenShift.
+# Usage:
+#   ansible-playbook deploy_ao.yml
+#   ansible-navigator run deploy_ao.yml
+- name: Deploy Automation Orchestrator
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Verify cluster access
+      ansible.builtin.command: oc whoami
+      changed_when: false
+      register: _oc_whoami
+
+    - name: Show logged-in user
+      ansible.builtin.debug:
+        msg: "Logged in as: {{ _oc_whoami.stdout }}"
+
+    - name: Deploy Automation Orchestrator
+      ansible.builtin.include_role:
+        name: ao_operator
