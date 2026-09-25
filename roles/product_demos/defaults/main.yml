@@ -6,7 +6,7 @@ apd_aap_password: "{{ aap_password }}"
 apd_aap_validate_certs: false
 
 # ─── APD bootstrap settings ────────────────────────────────────────────────
-apd_organization: "Default"
+apd_organization: "Ansible Product Demos (APD)"
 apd_project_name: "Ansible Product Demos"
 apd_project_scm_url: "https://github.com/ansible/product-demos.git"
 apd_project_scm_branch: "main"

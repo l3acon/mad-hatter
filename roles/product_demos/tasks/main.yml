@@ -29,16 +29,33 @@
     _apd_ee_image: "quay.io/ansible-product-demos/apd-ee-{{ _apd_gw_ping.json.version | replace('.', '') }}:latest"
 
 # ── Create organization directly (gateway async workaround) ─────────────────
-# ── Create organization (skip for Default — gateway sync can fail on fresh installs)
-- name: Ensure APD organization exists
-  ansible.controller.organization:
-    name: "{{ apd_organization }}"
-    state: present
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
+# ── Create organization via gateway API ──────────────────────────────────────
+# controller/v2/organizations/ fails with "Failed to sync resource to resource server"
+# but gateway/v1/organizations/ works and syncs to all services correctly.
+- name: Check if APD organization exists
+  ansible.builtin.uri:
+    url: "{{ apd_aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/organizations/?name={{ apd_organization | urlencode }}"
+    method: GET
     validate_certs: "{{ apd_aap_validate_certs }}"
-  when: apd_organization != 'Default'
+    url_username: "{{ apd_aap_username }}"
+    url_password: "{{ apd_aap_password }}"
+    force_basic_auth: true
+    return_content: true
+  register: _apd_org_check
+
+- name: Create APD organization via gateway
+  when: (_apd_org_check.json.results | length) == 0
+  ansible.builtin.uri:
+    url: "{{ apd_aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/organizations/"
+    method: POST
+    validate_certs: "{{ apd_aap_validate_certs }}"
+    url_username: "{{ apd_aap_username }}"
+    url_password: "{{ apd_aap_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: "{{ apd_organization }}"
+    status_code: [200, 201]
 
 # ── Bootstrap via infra.aap_configuration.dispatch ──────────────────────────
 # Mirrors install-apd.yml + common/bootstrap-vars.yml from the product-demos
@@ -120,6 +137,8 @@
         credentials: AAP Credential
         execution_environment: "{{ apd_ee_name }}"
         allow_simultaneous: true
+        extra_vars:
+          aap_request_timeout: 10
         survey_enabled: true
         survey_spec:
           name: ""
@@ -145,6 +164,8 @@
         playbook: multi_select_setup.yml
         credentials: AAP Credential
         execution_environment: "{{ apd_ee_name }}"
+        extra_vars:
+          aap_request_timeout: 10
         survey_enabled: true
         survey_spec:
           name: ""
