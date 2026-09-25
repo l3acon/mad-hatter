@@ -2,7 +2,7 @@
 # Apply the one-time Windows installer VirtualMachine (ISO + blank OS + virtio drivers).
 # Prereqs: DataVolumes for ISO and blank OS exist (dv_upload_iso.yml, dv_create_blank_os.yml).
 #
-#   ansible-playbook playbooks/openshift_virtualization/windows/vm_apply_installer.yml
+#   ansible-playbook jt_playbooks/openshift_virtualization/windows/vm_apply_installer.yml
 - name: Apply Windows installer VirtualMachine manifest
   hosts: localhost
   connection: local

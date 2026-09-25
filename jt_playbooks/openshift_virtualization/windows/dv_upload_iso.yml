@@ -3,7 +3,7 @@
 # Requires: virtctl, oc logged in, CDI upload proxy reachable from this host.
 #
 # Example:
-#   ansible-playbook playbooks/openshift_virtualization/windows/dv_upload_iso.yml \
+#   ansible-playbook jt_playbooks/openshift_virtualization/windows/dv_upload_iso.yml \
 #     -e ocpv_win_iso_local_path=/home/matt/Downloads/SERVER_EVAL_x64FRE_en-us.iso \
 #     -e ocpv_win_iso_dv_name=windows-server-eval-iso \
 #     -e ocpv_win_iso_dv_size=8Gi

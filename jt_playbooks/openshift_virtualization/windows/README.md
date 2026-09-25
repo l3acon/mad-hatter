@@ -35,10 +35,10 @@ When **`ocpv_win_autounattend_enabled=true`** (and **`export OCPV_WIN_AUTOUNATTE
 **Lab discipline:** use the **same** Administrator password for **`OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD`**, the golden build, **`OCPV_WIN_ADMIN_PASSWORD`** when validating **`controller_validate_windows_workflow.yml`**, and the AAP workflow survey.
 
 **Local validation without uploading:**  
-`ansible-playbook playbooks/openshift_virtualization/windows/autounattend_iso_pipeline.yml -e ocpv_win_autounattend_enabled=true -e ocpv_win_autounattend_upload=false -e ocpv_win_autounattend_admin_password='…'`  
+`ansible-playbook jt_playbooks/openshift_virtualization/windows/autounattend_iso_pipeline.yml -e ocpv_win_autounattend_enabled=true -e ocpv_win_autounattend_upload=false -e ocpv_win_autounattend_admin_password='…'`  
 prints the temp ISO path; requires **xorriso** or **genisoimage**.
 
-**Validate `Autounattend.xml` before booting Windows:** **`validate_autounattend_local.yml`** renders **`Autounattend.xml.j2`** and runs **`xmllint`** (well‑formed XML only). Example: `ansible-playbook playbooks/openshift_virtualization/windows/validate_autounattend_local.yml -e ocpv_win_autounattend_admin_password='…'` (or export **`OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD`**). Add **`-e ocpv_validate_autounattend_copy_to=/path/Autounattend.xml`** to keep a file for **Windows SIM**. For settings that exist on **your** Windows edition / image index, install the [Windows ADK](https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install), open **Windows System Image Manager**, create a **catalog** from the same **`install.wim`** index you install, import **`Autounattend.xml`**, and resolve red validation markers—this catches unknown components and pass mismatches that **`xmllint`** cannot see.
+**Validate `Autounattend.xml` before booting Windows:** **`validate_autounattend_local.yml`** renders **`Autounattend.xml.j2`** and runs **`xmllint`** (well‑formed XML only). Example: `ansible-playbook jt_playbooks/openshift_virtualization/windows/validate_autounattend_local.yml -e ocpv_win_autounattend_admin_password='…'` (or export **`OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD`**). Add **`-e ocpv_validate_autounattend_copy_to=/path/Autounattend.xml`** to keep a file for **Windows SIM**. For settings that exist on **your** Windows edition / image index, install the [Windows ADK](https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install), open **Windows System Image Manager**, create a **catalog** from the same **`install.wim`** index you install, import **`Autounattend.xml`**, and resolve red validation markers—this catches unknown components and pass mismatches that **`xmllint`** cannot see.
 
 | Variable | Default / notes |
 |----------|-----------------|
@@ -147,7 +147,7 @@ If you use fully custom **`ocpv_cloudinit_userdata`** with NoCloud enabled, repl
 
 ### KubeVirt inventory with WinRM defaults (CasC)
 
-CasC adds a second dynamic inventory **`OpenShift Virtualization | KubeVirt VMs (WinRM)`** (see `roles/openshift_virtualization_aap/defaults/main.yml`: `openshift_virt_aap_kubevirt_winrm_inventory_*`). It uses the same **`openshift_virtualization`** sync and namespaces as the primary KubeVirt inventory, and sets **inventory-level** variables so synced hosts default to **`ansible_connection: winrm`**, **`ansible_winrm_scheme: http`**, **`ansible_winrm_transport: ntlm`**, **`ansible_winrm_server_cert_validation: ignore`**, **`ansible_port: 5985`**. Re-run **`playbooks/openshift_virtualization/aap_rollout_casc.yml`** after pulling these changes, then **sync** both inventory sources in the controller UI (or wait for `update_on_launch`).
+CasC adds a second dynamic inventory **`OpenShift Virtualization | KubeVirt VMs (WinRM)`** (see `roles/openshift_virtualization_aap/defaults/main.yml`: `openshift_virt_aap_kubevirt_winrm_inventory_*`). It uses the same **`openshift_virtualization`** sync and namespaces as the primary KubeVirt inventory, and sets **inventory-level** variables so synced hosts default to **`ansible_connection: winrm`**, **`ansible_winrm_scheme: http`**, **`ansible_winrm_transport: ntlm`**, **`ansible_winrm_server_cert_validation: ignore`**, **`ansible_port: 5985`**. Re-run **`jt_playbooks/openshift_virtualization/aap_rollout_casc.yml`** after pulling these changes, then **sync** both inventory sources in the controller UI (or wait for `update_on_launch`).
 
 ### Troubleshoot WinRM from AAP
 
@@ -223,7 +223,7 @@ Keep the existing **`windows-server-os-work`** DataVolume; you only refresh its 
 
 ### After recapture
 
-- Re-run **`playbooks/openshift_virtualization/aap_rollout_casc.yml`** only if you changed CasC; refresh **`aap_sync_openshift_credential_from_oc.yml`** if `oc` token drifted.
+- Re-run **`jt_playbooks/openshift_virtualization/aap_rollout_casc.yml`** only if you changed CasC; refresh **`aap_sync_openshift_credential_from_oc.yml`** if `oc` token drifted.
 - Launch **OpenShift Virtualization | Provision Windows VM and install package** again (clone path uses the updated golden).
 
 ## Related paths

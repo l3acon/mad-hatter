@@ -12,7 +12,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/cmdb_add_host.yml
+    playbook: jt_playbooks/snow/cmdb_add_host.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Controller Credential
@@ -57,7 +57,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/cmdb_enrich_host.yml
+    playbook: jt_playbooks/snow/cmdb_enrich_host.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Controller Credential
@@ -93,7 +93,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/cmdb_sync_inventory.yml
+    playbook: jt_playbooks/snow/cmdb_sync_inventory.yml
     credentials:
       - Controller Credential
     execution_environment: "{{ snow_aap_ee_name }}"
@@ -106,7 +106,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/itsm_create_incident.yml
+    playbook: jt_playbooks/snow/itsm_create_incident.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Controller Credential
@@ -161,7 +161,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/itsm_update_incident.yml
+    playbook: jt_playbooks/snow/itsm_update_incident.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Controller Credential
@@ -197,7 +197,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/itsm_close_incident.yml
+    playbook: jt_playbooks/snow/itsm_close_incident.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Controller Credential
@@ -236,7 +236,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/selfservice_acknowledge_request.yml
+    playbook: jt_playbooks/snow/selfservice_acknowledge_request.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Controller Credential
@@ -249,7 +249,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/selfservice_update_request.yml
+    playbook: jt_playbooks/snow/selfservice_update_request.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - Controller Credential
@@ -263,7 +263,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/provision_rhel_vm.yml
+    playbook: jt_playbooks/snow/provision_rhel_vm.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aws_credential_name }}"
@@ -307,7 +307,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/post_provision_packages.yml
+    playbook: jt_playbooks/snow/post_provision_packages.yml
     credentials:
       - Controller Credential
       - "{{ snow_aap_ec2_ssh_credential_name }}"
@@ -321,7 +321,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/cleanup_vms.yml
+    playbook: jt_playbooks/snow/cleanup_vms.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aws_credential_name }}"
@@ -359,7 +359,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/compliance_scan.yml
+    playbook: jt_playbooks/snow/compliance_scan.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aap_ec2_ssh_credential_name }}"
@@ -401,7 +401,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/patch_pre_snapshot.yml
+    playbook: jt_playbooks/snow/patch_pre_snapshot.yml
     credentials:
       - "{{ snow_aws_credential_name }}"
       - Controller Credential
@@ -431,7 +431,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/patch_rhel_vm.yml
+    playbook: jt_playbooks/snow/patch_rhel_vm.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aap_ec2_ssh_credential_name }}"
@@ -462,7 +462,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/config_drift_check.yml
+    playbook: jt_playbooks/snow/config_drift_check.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aap_ec2_ssh_credential_name }}"
@@ -486,7 +486,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/config_drift_remediate.yml
+    playbook: jt_playbooks/snow/config_drift_remediate.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aap_ec2_ssh_credential_name }}"
@@ -511,7 +511,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/clab/provision_hypervisor.yml
+    playbook: jt_playbooks/snow/clab/provision_hypervisor.yml
     credentials:
       - "{{ snow_aws_credential_name }}"
       - Controller Credential
@@ -544,7 +544,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/clab/deploy_topology.yml
+    playbook: jt_playbooks/snow/clab/deploy_topology.yml
     credentials:
       - "{{ snow_aws_credential_name }}"
       - Containerlab SSH
@@ -557,7 +557,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_clab_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/clab/network_baseline.yml
+    playbook: jt_playbooks/snow/clab/network_baseline.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aws_credential_name }}"
@@ -570,7 +570,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_clab_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/clab/configure_devices.yml
+    playbook: jt_playbooks/snow/clab/configure_devices.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
       - "{{ snow_aws_credential_name }}"
@@ -583,7 +583,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/clab/create_change_request.yml
+    playbook: jt_playbooks/snow/clab/create_change_request.yml
     credentials:
       - "{{ snow_aap_credential_name }}"
     execution_environment: "{{ snow_aap_ee_name }}"
@@ -594,7 +594,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/clab/teardown_topology.yml
+    playbook: jt_playbooks/snow/clab/teardown_topology.yml
     credentials:
       - "{{ snow_aws_credential_name }}"
       - Containerlab SSH
@@ -606,7 +606,7 @@ controller_templates:
     organization: Default
     inventory: "{{ snow_aap_runtime_inventory_name }}"
     project: "{{ snow_aap_project_name }}"
-    playbook: playbooks/snow/clab/teardown_hypervisor.yml
+    playbook: jt_playbooks/snow/clab/teardown_hypervisor.yml
     credentials:
       - "{{ snow_aws_credential_name }}"
     execution_environment: "{{ snow_aap_ee_name }}"

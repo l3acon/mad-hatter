@@ -6,7 +6,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_create.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_create.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -19,7 +19,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_delete.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_delete.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -43,7 +43,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_post_install_package.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_post_install_package.yml
     credentials: >-
       {{
         ['Controller Credential', 'OpenShift Credential']
@@ -65,7 +65,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_create_windows_from_golden.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_create_windows_from_golden.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -81,7 +81,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_post_install_windows.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_post_install_windows.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -94,7 +94,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_troubleshoot_windows_winrm.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_troubleshoot_windows_winrm.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -134,7 +134,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_operations_simple.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_operations_simple.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -166,7 +166,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_backup_snapshot.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_backup_snapshot.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -190,7 +190,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/import_vm_operations.yml
+    playbook: jt_playbooks/openshift_virtualization/import_vm_operations.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -202,7 +202,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/import_vm_backup.yml
+    playbook: jt_playbooks/openshift_virtualization/import_vm_backup.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -214,7 +214,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/import_vm_restore.yml
+    playbook: jt_playbooks/openshift_virtualization/import_vm_restore.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -226,7 +226,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/import_vm_hot_plug.yml
+    playbook: jt_playbooks/openshift_virtualization/import_vm_hot_plug.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -242,7 +242,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/vm_provision_windows.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_provision_windows.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -316,7 +316,7 @@ controller_templates:
     organization: Default
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/cost_optimization_scale_down.yml
+    playbook: jt_playbooks/openshift_virtualization/cost_optimization_scale_down.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -369,7 +369,7 @@ controller_templates:
       - "{{ openshift_virt_aap_no_baremetal_ig_name }}"
     inventory: "{{ openshift_virt_aap_inventory_name }}"
     project: "{{ openshift_virt_aap_project_name }}"
-    playbook: playbooks/openshift_virtualization/cost_optimization_scale_up.yml
+    playbook: jt_playbooks/openshift_virtualization/cost_optimization_scale_up.yml
     credentials:
       - Controller Credential
       - OpenShift Credential

@@ -2,6 +2,6 @@
 exclude_paths:
   - roles/openshift_virtualization_aap/defaults/main.yml
   - roles/openshift_virtualization_aap/vars/main.yml
-  - playbooks/openshift_virtualization/vm_create.yml
-  - playbooks/openshift_virtualization/vm_delete.yml
+  - jt_playbooks/openshift_virtualization/vm_create.yml
+  - jt_playbooks/openshift_virtualization/vm_delete.yml
   - roles/clab/tasks/main.yml

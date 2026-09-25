@@ -1,0 +1,229 @@
+---
+# Provision infrastructure on ARO or ROSA.
+#
+# Usage (pick one platform tag + feature tags):
+#   ansible-navigator run infra-deploy.yml --tags rosa,aap --eei quay.io/matferna/mh-rosa:latest
+#   ansible-navigator run infra-deploy.yml --tags aro,aap,clab --eei quay.io/matferna/mh-aro:latest
+#
+# Tags:
+#   aro   — ARO credentials + kubeadmin login
+#   rosa  — ROSA credentials + bastion + cluster-admin reset
+#   aap   — Deploy AAP operator
+#   ocpv  — Provision bare-metal machinepool + wait (ROSA only)
+#   clab  — Deploy ContainerLab hypervisor (ARO only)
+- name: Provision infrastructure
+  hosts: localhost
+  vars:
+    aap_operator_disable_lightspeed: false
+    aap_operator_operator_channel: "stable-2.7"
+    aro_creds_file_path: "{{ playbook_dir }}/aro.creds.yml"
+    aro_creds_require_pub_key: true
+    rosa_creds_file_path: "{{ playbook_dir }}/rosa.creds.yml"
+    user_creds_file_path: "{{ playbook_dir }}/user.creds.yml"
+  tasks:
+    # ── aro: credentials + cluster login ──────────────────────────────────
+    - name: Slurp ARO credentials
+      tags: [aro]
+      ansible.builtin.include_role:
+        name: aro_creds
+
+    - name: Slurp user credentials (ARO)
+      tags: [aro]
+      ansible.builtin.include_role:
+        name: user_creds
+
+    - name: Get OC login status (ARO)
+      tags: [aro]
+      ansible.builtin.command: "oc whoami --show-server=true" # noqa: no-changed-when
+      register: oc_whoami
+      ignore_errors: true
+
+    - name: Login to ARO cluster if needed
+      tags: [aro]
+      when:
+        - (oc_whoami is failed) or (openshift_console_url not in oc_whoami.stdout)
+      block:
+        - name: Login to OCP Cluster with credentials
+          ansible.builtin.command: >-
+            oc login --username=kubeadmin
+            --password={{ openshift_kubeadmin_password }}
+            {{ openshift_api_url }}
+          register: oc_login
+          changed_when: "'Login successful' in oc_login.stdout"
+
+    # ── rosa: credentials + bastion + cluster login ───────────────────────
+    - name: Warning this may incur high costs
+      tags: [rosa]
+      ansible.builtin.pause:
+        prompt: "This may incur high costs, please acknowledge responsibility"
+      when:
+        - ignore_prompt is not defined
+
+    - name: Parse ROSA credentials
+      tags: [rosa]
+      ansible.builtin.include_role:
+        name: rosa_creds
+
+    - name: Parse user credentials (ROSA)
+      tags: [rosa]
+      ansible.builtin.include_role:
+        name: user_creds
+
+    - name: Add ROSA bastion to inventory
+      tags: [rosa]
+      ansible.builtin.add_host:
+        name: "{{ rosa_bastion_host }}"
+        groups: "rosa"
+        ansible_password: "{{ rosa_bastion_password }}"
+        ansible_user: "rosa"
+
+    - name: Get OC login status (ROSA)
+      tags: [rosa]
+      ansible.builtin.command: "oc whoami" # noqa: no-changed-when
+      register: oc_whoami
+      ignore_errors: true
+
+    - name: Reset ROSA cluster-admin
+      tags: [rosa]
+      when:
+        - (oc_whoami is failed) or (openshift_console_url not in oc_whoami.stdout)
+      delegate_to: "{{ groups['rosa'] | first }}"
+      block:
+        - name: Get the list of ROSA clusters
+          ansible.builtin.command: "rosa list cluster -o json"
+          register: rosa_cluster_list
+          changed_when: false
+          failed_when: rosa_cluster_list.rc != 0
+          check_mode: false
+
+        - name: Set cluster_name fact from the output
+          ansible.builtin.set_fact:
+            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name'] }}"
+            rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
+
+        - name: Display the extracted cluster name (for debugging)
+          ansible.builtin.debug:
+            msg: "Found cluster name: {{ cluster_name }}"
+          when:
+            - "ansible_debug is defined"
+            - "ansible_debug"
+
+        - name: Delete the admin user on the specified cluster
+          ansible.builtin.command: "rosa delete admin -c {{ cluster_name }} --yes"
+          register: rosa_admin_creation
+          changed_when: "'Admin user created' in rosa_admin_creation.stdout"
+          ignore_errors: true
+
+        - name: Create the admin user on the specified cluster
+          ansible.builtin.command: "rosa create admin -c {{ cluster_name }} -p {{ openshift_admin_password }}"
+          register: rosa_admin_creation
+          changed_when: "'Admin user created' in rosa_admin_creation.stdout"
+
+        - name: Extract the 'oc login' command line from the output
+          ansible.builtin.set_fact:
+            login_command_line: "{{ rosa_admin_creation.stdout_lines | select('match', '.*oc login.*') | first | trim }}"
+          when: "'oc login' in rosa_admin_creation.stdout"
+
+        - name: Set credential facts from the login command
+          ansible.builtin.set_fact:
+            rosa_url: "{{ login_command_line.split()[2] }}"
+            rosa_username: "{{ login_command_line.split()[4] }}"
+            rosa_password: "{{ login_command_line.split()[6] }}"
+          when: login_command_line is defined and login_command_line != ""
+
+    - name: Login to OCP cluster (ROSA)
+      tags: [rosa]
+      when:
+        - (oc_whoami is failed) or (openshift_console_url not in oc_whoami.stdout)
+      block:
+        - name: Login to OCP Cluster with new credentials
+          ansible.builtin.command: "{{ login_command_line }}"
+          register: oc_login
+          changed_when: "'Login successful' in oc_login.stdout"
+          retries: 30
+          delay: 5
+
+    # ── ocpv: provision bare-metal machinepool (ROSA) ─────────────────────
+    - name: Determine metal node availability
+      tags: [ocpv]
+      delegate_to: "{{ groups['rosa'] | first }}"
+      block:
+        - name: Get the list of ROSA clusters
+          ansible.builtin.command: "rosa list cluster -o json"
+          register: rosa_cluster_list
+          changed_when: false
+          failed_when: rosa_cluster_list.rc != 0
+          check_mode: false
+
+        - name: Set cluster_name fact from the output
+          ansible.builtin.set_fact:
+            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name'] }}"
+            rosa_availability_zone: "{{ (rosa_cluster_list.stdout | from_json)[0]['nodes']['availability_zones'][0] }}"
+
+        - name: Get machinepools
+          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json" # noqa: no-changed-when
+          register: machinepools
+
+        - name: Add virt machinepool
+          ansible.builtin.command: >-
+            rosa create machinepool --cluster={{ cluster_name }} --replicas 1
+            --availability-zone={{ rosa_availability_zone }}
+            --instance-type m5zn.metal --name rosa-virt
+          # noqa: no-changed-when
+          when: machinepools.stdout | from_json | length < 2
+
+    # ── aap: deploy AAP operator ──────────────────────────────────────────
+    - name: Deploy AAP Operator
+      tags: [aap]
+      ansible.builtin.include_role:
+        name: 'aap_operator'
+        tasks_from: workload
+      vars:
+        aap_operator_controller_admin_password: "{{ aap_admin_password }}"
+        aap_operator_inject_manifest: true
+        aap_operator_inject_manifest_path: "{{ aap_manifest_path }}"
+
+    # ── clab: deploy ContainerLab hypervisor (ARO) ────────────────────────
+    - name: Deploy ContainerLab
+      tags: [clab]
+      ansible.builtin.include_role:
+        name: clab
+      vars:
+        clab_topology_deployment: "rhdp"
+
+    # ── ocpv: wait for bare-metal node (ROSA) ────────────────────────────
+    - name: Wait for metal node to be ready
+      tags: [ocpv]
+      delegate_to: "{{ groups['rosa'] | first }}"
+      block:
+        - name: Get cluster name for machinepool check
+          ansible.builtin.command: "rosa list cluster -o json"
+          register: rosa_cluster_list
+          changed_when: false
+          failed_when: rosa_cluster_list.rc != 0
+          check_mode: false
+
+        - name: Set cluster_name fact
+          ansible.builtin.set_fact:
+            cluster_name: "{{ (rosa_cluster_list.stdout | from_json)[0]['name'] }}"
+
+        - name: Wait until virt host comes up
+          ansible.builtin.command: "rosa list machinepool --cluster={{ cluster_name }} -o json"
+          register: machinepools
+          changed_when: false
+          until: >
+            (machinepools.stdout | from_json
+            | selectattr('id', 'equalto', 'rosa-virt')
+            | list)[0].status.current_replicas == 1
+          retries: 75
+          delay: 20
+
+    # ── always: display results ───────────────────────────────────────────
+    - name: Display Access info
+      tags: always
+      when: aap_controller_web_url is defined
+      ansible.builtin.debug:
+        msg:
+          - "AAP URL: {{ aap_controller_web_url }}"
+          - "AAP Admin Login: {{ aap_controller_admin_user }}"
+          - "AAP Admin Password: {{ aap_operator_controller_admin_password }}"

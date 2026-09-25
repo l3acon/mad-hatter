@@ -3,7 +3,7 @@
 # Windows Setup also validates against the install image catalog; use Windows SIM + install.wim for that.
 #
 #   export OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD='…'
-#   ansible-playbook playbooks/openshift_virtualization/windows/validate_autounattend_local.yml
+#   ansible-playbook jt_playbooks/openshift_virtualization/windows/validate_autounattend_local.yml
 #
 # Optional extra vars (same as autounattend ISO pipeline): ocpv_unattend_os_disk_id, ocpv_unattend_wim_index, etc.
 # Optional: -e ocpv_validate_autounattend_copy_to=/tmp/Autounattend.xml to keep a copy for Windows SIM import.

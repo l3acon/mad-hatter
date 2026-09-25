@@ -15,7 +15,7 @@ The **OpenShift Credential** on the controller must carry a current **API URL** 
 
 ```bash
 oc login …   # same cluster the controller should automate
-ansible-playbook playbooks/openshift_virtualization/aap_sync_openshift_credential_from_oc.yml
+ansible-playbook jt_playbooks/openshift_virtualization/aap_sync_openshift_credential_from_oc.yml
 ```
 
 Then re-run **OpenShift Virtualization | Provision Windows VM and install package**.

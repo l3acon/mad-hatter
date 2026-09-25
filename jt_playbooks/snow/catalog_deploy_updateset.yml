@@ -6,7 +6,7 @@
 # of REST Message HTTP methods. Update Set commits are privileged platform operations.
 #
 # Usage:
-#   ansible-playbook playbooks/snow/catalog_deploy_updateset.yml
+#   ansible-playbook jt_playbooks/snow/catalog_deploy_updateset.yml
 - name: Deploy SNOW catalog integration via Update Set
   hosts: localhost
   gather_facts: false

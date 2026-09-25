@@ -7,15 +7,15 @@ as Code -- all from a single `ansible-playbook` or `ansible-navigator` command.
 
 ## Overview
 
-The project targets two managed OpenShift platforms:
+The project targets two managed OpenShift platforms and separates deployment
+into two phases: **infrastructure provisioning** and **Configuration as Code**.
 
-| Platform | Playbook | Use case |
+| Phase | Playbook | What it does |
 |---|---|---|
-| **ARO** (Azure Red Hat OpenShift) | `deploy_aro.yml` | AAP, ContainerLab networking labs, OCP-V product demos |
-| **ROSA** (Red Hat OpenShift Service on AWS) | `deploy_rosa.yml` | AAP, bare-metal OCP-V nodes, OCP-V product demos |
-
-A third playbook, `deploy_portal.yml`, deploys the **Ansible Automation
-Portal** (Helm-based, formerly "Self-Service Portal") on either platform.
+| **Infra** | `infra-deploy.yml` | Platform login, AAP operator, bare-metal nodes, ContainerLab hypervisor |
+| **CasC** | `casc-deploy.yml` | ServiceNow integration, OCP-V product demos, network workshop CasC |
+| **Portal** | `deploy_portal.yml` | Ansible Automation Portal (Helm) |
+| **AO** | `deploy_ao.yml` | Automation Orchestrator operator |
 
 ### AAP 2.7
 
@@ -58,48 +58,54 @@ export CONTROLLER_PASSWORD='YourAAP AdminPass'
 export AAP_MACHINE_CRED_PASSWORD='MachineCredPass1!'
 export K8S_AUTH_PASSWORD='YourAAP AdminPass'
 
-# 5. Run a playbook (AAP-only on ARO as an example)
-ansible-navigator run deploy_aro.yml --tags aap \
-  --eei quay.io/matferna/mh-aro:latest
+# 5. Deploy infrastructure (ROSA with AAP as an example)
+ansible-navigator run infra-deploy.yml --tags rosa,aap \
+  --eei quay.io/matferna/mh-rosa:latest
+
+# 6. Apply Configuration as Code (SNOW + product demos)
+ansible-navigator run casc-deploy.yml --tags snow,apd \
+  --eei quay.io/matferna/mh-rosa:latest
 ```
 
 ## Playbooks
 
-### `deploy_aro.yml` -- ARO
+### `infra-deploy.yml` -- Infrastructure Provisioning
 
-Use `--tags` to select components:
+Use `--tags` to select a platform and features:
 
 | Tags | Description |
 |---|---|
-| `--tags aap` | AAP operator + manifest injection. |
-| `--tags aap,clab` | AAP + ContainerLab + multi-vendor network CasC. |
-| `--tags aap,apd` | AAP + OpenShift Virtualization product demos CasC. |
-| `--tags aap,clab,apd` | AAP + ContainerLab + product demos. |
-| _(no tags)_ | Everything. |
+| `--tags rosa,aap` | ROSA login + AAP operator. |
+| `--tags rosa,aap,ocpv` | ROSA + AAP + bare-metal machinepool for OCP Virtualization. |
+| `--tags aro,aap` | ARO login + AAP operator. |
+| `--tags aro,aap,clab` | ARO + AAP + ContainerLab hypervisor. |
 
-**Infrastructure:** order an [ARO Open Environment](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link) from RHDP, then copy the YAML tab to `aro.creds.yml`.
+**Infrastructure:** order an environment from RHDP, then copy the YAML tab:
+- **ARO:** [ARO Open Environment](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link) → `aro.creds.yml`
+- **ROSA:** [ROSA Open Environment](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/sandboxes-gpte.rosa.prod&utm_source=webapp&utm_medium=share-link) → `rosa.creds.yml`
 
 ```bash
-ansible-navigator run deploy_aro.yml --tags aap,clab \
-  --eei quay.io/matferna/mh-aro:latest
+ansible-navigator run infra-deploy.yml --tags rosa,aap \
+  --eei quay.io/matferna/mh-rosa:latest
 ```
 
-### `deploy_rosa.yml` -- ROSA
+### `casc-deploy.yml` -- Configuration as Code
 
-Use `--tags` to select components:
+Apply CasC to an existing AAP instance. Run after `infra-deploy.yml` or standalone.
 
 | Tags | Description |
 |---|---|
-| `--tags aap` | AAP operator + manifest injection. |
-| `--tags aap,ocpv` | AAP + bare-metal machinepool for OCP Virtualization. |
-| `--tags aap,apd` | AAP + OpenShift Virtualization product demos CasC. |
-| `--tags aap,ocpv,apd` | AAP + bare-metal node + product demos. |
-| _(no tags)_ | Everything. |
-
-**Infrastructure:** order a [ROSA Open Environment](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/sandboxes-gpte.rosa.prod&utm_source=webapp&utm_medium=share-link) from RHDP, then copy the YAML tab to `rosa.creds.yml`.
+| `--tags snow` | ServiceNow integration CasC (CMDB, ITSM, self-service, compliance). |
+| `--tags apd` | OpenShift Virtualization product demos CasC. |
+| `--tags clab` | ContainerLab multi-vendor network workshop CasC. |
+| `--tags snow,apd` | SNOW + product demos. |
+| `--tags apd,clab` | Product demos + network workshop. |
 
 ```bash
-ansible-navigator run deploy_rosa.yml \
+# Source credentials first
+source .env
+
+ansible-navigator run casc-deploy.yml --tags snow,apd \
   --eei quay.io/matferna/mh-rosa:latest
 ```
 
@@ -124,6 +130,23 @@ ansible-playbook deploy_portal.yml \
 See [roles/self-service/README.md](roles/self-service/README.md) for the full
 variable reference, tag list, and troubleshooting.
 
+### Deprecated playbooks
+
+The following playbooks are thin wrappers that `import_playbook` the new
+playbooks. They will be removed in a future release.
+
+| Old | Replacement |
+|---|---|
+| `deploy_aro.yml` | `infra-deploy.yml --tags aro,...` |
+| `deploy_rosa.yml` | `infra-deploy.yml --tags rosa,...` |
+| `deploy_snow.yml` | `casc-deploy.yml --tags snow` |
+
+## JT Playbooks
+
+Job template playbooks (used by AAP job templates that reference this
+project as an SCM source) live in `jt_playbooks/`. These are not run
+directly -- they are launched by AAP workflows and job templates.
+
 ## Configuration
 
 ### Credential files
@@ -131,8 +154,8 @@ variable reference, tag list, and troubleshooting.
 | File | Source | Used by |
 |---|---|---|
 | `user.creds.yml` | Copy from [examples/user.creds.yml](examples/user.creds.yml) | All playbooks -- AAP admin password, Lightspeed token |
-| `aro.creds.yml` | RHDP YAML tab (ARO) | `deploy_aro.yml` -- cluster API URL, kubeadmin password, Azure SP |
-| `rosa.creds.yml` | RHDP YAML tab (ROSA) | `deploy_rosa.yml` -- bastion host, cluster details, AWS keys |
+| `aro.creds.yml` | RHDP YAML tab (ARO) | `infra-deploy.yml --tags aro` -- cluster API URL, kubeadmin password, Azure SP |
+| `rosa.creds.yml` | RHDP YAML tab (ROSA) | `infra-deploy.yml --tags rosa` -- bastion host, cluster details, AWS keys |
 
 ### Environment variables
 

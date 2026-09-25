@@ -1,6 +1,6 @@
 ---
 # Build a small Joliet/Rock Ridge ISO containing Autounattend.xml + helper scripts, then virtctl image-upload to a CDI DataVolume.
-# Quick XML check (no cluster): playbooks/openshift_virtualization/windows/validate_autounattend_local.yml
+# Quick XML check (no cluster): jt_playbooks/openshift_virtualization/windows/validate_autounattend_local.yml
 # Enable with -e ocpv_win_autounattend_enabled=true (typically together with prep_windows_install_media.yml).
 # Administrator password is embedded in the ISO and Autounattend.xml — use a lab password and export from shell when possible:
 #   export OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD='...'
@@ -28,7 +28,7 @@
     _ocpv_virtio_image_default: quay.io/kubevirt/virtio-container-disk:v1.2.0
     ocpv_win_virtio_containerdisk_image: "{{ _ocpv_virtio_image_default }}"
     ocpv_win_autounattend_admin_password: "{{ lookup('env', 'OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD') | default('', true) }}"
-    _ocpv_prepare_win_ps1_url_default: "https://raw.githubusercontent.com/l3acon/mad-hatter/main/playbooks/openshift_virtualization/windows/scripts/prepare-win.ps1"
+    _ocpv_prepare_win_ps1_url_default: "https://raw.githubusercontent.com/l3acon/mad-hatter/main/jt_playbooks/openshift_virtualization/windows/scripts/prepare-win.ps1"
     ocpv_prepare_win_ps1_url_resolved: "{{ ocpv_prepare_win_ps1_url | default(_ocpv_prepare_win_ps1_url_default) }}"
   tasks:
     - name: Skip autounattend pipeline when disabled
