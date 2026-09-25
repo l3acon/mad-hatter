@@ -26,11 +26,15 @@
       tags: [aro]
       ansible.builtin.include_role:
         name: aro_creds
+        apply:
+          tags: [aro]
 
     - name: Slurp user credentials (ARO)
       tags: [aro]
       ansible.builtin.include_role:
         name: user_creds
+        apply:
+          tags: [aro]
 
     - name: Get OC login status (ARO)
       tags: [aro]
@@ -63,11 +67,15 @@
       tags: [rosa]
       ansible.builtin.include_role:
         name: rosa_creds
+        apply:
+          tags: [rosa]
 
     - name: Parse user credentials (ROSA)
       tags: [rosa]
       ansible.builtin.include_role:
         name: user_creds
+        apply:
+          tags: [rosa]
 
     - name: Add ROSA bastion to inventory
       tags: [rosa]
@@ -178,6 +186,8 @@
       ansible.builtin.include_role:
         name: 'aap_operator'
         tasks_from: workload
+        apply:
+          tags: [aap]
       vars:
         aap_operator_controller_admin_password: "{{ aap_admin_password }}"
         aap_operator_inject_manifest: true
@@ -188,6 +198,8 @@
       tags: [clab]
       ansible.builtin.include_role:
         name: clab
+        apply:
+          tags: [clab]
       vars:
         clab_topology_deployment: "rhdp"
 

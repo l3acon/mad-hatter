@@ -47,6 +47,8 @@
       tags: [snow]
       ansible.builtin.include_role:
         name: snow
+        apply:
+          tags: [snow]
       vars:
         snow_extra_controller_credentials:
           - name: AWS
@@ -87,6 +89,8 @@
       tags: [apd]
       ansible.builtin.include_role:
         name: openshift_virtualization_aap
+        apply:
+          tags: [apd]
       vars:
         openshift_virt_aap_cost_opt_schedule_enabled: false
         openshift_virt_aap_extra_controller_credentials:
@@ -103,11 +107,15 @@
       tags: [clab]
       ansible.builtin.include_role:
         name: mvnw
+        apply:
+          tags: [clab]
 
     - name: Configure ContainerLab credentials # noqa: var-naming[no-role-prefix]
       tags: [clab]
       ansible.builtin.include_role:
         name: infra.aap_configuration.dispatch
+        apply:
+          tags: [clab]
       vars:
         controller_credentials:
           - name: Demo Credential
