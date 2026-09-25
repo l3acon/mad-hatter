@@ -1,0 +1,36 @@
+---
+# ─── Product Demos: AAP connection ──────────────────────────────────────────
+apd_aap_hostname: "{{ aap_hostname }}"
+apd_aap_username: "{{ aap_username }}"
+apd_aap_password: "{{ aap_password }}"
+apd_aap_validate_certs: false
+
+# ─── Organization ───────────────────────────────────────────────────────────
+apd_organization: "Default"
+
+# ─── Project ────────────────────────────────────────────────────────────────
+apd_project_name: "Ansible Product Demos"
+apd_project_scm_url: "https://github.com/ansible/product-demos.git"
+apd_project_scm_branch: "main"
+
+# ─── Execution Environment ─────────────────────────────────────────────────
+apd_ee_name: "Product Demos EE"
+apd_ee_image: "quay.io/acme_corp/product-demos-ee:latest"
+
+# ─── AWS credential ────────────────────────────────────────────────────────
+apd_aws_credential_name: "AWS"
+apd_aws_access_key: ""
+apd_aws_secret_key: ""
+apd_aws_region: "us-east-2"
+
+# ─── Machine credential ────────────────────────────────────────────────────
+apd_machine_credential_name: "APD Machine Credential"
+apd_machine_credential_username: "ec2-user"
+apd_machine_credential_ssh_key: ""
+apd_machine_credential_password: ""
+
+# ─── Inventory ──────────────────────────────────────────────────────────────
+apd_inventory_name: "Ansible Product Demos Inventory"
+
+# ─── Extra credentials to merge (list of dicts) ────────────────────────────
+apd_extra_credentials: []

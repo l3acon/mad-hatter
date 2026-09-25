@@ -56,19 +56,19 @@
             organization: Default
             update_secrets: false
 
-    # ── shared: OCP token + gateway OAuth (for apd, clab) ────────────────
+    # ── shared: OCP token + gateway OAuth (for clab) ───────────────────────
     - name: Get OCP bearer token
-      tags: [apd, clab]
+      tags: [clab]
       ansible.builtin.command: "oc whoami --show-token" # noqa: no-changed-when
       register: oc_token_result
 
     - name: Set OCP bearer token
-      tags: [apd, clab]
+      tags: [clab]
       ansible.builtin.set_fact:
         openshift_bearer_token: "{{ oc_token_result.stdout }}"
 
     - name: Obtain gateway OAuth token for CasC modules
-      tags: [apd, clab]
+      tags: [clab]
       ansible.platform.token:
         description: "CasC dispatch token"
         scope: "write"
@@ -80,27 +80,41 @@
       register: _casc_token_result
 
     - name: Set controller OAuth token for ansible.controller modules
-      tags: [apd, clab]
+      tags: [clab]
       ansible.builtin.set_fact:
         controller_oauthtoken: "{{ _casc_token_result.ansible_facts.aap_token.token }}"
 
-    # ── apd: OpenShift Virtualization product demos CasC ──────────────────
-    - name: OpenShift Virtualization AAP configuration as code # noqa: var-naming[no-role-prefix]
+    # ── apd: parse ROSA credentials for AWS keys ───────────────────────────
+    - name: Parse ROSA credentials for AWS keys
       tags: [apd]
       ansible.builtin.include_role:
-        name: openshift_virtualization_aap
+        name: rosa_creds
         apply:
           tags: [apd]
       vars:
-        openshift_virt_aap_cost_opt_schedule_enabled: false
-        openshift_virt_aap_extra_controller_credentials:
-          - name: Demo Credential
-            credential_type: Machine
-            update_secrets: true
-            inputs:
-              username: "admin"
-              password: "{{ aap_machine_cred_password }}"
-              ssh_key_data: "{{ aap_machine_cred_priv_key }}"
+        rosa_creds_file_path: "{{ playbook_dir }}/rosa.creds.yml"
+
+    - name: Parse user credentials for SSH key
+      tags: [apd]
+      ansible.builtin.include_role:
+        name: user_creds
+        apply:
+          tags: [apd]
+      vars:
+        user_creds_file_path: "{{ playbook_dir }}/user.creds.yml"
+
+    # ── apd: Ansible Product Demos CasC ──────────────────────────────────
+    - name: Ansible Product Demos configuration as code
+      tags: [apd]
+      ansible.builtin.include_role:
+        name: product_demos
+        apply:
+          tags: [apd]
+      vars:
+        apd_aws_access_key: "{{ aws_access_key | default(lookup('env', 'AWS_ACCESS_KEY_ID')) }}"
+        apd_aws_secret_key: "{{ aws_secret_key | default(lookup('env', 'AWS_SECRET_ACCESS_KEY')) }}"
+        apd_machine_credential_ssh_key: "{{ aap_machine_cred_priv_key | default(lookup('file', '/root/keys/my_priv_key', errors='ignore') | default('')) }}"
+        apd_machine_credential_password: "{{ aap_machine_cred_password | default(lookup('env', 'AAP_MACHINE_CRED_PASSWORD')) }}"
 
     # ── clab: ContainerLab network CasC ───────────────────────────────────
     - name: Run multi-vendor network workshop config as code
