@@ -57,6 +57,8 @@ controller_templates:
       }}
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ openshift_virt_aap_rhel_namespace }}"
     survey_enabled: false
 
   - name: "OpenShift Virtualization | Create Windows VM from DataVolume"
@@ -94,6 +96,8 @@ controller_templates:
       - OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
     ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ openshift_virt_aap_windows_namespace }}"
     survey_enabled: false
 
   - name: "OpenShift Virtualization | Troubleshoot Windows WinRM connectivity"
