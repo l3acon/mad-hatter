@@ -208,6 +208,8 @@ openshift_virt_aap_snow_instance: ""
 openshift_virt_aap_snow_username: ""
 openshift_virt_aap_snow_password: ""
 openshift_virt_aap_snow_credential_name: "ServiceNow Credential"
+openshift_virt_aap_snow_ee_image: "registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9:latest"
+openshift_virt_aap_snow_ee_name: "ServiceNow EE"
 openshift_virt_aap_snow_workflow_name: "ServiceNow | Provision OpenShift VM (end-to-end)"
 
 openshift_virt_aap_openshift_credential:
@@ -243,6 +245,9 @@ controller_execution_environments:
     pull: always
   - name: "{{ openshift_virt_aap_ee_windows_name }}"
     image: "{{ openshift_virt_aap_ee_windows_image }}"
+    pull: always
+  - name: "{{ openshift_virt_aap_snow_ee_name }}"
+    image: "{{ openshift_virt_aap_snow_ee_image }}"
     pull: always
 
 controller_inventories:

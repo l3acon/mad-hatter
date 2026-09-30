@@ -427,7 +427,7 @@ controller_templates:
     credentials:
       - "{{ openshift_virt_aap_snow_credential_name }}"
       - Controller Credential
-    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    execution_environment: "{{ openshift_virt_aap_snow_ee_name }}"
     ask_variables_on_launch: true
     survey_enabled: false
 
@@ -440,7 +440,7 @@ controller_templates:
     credentials:
       - "{{ openshift_virt_aap_snow_credential_name }}"
       - Controller Credential
-    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    execution_environment: "{{ openshift_virt_aap_snow_ee_name }}"
     ask_variables_on_launch: true
     survey_enabled: false
 
