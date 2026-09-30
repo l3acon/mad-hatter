@@ -70,6 +70,60 @@ snow_catalog_items:
     aap_resource_name: "ServiceNow | CMDB - Sync Inventory"
     variables: []
 
+  - name: "Provision OpenShift VM"
+    short_description: "Provision a Fedora VM on OpenShift Virtualization and install packages"
+    description: |
+      Self-service provisioning of a Fedora virtual machine on OpenShift Virtualization.
+      Backed by an AAP workflow that:
+      1. Creates a VM in the virt-rhel namespace with the specified instancetype
+      2. Waits for the VM to boot and obtain an IP address
+      3. Connects via SSH and installs the requested packages with dnf
+    category: Infrastructure
+    catalog: Ansible Automation Platform
+    aap_resource_type: workflow_job_template
+    aap_resource_name: "OpenShift Virtualization | Provision VM and install package"
+    variables:
+      - name: ocpv_vm_name
+        label: VM Name
+        type: String
+        mandatory: true
+        help_text: "A unique name for the virtual machine (lowercase, no spaces)"
+        order: 100
+      - name: ocpv_instancetype_name
+        label: Instance Size
+        type: Select Box
+        mandatory: true
+        default_value: u1.medium
+        choices:
+          - label: "Medium (1 vCPU, 4 GiB)"
+            value: u1.medium
+          - label: "Large (2 vCPU, 8 GiB)"
+            value: u1.large
+          - label: "XLarge (4 vCPU, 16 GiB)"
+            value: u1.xlarge
+          - label: "2XLarge (8 vCPU, 32 GiB)"
+            value: u1.2xlarge
+        order: 200
+      - name: ocpv_preference_name
+        label: OS Preference
+        type: Select Box
+        mandatory: true
+        default_value: fedora
+        choices:
+          - label: Fedora
+            value: fedora
+          - label: RHEL 9
+            value: rhel.9
+          - label: CentOS Stream 9
+            value: centos.stream9
+        order: 300
+      - name: ocpv_post_package_name
+        label: Package to Install
+        type: String
+        mandatory: true
+        help_text: "Package name to install via dnf (e.g. vim, httpd, git)"
+        order: 400
+
   - name: "Create Incident"
     short_description: "Create a new incident via Ansible Automation Platform"
     description: |
