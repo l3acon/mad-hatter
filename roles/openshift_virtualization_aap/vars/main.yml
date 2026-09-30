@@ -12,6 +12,8 @@ controller_templates:
       - OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ openshift_virt_aap_rhel_namespace }}"
     survey_enabled: false
 
   - name: "OpenShift Virtualization | Delete VM"
@@ -71,6 +73,8 @@ controller_templates:
       - OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
     ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ openshift_virt_aap_windows_namespace }}"
     survey_enabled: false
 
   - name: "OpenShift Virtualization | Post-install Chocolatey on Windows VM"
@@ -248,6 +252,8 @@ controller_templates:
       - OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_windows_name }}"
     ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ openshift_virt_aap_windows_namespace }}"
     survey_enabled: true
     survey_spec:
       name: ""
@@ -262,12 +268,6 @@ controller_templates:
           required: true
           min: 1
           max: 253
-        - question_name: Namespace
-          type: text
-          variable: ocpv_vm_namespace
-          required: true
-          min: 1
-          max: 63
         - question_name: Golden source DataVolume name
           question_description: >-
             Pre-built golden image whose PVC will be CDI-cloned for this VM.
@@ -413,8 +413,9 @@ controller_templates:
 controller_workflows:
   - name: "OpenShift Virtualization | Provision VM and install package"
     description: >-
-      Create a Fedora-based VM, then SSH as fedora to install a package with dnf.
-      The post-install job looks up the guest IP from the VirtualMachineInstance and connects directly (no inventory sync in the workflow).
+      Create a Fedora-based VM in the {{ openshift_virt_aap_rhel_namespace }} namespace, then SSH as
+      fedora to install a package with dnf. The namespace is set automatically via the Create VM job
+      template extra_vars.
       When openshift_virt_aap_vm_ssh_machine_cred_enabled, paste the same public key used at CasC
       (openshift_virt_aap_vm_ssh_public_key_file, default id_rsa.pub) into the survey so it matches the Machine
       credential "{{ openshift_virt_aap_vm_ssh_machine_cred_name }}".
@@ -453,12 +454,6 @@ controller_workflows:
           required: true
           min: 1
           max: 253
-        - question_name: Namespace
-          type: text
-          variable: ocpv_vm_namespace
-          required: true
-          min: 1
-          max: 63
         - question_name: Instancetype name
           type: text
           variable: ocpv_instancetype_name
@@ -487,11 +482,12 @@ controller_workflows:
 
   - name: "OpenShift Virtualization | Provision Windows VM and install package"
     description: >-
-      Create a Windows VM from a golden root DataVolume by CDI-cloning it to a per-VM DataVolume (default), then connect
-      with WinRM and install a Chocolatey package. Requires WinRM on the golden image. The create step uses the OpenShift
-      Virtualization EE (Kubernetes API only); the install step uses the Windows EE (ansible.windows + pywinrm). With
-      default **ocpv_use_cloudbase_nocloud=false**, the create job does not inject NoCloud user-data; the survey Administrator
-      password must match the golden image. Set **ocpv_use_cloudbase_nocloud=true** (or pass custom **ocpv_cloudinit_userdata**)
+      Create a Windows VM in the {{ openshift_virt_aap_windows_namespace }} namespace from a golden root
+      DataVolume by CDI-cloning it to a per-VM DataVolume (default), then connect with WinRM and install
+      a Chocolatey package. The namespace is set automatically via the Create Windows VM job template
+      extra_vars. Requires WinRM on the golden image. With default **ocpv_use_cloudbase_nocloud=false**,
+      the create job does not inject NoCloud user-data; the survey Administrator password must match the
+      golden image. Set **ocpv_use_cloudbase_nocloud=true** (or pass custom **ocpv_cloudinit_userdata**)
       to attach NoCloud for Cloudbase-Init password alignment and clone unstick.
     organization: Default
     survey_enabled: true
@@ -529,12 +525,6 @@ controller_workflows:
           required: true
           min: 1
           max: 253
-        - question_name: Namespace
-          type: text
-          variable: ocpv_vm_namespace
-          required: true
-          min: 1
-          max: 63
         - question_name: Golden source DataVolume name
           question_description: >-
             Existing DataVolume in the same namespace whose PVC will be CDI-cloned to a per-VM root disk (default).

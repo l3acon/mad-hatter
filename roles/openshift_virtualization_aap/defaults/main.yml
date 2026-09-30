@@ -24,15 +24,21 @@ openshift_virt_aap_inventory_name: OpenShift Virtualization Runtime
 
 # Dynamic inventory for OpenShift Virtualization VMs (Controller source: openshift_virtualization / redhat.openshift_virtualization).
 # List every namespace where job templates or workflows create VMs so sync discovers them.
+# Default namespaces for RHEL and Windows VMs (used by JT extra_vars and inventory sources).
+openshift_virt_aap_rhel_namespace: virt-rhel
+openshift_virt_aap_windows_namespace: virt-windows
+
 openshift_virt_aap_kubevirt_inventory_name: "OpenShift Virtualization | KubeVirt VMs"
 openshift_virt_aap_kubevirt_inventory_source_name: "OpenShift Virtualization | KubeVirt inventory sync"
 openshift_virt_aap_kubevirt_inventory_namespaces:
-  - ocpv-aap-smoke
+  - "{{ openshift_virt_aap_rhel_namespace }}"
 
-# Constructed inventory: same KubeVirt hosts plus WinRM connection variables (see template).
+# WinRM inventory: same pattern but scoped to the Windows namespace.
 openshift_virt_aap_kubevirt_winrm_inventory_enabled: true
 openshift_virt_aap_kubevirt_winrm_inventory_name: "OpenShift Virtualization | KubeVirt VMs (WinRM)"
 openshift_virt_aap_kubevirt_winrm_inventory_source_name: "OpenShift Virtualization | KubeVirt inventory sync (WinRM)"
+openshift_virt_aap_kubevirt_winrm_inventory_namespaces:
+  - "{{ openshift_virt_aap_windows_namespace }}"
 # Applied to the WinRM inventory object in Tower (merged with per-host facts from the sync).
 openshift_virt_aap_kubevirt_winrm_inventory_variables:
   ansible_connection: winrm
@@ -41,14 +47,14 @@ openshift_virt_aap_kubevirt_winrm_inventory_variables:
   ansible_winrm_server_cert_validation: ignore
   ansible_port: 5985
 
-# Second openshift_virtualization source targeting the WinRM inventory (same namespaces as primary).
+# Second openshift_virtualization source targeting the WinRM inventory (Windows namespace).
 openshift_virt_aap_kubevirt_winrm_inventory_sources:
   - name: "{{ openshift_virt_aap_kubevirt_winrm_inventory_source_name }}"
     inventory: "{{ openshift_virt_aap_kubevirt_winrm_inventory_name }}"
     organization: Default
     description: >-
-      Same OpenShift Virtualization sync as the primary KubeVirt inventory; inventory variables
-      (openshift_virt_aap_kubevirt_winrm_inventory_variables) default ansible_connection to WinRM for Windows.
+      OpenShift Virtualization sync for the WinRM inventory; scoped to
+      openshift_virt_aap_kubevirt_winrm_inventory_namespaces (Windows VMs).
     source: openshift_virtualization
     credential: OpenShift Credential
     execution_environment: "{{ openshift_virt_aap_ee_name }}"
@@ -58,7 +64,7 @@ openshift_virt_aap_kubevirt_winrm_inventory_sources:
     timeout: 600
     verbosity: 1
     source_vars:
-      namespaces: "{{ openshift_virt_aap_kubevirt_inventory_namespaces }}"
+      namespaces: "{{ openshift_virt_aap_kubevirt_winrm_inventory_namespaces }}"
 
 # Dispatched to infra.aap_configuration.controller_inventory_sources (Runtime inventory stays module-managed only).
 openshift_virt_aap_controller_inventory_sources:
@@ -158,7 +164,8 @@ openshift_virt_aap_cost_opt_cluster_name: rosa-tdnkz
 openshift_virt_aap_cost_opt_machinepool: rosa-virt
 openshift_virt_aap_cost_opt_bastion_host: "{{ lookup('env', 'ROSA_BASTION_HOST') | default('bastion.tdnkz.sandbox5192.opentlc.com', true) }}"
 openshift_virt_aap_cost_opt_namespaces:
-  - ocpv-aap-smoke
+  - "{{ openshift_virt_aap_rhel_namespace }}"
+  - "{{ openshift_virt_aap_windows_namespace }}"
 
 # Schedule toggle: "daily" runs every weekday, "weekend" runs Fri evening / Mon morning only.
 openshift_virt_aap_cost_opt_schedule_mode: daily
