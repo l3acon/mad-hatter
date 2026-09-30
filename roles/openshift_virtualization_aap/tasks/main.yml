@@ -114,7 +114,8 @@
     organization: Default
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
 - name: Ensure KubeVirt dynamic inventory exists
@@ -123,7 +124,8 @@
     organization: Default
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
 - name: Ensure KubeVirt WinRM inventory exists (inventory-level WinRM defaults for synced hosts)
@@ -134,7 +136,8 @@
     state: present
     variables: "{{ openshift_virt_aap_kubevirt_winrm_inventory_variables }}"
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
 - name: Merge optional WinRM inventory source into CasC inventory source list
@@ -158,13 +161,15 @@
     is_superuser: false
     state: present
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
 - name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
   ansible.builtin.set_fact:
     controller_host: "{{ aap_hostname }}"
-    controller_oauthtoken: "{{ controller_oauthtoken }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
     controller_execution_environments: "{{ controller_execution_environments }}"
     controller_projects: "{{ controller_projects }}"
     controller_inventories: []

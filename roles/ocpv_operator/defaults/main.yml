@@ -1,0 +1,10 @@
+---
+ocpv_operator_project: openshift-cnv
+ocpv_operator_name: kubevirt-hyperconverged
+ocpv_operator_csv_nameprefix: kubevirt-hyperconverged-operator
+ocpv_operator_channel: "stable"
+ocpv_operator_catalog: redhat-operators
+ocpv_operator_automatic_install_plan_approval: true
+ocpv_operator_starting_csv: ""
+
+ocpv_operator_hyperconverged_name: kubevirt-hyperconverged

@@ -1,0 +1,6 @@
+---
+galaxy_info:
+  role_name: ocpv_operator
+  description: Install OpenShift Virtualization (CNV) operator and create HyperConverged CR
+  min_ansible_version: "2.15"
+dependencies: []

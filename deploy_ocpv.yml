@@ -1,0 +1,22 @@
+---
+# Deploy OpenShift Virtualization operator on an OpenShift cluster.
+# Usage:
+#   ansible-playbook deploy_ocpv.yml
+#   ansible-navigator run deploy_ocpv.yml --eei quay.io/matferna/mh-rosa:latest
+- name: Deploy OpenShift Virtualization
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Verify cluster access
+      ansible.builtin.command: oc whoami
+      changed_when: false
+      register: _oc_whoami
+
+    - name: Show logged-in user
+      ansible.builtin.debug:
+        msg: "Logged in as: {{ _oc_whoami.stdout }}"
+
+    - name: Deploy OpenShift Virtualization operator
+      ansible.builtin.include_role:
+        name: ocpv_operator

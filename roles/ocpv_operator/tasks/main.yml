@@ -1,0 +1,56 @@
+---
+# --- Install OpenShift Virtualization operator --------------------------
+- name: Install OpenShift Virtualization operator
+  ansible.builtin.include_role:
+    name: install_operator
+  vars:
+    install_operator_action: install
+    install_operator_namespace: "{{ ocpv_operator_project }}"
+    install_operator_name: "{{ ocpv_operator_name }}"
+    install_operator_csv_nameprefix: "{{ ocpv_operator_csv_nameprefix }}"
+    install_operator_manage_namespaces:
+      - "{{ ocpv_operator_project }}"
+    install_operator_channel: "{{ ocpv_operator_channel }}"
+    install_operator_catalog: "{{ ocpv_operator_catalog }}"
+    install_operator_automatic_install_plan_approval: >-
+      {{ ocpv_operator_automatic_install_plan_approval }}
+    install_operator_starting_csv: "{{ ocpv_operator_starting_csv }}"
+    install_operator_catalogsource_setup: false
+
+# --- Create HyperConverged CR to deploy KubeVirt -----------------------
+- name: Create HyperConverged instance
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: hco.kubevirt.io/v1beta1
+      kind: HyperConverged
+      metadata:
+        name: "{{ ocpv_operator_hyperconverged_name }}"
+        namespace: "{{ ocpv_operator_project }}"
+      spec: {}
+
+# --- Wait for KubeVirt to be ready ------------------------------------
+- name: Wait for HyperConverged to report available
+  kubernetes.core.k8s_info:
+    api_version: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    name: "{{ ocpv_operator_hyperconverged_name }}"
+    namespace: "{{ ocpv_operator_project }}"
+  register: r_hco
+  retries: 60
+  delay: 30
+  until: >-
+    r_hco.resources | default([]) | length > 0
+    and (r_hco.resources[0].status.conditions
+         | default([])
+         | selectattr('type', 'equalto', 'Available')
+         | selectattr('status', 'equalto', 'True')
+         | list
+         | length > 0)
+
+- name: Display OCP-V deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "OpenShift Virtualization deployed successfully."
+      - "Namespace: {{ ocpv_operator_project }}"
+      - "HyperConverged CR: {{ ocpv_operator_hyperconverged_name }}"
