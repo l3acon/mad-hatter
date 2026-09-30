@@ -417,6 +417,33 @@ controller_templates:
           min: 1
           max: 256
 
+  # ── ServiceNow self-service JTs (only when SNOW integration enabled) ────
+  - name: "ServiceNow | OCP-V - Acknowledge Catalog Request"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: jt_playbooks/snow/selfservice_acknowledge_request.yml
+    credentials:
+      - "{{ openshift_virt_aap_snow_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "ServiceNow | OCP-V - Update Catalog Item Status"
+    job_type: run
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: jt_playbooks/snow/selfservice_update_request.yml
+    credentials:
+      - "{{ openshift_virt_aap_snow_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
 controller_workflows:
   - name: "OpenShift Virtualization | Provision VM and install package"
     description: >-
@@ -429,7 +456,7 @@ controller_workflows:
       Optional extra Machine credentials: openshift_virt_aap_post_install_jt_credentials_suffix.
     organization: Default
     survey_enabled: true
-    ask_variables_on_launch: false
+    ask_variables_on_launch: true
     allow_simultaneous: false
     ask_inventory_on_launch: false
     ask_scm_branch_on_launch: false
@@ -558,3 +585,78 @@ controller_workflows:
           required: true
           min: 1
           max: 128
+
+  # ── ServiceNow end-to-end workflow ──────────────────────────────────────
+  - name: "{{ openshift_virt_aap_snow_workflow_name }}"
+    description: >-
+      End-to-end self-service VM provisioning triggered from a ServiceNow catalog item.
+      Acknowledges the SNOW request, creates a Fedora VM on OpenShift Virtualization,
+      installs the requested package, then updates the SNOW request with completion
+      or failure status.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: true
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Acknowledge Request
+        unified_job_template: "ServiceNow | OCP-V - Acknowledge Catalog Request"
+        success_nodes:
+          - Provision VM
+      - identifier: Provision VM
+        unified_job_template: "OpenShift Virtualization | Create VM"
+        success_nodes:
+          - Install Packages
+        failure_nodes:
+          - Update Request Failed
+      - identifier: Install Packages
+        unified_job_template: "OpenShift Virtualization | Post-install package on VM"
+        success_nodes:
+          - Update Request Complete
+        failure_nodes:
+          - Update Request Failed
+      - identifier: Update Request Complete
+        unified_job_template: "ServiceNow | OCP-V - Update Catalog Item Status"
+        extra_data:
+          snow_request_state: "3"
+      - identifier: Update Request Failed
+        unified_job_template: "ServiceNow | OCP-V - Update Catalog Item Status"
+        extra_data:
+          snow_request_state: "4"
+    survey_spec:
+      name: ""
+      description: >-
+        Parameters passed from the ServiceNow catalog item request.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instance size
+          type: multiplechoice
+          variable: ocpv_instancetype_name
+          required: true
+          choices:
+            - u1.medium
+            - u1.large
+            - u1.xlarge
+            - u1.2xlarge
+          default: u1.medium
+        - question_name: Package to install
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 256
+        - question_name: Catalog request sys_id
+          question_description: >-
+            sys_id of the sc_req_item record (passed automatically from SNOW).
+          type: text
+          variable: snow_request_sys_id
+          required: true
+        - question_name: Requested by
+          type: text
+          variable: snow_requested_by
+          required: false

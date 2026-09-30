@@ -202,6 +202,14 @@ openshift_virt_aap_ssp_preference_choices:
   - windows.10
   - windows.10.virtio
 
+# ─── ServiceNow integration (SNOW catalog → AAP workflow) ─────────────────
+openshift_virt_aap_snow_enabled: false
+openshift_virt_aap_snow_instance: ""
+openshift_virt_aap_snow_username: ""
+openshift_virt_aap_snow_password: ""
+openshift_virt_aap_snow_credential_name: "ServiceNow Credential"
+openshift_virt_aap_snow_workflow_name: "ServiceNow | Provision OpenShift VM (end-to-end)"
+
 openshift_virt_aap_openshift_credential:
   - name: OpenShift Credential
     credential_type: OpenShift or Kubernetes API Bearer Token

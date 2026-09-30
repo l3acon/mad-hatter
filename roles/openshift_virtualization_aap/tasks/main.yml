@@ -104,8 +104,57 @@
             if (openshift_virt_aap_bastion_cred_enabled | bool
                 and (openshift_virt_aap_bastion_password | length) > 0) else []
           )
+        + (
+            [
+              {
+                'name': openshift_virt_aap_snow_credential_name,
+                'credential_type': 'ServiceNow',
+                'organization': 'Default',
+                'update_secrets': true,
+                'inputs': {
+                  'instance': openshift_virt_aap_snow_instance,
+                  'username': openshift_virt_aap_snow_username,
+                  'password': openshift_virt_aap_snow_password,
+                },
+              },
+            ]
+            if (openshift_virt_aap_snow_enabled | bool
+                and (openshift_virt_aap_snow_instance | length) > 0) else []
+          )
       }}
   no_log: true
+
+- name: Ensure ServiceNow credential type exists
+  when: openshift_virt_aap_snow_enabled | bool
+  ansible.controller.credential_type:
+    name: ServiceNow
+    kind: cloud
+    inputs:
+      fields:
+        - id: instance
+          type: string
+          label: Instance URL
+        - id: username
+          type: string
+          label: Username
+        - id: password
+          type: string
+          label: Password
+          secret: true
+      required:
+        - instance
+        - username
+        - password
+    injectors:
+      extra_vars:
+        snow_instance: "{% raw %}{{ instance }}{% endraw %}"
+        snow_username: "{% raw %}{{ username }}{% endraw %}"
+        snow_password: "{% raw %}{{ password }}{% endraw %}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
 # controller_inventories role passes `variables` through a regex_replace chain that breaks omit/empty dict on Ansible 2.20+.
 - name: Ensure controller inventory exists
