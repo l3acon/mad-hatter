@@ -14,6 +14,9 @@ controller_templates:
     ask_variables_on_launch: true
     extra_vars:
       ocpv_vm_namespace: "{{ openshift_virt_aap_rhel_namespace }}"
+      ocpv_ssh_public_key: >-
+        {{ lookup('file', openshift_virt_aap_vm_ssh_public_key_file)
+           if openshift_virt_aap_vm_ssh_machine_cred_enabled | bool else '' }}
     survey_enabled: false
 
   - name: "OpenShift Virtualization | Delete VM"
@@ -464,15 +467,6 @@ controller_workflows:
           variable: ocpv_preference_name
           required: false
           default: fedora
-        - question_name: SSH public key for fedora user
-          question_description: >-
-            Must match the private key in the "{{ openshift_virt_aap_vm_ssh_machine_cred_name }}" Machine credential
-            when openshift_virt_aap_vm_ssh_machine_cred_enabled (default id_rsa / id_rsa.pub paths).
-          type: text
-          variable: ocpv_ssh_public_key
-          required: true
-          min: 1
-          max: 8192
         - question_name: Package to install
           type: text
           variable: ocpv_post_package_name
