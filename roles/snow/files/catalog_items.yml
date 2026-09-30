@@ -81,7 +81,7 @@ snow_catalog_items:
     category: Infrastructure
     catalog: Ansible Automation Platform
     aap_resource_type: workflow_job_template
-    aap_resource_name: "OpenShift Virtualization | Provision VM and install package"
+    aap_resource_name: "ServiceNow | Provision OpenShift VM (end-to-end)"
     variables:
       - name: ocpv_vm_name
         label: VM Name
