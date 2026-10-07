@@ -122,34 +122,23 @@
       ansible.builtin.assert:
         that:
           - ocpv_golden_dv_info.resources | default([]) | length > 0
-          - ocpv_golden_dv_info.resources[0].spec.pvc is defined
+          - (ocpv_golden_dv_info.resources[0].spec.pvc is defined) or
+            (ocpv_golden_dv_info.resources[0].spec.storage is defined)
         fail_msg: >-
           Golden DataVolume "{{ ocpv_win_root_dv_name }}" was not found in namespace "{{ ocpv_vm_namespace }}"
-          or has no spec.pvc (cannot derive clone PVC fields).
+          or has no spec.pvc / spec.storage.
       when: ocpv_clone_golden_root_effective
 
-    - name: Derive clone PVC spec from golden DataVolume
+    - name: Resolve golden DV storage size and class
       ansible.builtin.set_fact:
-        ocpv_clone_dv_pvc_spec: >-
-          {{
-            {
-              'accessModes': ocpv_golden_dv_info.resources[0].spec.pvc.accessModes | default(['ReadWriteOnce']),
-              'resources': {
-                'requests': {
-                  'storage': ocpv_golden_dv_info.resources[0].spec.pvc.resources.requests.storage,
-                },
-              },
-              'volumeMode': ocpv_golden_dv_info.resources[0].spec.pvc.volumeMode | default('Filesystem'),
-            }
-            | combine(
-              {'storageClassName': ocpv_golden_dv_info.resources[0].spec.pvc.storageClassName}
-              if (
-                ocpv_golden_dv_info.resources[0].spec.pvc.storageClassName is defined
-                and (ocpv_golden_dv_info.resources[0].spec.pvc.storageClassName | string | length) > 0
-              )
-              else {}
-            )
-          }}
+        _golden_storage_size: >-
+          {{ (ocpv_golden_dv_info.resources[0].spec.pvc.resources.requests.storage
+              | default(ocpv_golden_dv_info.resources[0].spec.storage.resources.requests.storage
+              | default('90Gi'))) }}
+        _golden_storage_class: >-
+          {{ ocpv_golden_dv_info.resources[0].spec.pvc.storageClassName
+             | default(ocpv_golden_dv_info.resources[0].spec.storage.storageClassName
+             | default('')) }}
       when: ocpv_clone_golden_root_effective
 
     - name: Ensure clone DataVolume exists (CDI clone from golden PVC)
@@ -168,7 +157,11 @@
               pvc:
                 name: "{{ ocpv_win_root_dv_name }}"
                 namespace: "{{ ocpv_vm_namespace }}"
-            pvc: "{{ ocpv_clone_dv_pvc_spec }}"
+            storage:
+              resources:
+                requests:
+                  storage: "{{ _golden_storage_size }}"
+              storageClassName: "{{ _golden_storage_class if _golden_storage_class | length > 0 else omit }}"
         wait: false
       when: ocpv_clone_golden_root_effective
 
