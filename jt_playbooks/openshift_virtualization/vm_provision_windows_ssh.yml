@@ -101,6 +101,27 @@
       retries: 60
       delay: 15
 
+    - name: Create NoCloud userdata Secret (Cloudbase-Init)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ ocpv_vm_name }}-nocloud"
+            namespace: "{{ ocpv_vm_namespace }}"
+          type: Opaque
+          stringData:
+            userdata: |
+              #cloud-config
+              users:
+                - name: Administrator
+                  passwd: {{ ocpv_windows_admin_password | to_json }}
+                  inactive: false
+              runcmd:
+                - powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-Service -Name sshd -StartupType Automatic; Start-Service sshd"
+                - powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -ErrorAction SilentlyContinue"
+
     - name: Create Windows VirtualMachine
       redhat.openshift_virtualization.kubevirt_vm:
         name: "{{ ocpv_vm_name }}"
@@ -123,6 +144,10 @@
             - name: rootdisk
               dataVolume:
                 name: "{{ _clone_dv_name }}"
+            - name: cloudinit
+              cloudInitNoCloud:
+                secretRef:
+                  name: "{{ ocpv_vm_name }}-nocloud"
         wait: true
         wait_timeout: 900
 
