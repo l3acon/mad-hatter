@@ -1,0 +1,8 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: mad-hatter-templates
+  description: OpenShift Virtualization self-service templates
+spec:
+  targets:
+    - ./provision-vm.yaml

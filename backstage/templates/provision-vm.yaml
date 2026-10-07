@@ -1,0 +1,63 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: provision-openshift-vm
+  title: Provision OpenShift VM
+  description: >-
+    Create a Fedora virtual machine on OpenShift Virtualization and install a
+    package. Powered by Ansible Automation Platform.
+  tags:
+    - ansible
+    - openshift
+    - virtualization
+    - vm
+  annotations:
+    ansible.com/template-source: aap
+spec:
+  owner: admin
+  system: ansible
+  type: service
+  parameters:
+    - title: Virtual Machine Configuration
+      required:
+        - vmName
+        - packageName
+      properties:
+        vmName:
+          title: VM Name
+          type: string
+          description: A unique name for the virtual machine (lowercase, no spaces).
+          maxLength: 253
+          pattern: '^[a-z0-9][a-z0-9-]*$'
+        instanceType:
+          title: Instance Size
+          type: string
+          description: VM sizing (vCPU/memory).
+          default: u1.medium
+          enum:
+            - u1.medium
+            - u1.large
+            - u1.xlarge
+          enumNames:
+            - 'Medium (1 vCPU, 4 GiB)'
+            - 'Large (2 vCPU, 8 GiB)'
+            - 'XLarge (4 vCPU, 16 GiB)'
+        packageName:
+          title: Package to Install
+          type: string
+          description: Package name to install via dnf (e.g. vim, httpd, git, tmux).
+          maxLength: 256
+  steps:
+    - id: launch
+      name: Launch VM Provisioning
+      action: rhaap:launch-job-template
+      input:
+        jobTemplateName: 'OpenShift Virtualization | Provision VM (self-service)'
+        extraVars:
+          ocpv_vm_name: '${{ parameters.vmName }}'
+          ocpv_instancetype_name: '${{ parameters.instanceType }}'
+          ocpv_post_package_name: '${{ parameters.packageName }}'
+  output:
+    links:
+      - title: View Job in AAP
+        url: '${{ steps.launch.output.jobUrl }}'
