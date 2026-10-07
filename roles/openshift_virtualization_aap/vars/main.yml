@@ -417,6 +417,56 @@ controller_templates:
           min: 1
           max: 256
 
+  - name: "OpenShift Virtualization | Provision VM (self-service)"
+    job_type: run
+    description: >-
+      Self-contained: create a Fedora VM, wait for SSH, and install a package — all in
+      a single job template. Designed for the self-service portal which cannot launch workflows.
+    organization: Default
+    inventory: "{{ openshift_virt_aap_inventory_name }}"
+    project: "{{ openshift_virt_aap_project_name }}"
+    playbook: jt_playbooks/openshift_virtualization/vm_provision_fedora.yml
+    credentials: >-
+      {{
+        ['Controller Credential', 'OpenShift Credential']
+        + ([openshift_virt_aap_vm_ssh_machine_cred_name] if openshift_virt_aap_vm_ssh_machine_cred_enabled else [])
+      }}
+    execution_environment: "{{ openshift_virt_aap_ee_name }}"
+    ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ openshift_virt_aap_rhel_namespace }}"
+      ocpv_ssh_public_key: >-
+        {{ lookup('file', openshift_virt_aap_vm_ssh_public_key_file)
+           if openshift_virt_aap_vm_ssh_machine_cred_enabled | bool else '' }}
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Provision a Fedora VM and install a package. All-in-one for self-service portal.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instance size
+          type: multiplechoice
+          variable: ocpv_instancetype_name
+          required: true
+          choices:
+            - u1.medium
+            - u1.large
+            - u1.xlarge
+            - u1.2xlarge
+          default: u1.medium
+        - question_name: Package to install
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 256
+
   # ── ServiceNow self-service JTs (only when SNOW integration enabled) ────
   - name: "ServiceNow | OCP-V - Acknowledge Catalog Request"
     job_type: run
