@@ -232,12 +232,13 @@ controller_templates:
   - name: "OpenShift Virtualization | Provision Windows VM (self-service)"
     job_type: run
     description: >-
-      Self-contained: clone a Windows golden image, create the VM, wait for WinRM,
-      and install a Chocolatey package — all in one job template.
+      Clone a Windows golden image and create a VM. The workshop golden images do not
+      support automated post-boot configuration (no Cloudbase-Init / WinRM). Connect
+      via the OpenShift console VNC after provisioning.
     organization: Default
     inventory: "{{ workshop_aap_inventory_name }}"
     project: "{{ workshop_aap_project_name }}"
-    playbook: jt_playbooks/openshift_virtualization/vm_provision_windows_ssh.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_create_windows_from_golden.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
@@ -249,7 +250,7 @@ controller_templates:
     survey_spec:
       name: ""
       description: >-
-        Provision a Windows VM from a golden DataVolume and install a Chocolatey package.
+        Provision a Windows VM from a golden DataVolume. Connect via OpenShift console VNC after launch.
       spec:
         - question_name: VM name
           type: text
@@ -271,20 +272,6 @@ controller_templates:
             - u1.large
             - u1.xlarge
           default: u1.medium
-        - question_name: Local Administrator password
-          type: password
-          variable: ocpv_windows_admin_password
-          required: true
-          min: 1
-          max: 256
-        - question_name: Chocolatey package
-          question_description: >-
-            Package name as used with choco install (e.g. notepadplusplus, firefox).
-          type: text
-          variable: ocpv_post_package_name
-          required: true
-          min: 1
-          max: 128
 
 # ── Workflows ─────────────────────────────────────────────────────────────────
 controller_workflows:
