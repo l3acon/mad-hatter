@@ -1,5 +1,5 @@
 - name: Create ImageStream for plugin-registry
-  redhat.openshift.k8s:
+  kubernetes.core.k8s:
     state: present
     definition:
       apiVersion: image.openshift.io/v1
@@ -9,7 +9,7 @@
         namespace: "{{ openshift_namespace }}"
 
 - name: Create BuildConfig for plugin-registry (binary build)
-  redhat.openshift.k8s:
+  kubernetes.core.k8s:
     state: present
     definition:
       apiVersion: build.openshift.io/v1

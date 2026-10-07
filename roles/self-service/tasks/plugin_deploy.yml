@@ -1,5 +1,5 @@
 - name: Get plugin registry ImageStream
-  redhat.openshift.k8s:
+  kubernetes.core.k8s:
     kind: ImageStream
     api_version: image.openshift.io/v1
     name: plugin-registry
@@ -23,7 +23,7 @@
   tags: [deploy_plugin]
 
 - name: Create Deployment for plugin-registry
-  redhat.openshift.k8s:
+  kubernetes.core.k8s:
     state: present
     definition:
       apiVersion: apps/v1
@@ -52,7 +52,7 @@
   tags: [deploy_plugin]
 
 - name: Create Service for plugin-registry
-  redhat.openshift.k8s:
+  kubernetes.core.k8s:
     state: present
     definition:
       apiVersion: v1
