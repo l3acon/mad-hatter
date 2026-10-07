@@ -4,7 +4,7 @@ metadata:
   name: provision-openshift-vm
   title: Provision OpenShift VM
   description: >-
-    Create a Fedora virtual machine on OpenShift Virtualization and install a
+    Create a RHEL 9 virtual machine on OpenShift Virtualization and install a
     package. Powered by Ansible Automation Platform.
   tags:
     - ansible
@@ -52,7 +52,7 @@ spec:
       name: Launch VM Provisioning
       action: rhaap:launch-job-template
       input:
-        jobTemplateName: 'OpenShift Virtualization | Provision VM (self-service)'
+        jobTemplateName: 'OpenShift Virtualization | Provision RHEL VM (self-service)'
         extraVars:
           ocpv_vm_name: '${{ parameters.vmName }}'
           ocpv_instancetype_name: '${{ parameters.instanceType }}'

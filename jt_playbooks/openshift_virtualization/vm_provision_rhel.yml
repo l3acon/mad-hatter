@@ -1,11 +1,11 @@
 ---
-# Self-contained: create a Fedora VM, wait for SSH, install a package — all in
+# Self-contained: create a RHEL 9 VM, wait for SSH, install a package — all in
 # a single job template. Designed for the self-service portal which cannot
 # launch workflows.
 #
 # Expects: ocpv_vm_name, ocpv_vm_namespace, ocpv_post_package_name
 # Optional: ocpv_instancetype_name, ocpv_preference_name, ocpv_ssh_public_key
-- name: Provision Fedora VM and install package
+- name: Provision RHEL 9 VM and install package
   hosts: localhost
   connection: local
   gather_facts: false
@@ -29,15 +29,16 @@
         name: "{{ ocpv_vm_namespace }}"
         state: present
 
-    - name: Build cloud-init with SSH public key
-      when:
-        - ocpv_cloudinit_userdata is not defined
-        - ocpv_ssh_public_key | default('') | trim | length > 0
+    - name: Build cloud-init user data
       ansible.builtin.set_fact:
         ocpv_cloudinit_userdata: |
           #cloud-config
+          user: cloud-user
+          {% if ocpv_ssh_public_key | default('') | trim | length > 0 %}
           ssh_authorized_keys:
             - "{{ ocpv_ssh_public_key | trim }}"
+          {% endif %}
+      when: ocpv_cloudinit_userdata is not defined
 
     - name: Create VirtualMachine
       redhat.openshift_virtualization.kubevirt_vm:
@@ -47,7 +48,19 @@
         instancetype:
           name: "{{ ocpv_instancetype_name | default('u1.medium') }}"
         preference:
-          name: "{{ ocpv_preference_name | default('fedora') }}"
+          name: "{{ ocpv_preference_name | default('rhel.9') }}"
+        data_volume_templates:
+          - metadata:
+              name: "{{ ocpv_vm_name }}-rootdisk"
+            spec:
+              sourceRef:
+                kind: DataSource
+                name: "{{ ocpv_datasource_name | default('rhel9') }}"
+                namespace: openshift-virtualization-os-images
+              storage:
+                resources:
+                  requests:
+                    storage: "{{ ocpv_rootdisk_size | default('30Gi') }}"
         spec:
           domain:
             devices:
@@ -58,17 +71,14 @@
             - name: default
               pod: {}
           volumes:
-            - name: containerdisk
-              containerDisk:
-                image: "{{ ocpv_containerdisk_image | default('quay.io/containerdisks/fedora:latest') }}"
+            - name: rootdisk
+              dataVolume:
+                name: "{{ ocpv_vm_name }}-rootdisk"
             - name: cloudinit
               cloudInitNoCloud:
-                userData: "{{ ocpv_cloudinit_userdata | default(_default_cloudinit) }}"
+                userData: "{{ ocpv_cloudinit_userdata }}"
         wait: true
         wait_timeout: 600
-      vars:
-        _default_cloudinit: |
-          #cloud-config
 
     # ── Wait for guest IP and SSH ────────────────────────────────────────
     - name: Wait until VMI reports a guest IP
@@ -108,7 +118,7 @@
         name: ocpv_guest
         groups: ocpv_guests
         ansible_host: "{{ _guest_ip }}"
-        ansible_user: fedora
+        ansible_user: "{{ ocpv_ssh_user | default('cloud-user') }}"
         ansible_connection: ssh
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 

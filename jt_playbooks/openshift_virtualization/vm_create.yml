@@ -24,15 +24,16 @@
         name: "{{ ocpv_vm_namespace }}"
         state: present
 
-    - name: Optionally build cloud-init with SSH public key for fedora user
-      when:
-        - ocpv_cloudinit_userdata is not defined
-        - ocpv_ssh_public_key | default('') | trim | length > 0
+    - name: Build cloud-init user data
       ansible.builtin.set_fact:
         ocpv_cloudinit_userdata: |
           #cloud-config
+          user: cloud-user
+          {% if ocpv_ssh_public_key | default('') | trim | length > 0 %}
           ssh_authorized_keys:
             - "{{ ocpv_ssh_public_key | trim }}"
+          {% endif %}
+      when: ocpv_cloudinit_userdata is not defined
 
     - name: Create VirtualMachine
       redhat.openshift_virtualization.kubevirt_vm:
@@ -43,7 +44,8 @@
         instancetype:
           name: "{{ ocpv_instancetype_name | default('u1.medium') }}"
         preference:
-          name: "{{ ocpv_preference_name | default('fedora') }}"
+          name: "{{ ocpv_preference_name | default('rhel.9') }}"
+        data_volume_templates: "{{ ocpv_data_volume_templates | default(_ocpv_default_dvt) }}"
         spec:
           domain:
             devices:
@@ -57,13 +59,22 @@
         wait: "{{ ocpv_vm_wait | default(true) }}"
         wait_timeout: "{{ ocpv_vm_wait_timeout | default(600) }}"
       vars:
+        _ocpv_default_dvt:
+          - metadata:
+              name: "{{ ocpv_vm_name }}-rootdisk"
+            spec:
+              sourceRef:
+                kind: DataSource
+                name: "{{ ocpv_datasource_name | default('rhel9') }}"
+                namespace: openshift-virtualization-os-images
+              storage:
+                resources:
+                  requests:
+                    storage: "{{ ocpv_rootdisk_size | default('30Gi') }}"
         _ocpv_default_volumes:
-          - name: containerdisk
-            containerDisk:
-              image: "{{ ocpv_containerdisk_image | default('quay.io/containerdisks/fedora:latest') }}"
+          - name: rootdisk
+            dataVolume:
+              name: "{{ ocpv_vm_name }}-rootdisk"
           - name: cloudinit
             cloudInitNoCloud:
-              userData: "{{ ocpv_cloudinit_userdata | default(_ocpv_default_cloudinit) }}"
-        _ocpv_default_cloudinit: |
-          #cloud-config
-          # Default username for fedora containerdisk is: fedora
+              userData: "{{ ocpv_cloudinit_userdata }}"

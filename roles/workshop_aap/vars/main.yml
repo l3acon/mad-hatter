@@ -180,15 +180,15 @@ controller_templates:
           variable: ocpv_vm_name
           required: true
 
-  - name: "OpenShift Virtualization | Provision VM (self-service)"
+  - name: "OpenShift Virtualization | Provision RHEL VM (self-service)"
     job_type: run
     description: >-
-      Self-contained: create a Fedora VM, wait for SSH, and install a package — all in
+      Self-contained: create a RHEL 9 VM, wait for SSH, and install a package — all in
       a single job template. Designed for the self-service portal which cannot launch workflows.
     organization: Default
     inventory: "{{ workshop_aap_inventory_name }}"
     project: "{{ workshop_aap_project_name }}"
-    playbook: jt_playbooks/openshift_virtualization/vm_provision_fedora.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_provision_rhel.yml
     credentials: >-
       {{
         ['Controller Credential', 'OpenShift Credential']
@@ -205,7 +205,7 @@ controller_templates:
     survey_spec:
       name: ""
       description: >-
-        Provision a Fedora VM and install a package. All-in-one for self-service portal.
+        Provision a RHEL 9 VM and install a package. All-in-one for self-service portal.
       spec:
         - question_name: VM name
           type: text
@@ -290,7 +290,7 @@ controller_templates:
 controller_workflows:
   - name: "OpenShift Virtualization | Provision VM and install package"
     description: >-
-      Create a Fedora VM in the {{ workshop_aap_rhel_namespace }} namespace,
+      Create a RHEL 9 VM in the {{ workshop_aap_rhel_namespace }} namespace,
       then SSH in and install a package with dnf.
     organization: Default
     survey_enabled: true
@@ -324,7 +324,7 @@ controller_workflows:
           type: text
           variable: ocpv_preference_name
           required: false
-          default: fedora
+          default: rhel.9
         - question_name: Package to install
           type: text
           variable: ocpv_post_package_name

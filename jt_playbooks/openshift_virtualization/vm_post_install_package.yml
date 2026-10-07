@@ -72,7 +72,7 @@
         name: ocpv_guest
         groups: ocpv_guests
         ansible_host: "{{ ocpv_guest_ip }}"
-        ansible_user: fedora
+        ansible_user: "{{ ocpv_ssh_user | default('cloud-user') }}"
         ansible_connection: ssh
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
