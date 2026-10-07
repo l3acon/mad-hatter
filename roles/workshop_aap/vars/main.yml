@@ -11,6 +11,9 @@ controller_execution_environments:
   - name: "{{ workshop_aap_ee_name }}"
     image: "{{ workshop_aap_ee_image }}"
     pull: always
+  - name: "{{ workshop_aap_ee_windows_name }}"
+    image: "{{ workshop_aap_ee_windows_image }}"
+    pull: always
 
 controller_projects:
   - name: "{{ workshop_aap_project_name }}"
@@ -225,6 +228,63 @@ controller_templates:
           required: true
           min: 1
           max: 256
+
+  - name: "OpenShift Virtualization | Provision Windows VM (self-service)"
+    job_type: run
+    description: >-
+      Self-contained: clone a Windows golden image, create the VM, wait for WinRM,
+      and install a Chocolatey package — all in one job template.
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/openshift_virtualization/vm_provision_windows.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ workshop_aap_ee_windows_name }}"
+    ask_variables_on_launch: false
+    extra_vars:
+      ocpv_vm_namespace: "{{ workshop_aap_windows_namespace }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: >-
+        Provision a Windows VM from a golden DataVolume and install a Chocolatey package.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Golden source DataVolume
+          type: text
+          variable: ocpv_win_root_dv_name
+          required: true
+          default: "{{ workshop_aap_windows_golden_dv }}"
+        - question_name: Instance size
+          type: multiplechoice
+          variable: ocpv_instancetype_name
+          required: true
+          choices:
+            - u1.medium
+            - u1.large
+            - u1.xlarge
+          default: u1.medium
+        - question_name: Local Administrator password
+          type: password
+          variable: ocpv_windows_admin_password
+          required: true
+          min: 1
+          max: 256
+        - question_name: Chocolatey package
+          question_description: >-
+            Package name as used with choco install (e.g. notepadplusplus, firefox).
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 128
 
 # ── Workflows ─────────────────────────────────────────────────────────────────
 controller_workflows:
