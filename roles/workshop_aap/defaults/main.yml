@@ -1,0 +1,24 @@
+---
+# ─── Project ──────────────────────────────────────────────────────────────────
+workshop_aap_project_scm_url: https://github.com/l3acon/mad-hatter
+workshop_aap_project_scm_branch: main
+workshop_aap_project_name: "OpenShift Virtualization (mad-hatter)"
+workshop_aap_ee_image: quay.io/matferna/mh-rosa:latest
+workshop_aap_ee_name: "OpenShift Virtualization EE"
+workshop_aap_verify_ssl: false
+
+# ─── Namespaces ───────────────────────────────────────────────────────────────
+workshop_aap_rhel_namespace: virt-rhel
+workshop_aap_windows_namespace: virt-windows
+
+# ─── Inventories ──────────────────────────────────────────────────────────────
+workshop_aap_inventory_name: "OpenShift Virtualization Runtime"
+workshop_aap_kubevirt_inventory_name: "OpenShift Virtualization | KubeVirt VMs"
+workshop_aap_kubevirt_winrm_inventory_name: "OpenShift Virtualization | KubeVirt VMs (WinRM)"
+
+# ─── VM SSH credential ───────────────────────────────────────────────────────
+workshop_aap_vm_ssh_enabled: true
+workshop_aap_vm_ssh_credential_name: "OpenShift Virtualization | Fedora VM SSH"
+workshop_aap_vm_ssh_username: fedora
+workshop_aap_vm_ssh_private_key_file: /root/keys/my_priv_key
+workshop_aap_vm_ssh_public_key_file: /root/keys/my_pub_key.pub

@@ -1,0 +1,224 @@
+---
+# ═══════════════════════════════════════════════════════════════════════════════
+# Workshop AAP CasC — controller_* variables for infra.aap_configuration.dispatch
+#
+# Lighter variant of openshift_virtualization_aap for pre-provisioned workshop
+# environments (AAP + CNV already installed). No operator deployment, no
+# credential type creation, no cost optimization schedules.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+controller_execution_environments:
+  - name: "{{ workshop_aap_ee_name }}"
+    image: "{{ workshop_aap_ee_image }}"
+    pull: always
+
+controller_projects:
+  - name: "{{ workshop_aap_project_name }}"
+    organization: Default
+    scm_type: git
+    scm_url: "{{ workshop_aap_project_scm_url }}"
+    scm_branch: "{{ workshop_aap_project_scm_branch }}"
+    default_environment: "{{ workshop_aap_ee_name }}"
+    allow_override: true
+    scm_update_on_launch: true
+    wait: true
+
+controller_hosts:
+  - name: localhost
+    inventory: "{{ workshop_aap_inventory_name }}"
+    variables:
+      ansible_connection: local
+
+controller_inventory_sources:
+  - name: "OpenShift Virtualization | KubeVirt inventory sync"
+    inventory: "{{ workshop_aap_kubevirt_inventory_name }}"
+    organization: Default
+    source: openshift_virtualization
+    credential: OpenShift Credential
+    execution_environment: "{{ workshop_aap_ee_name }}"
+    overwrite: true
+    update_on_launch: true
+    update_cache_timeout: 0
+    timeout: 600
+    verbosity: 1
+    source_vars:
+      namespaces:
+        - "{{ workshop_aap_rhel_namespace }}"
+
+  - name: "OpenShift Virtualization | KubeVirt inventory sync (WinRM)"
+    inventory: "{{ workshop_aap_kubevirt_winrm_inventory_name }}"
+    organization: Default
+    source: openshift_virtualization
+    credential: OpenShift Credential
+    execution_environment: "{{ workshop_aap_ee_name }}"
+    overwrite: true
+    update_on_launch: true
+    update_cache_timeout: 0
+    timeout: 600
+    verbosity: 1
+    source_vars:
+      namespaces:
+        - "{{ workshop_aap_windows_namespace }}"
+
+# ── Job Templates ─────────────────────────────────────────────────────────────
+controller_templates:
+  - name: "OpenShift Virtualization | Create VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/openshift_virtualization/vm_create.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ workshop_aap_ee_name }}"
+    ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ workshop_aap_rhel_namespace }}"
+      ocpv_ssh_public_key: >-
+        {{ lookup('file', workshop_aap_vm_ssh_public_key_file)
+           if workshop_aap_vm_ssh_enabled | bool else '' }}
+    survey_enabled: false
+
+  - name: "OpenShift Virtualization | Delete VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/openshift_virtualization/vm_delete.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ workshop_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: ""
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+
+  - name: "OpenShift Virtualization | Post-install package on VM"
+    job_type: run
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/openshift_virtualization/vm_post_install_package.yml
+    credentials: >-
+      {{
+        ['Controller Credential', 'OpenShift Credential']
+        + ([workshop_aap_vm_ssh_credential_name] if workshop_aap_vm_ssh_enabled | bool else [])
+      }}
+    execution_environment: "{{ workshop_aap_ee_name }}"
+    ask_variables_on_launch: true
+    extra_vars:
+      ocpv_vm_namespace: "{{ workshop_aap_rhel_namespace }}"
+    survey_enabled: false
+
+  - name: "OpenShift Virtualization | VM lifecycle (simple)"
+    job_type: run
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/openshift_virtualization/vm_operations_simple.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ workshop_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Start, stop, or restart a single VM by name.
+      spec:
+        - question_name: Operation
+          type: multiplechoice
+          variable: ocpv_vm_operation
+          required: true
+          choices:
+            - start
+            - stop
+            - restart
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+
+  - name: "OpenShift Virtualization | Snapshot VM (simple)"
+    job_type: run
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/openshift_virtualization/vm_backup_snapshot.yml
+    credentials:
+      - Controller Credential
+      - OpenShift Credential
+    execution_environment: "{{ workshop_aap_ee_name }}"
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: Create a VirtualMachineSnapshot for one VM.
+      spec:
+        - question_name: Namespace
+          type: text
+          variable: ocpv_vm_namespace
+          required: true
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+
+# ── Workflows ─────────────────────────────────────────────────────────────────
+controller_workflows:
+  - name: "OpenShift Virtualization | Provision VM and install package"
+    description: >-
+      Create a Fedora VM in the {{ workshop_aap_rhel_namespace }} namespace,
+      then SSH in and install a package with dnf.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Provision VM
+        unified_job_template: "OpenShift Virtualization | Create VM"
+        success_nodes:
+          - Install packages
+      - identifier: Install packages
+        unified_job_template: "OpenShift Virtualization | Post-install package on VM"
+    survey_spec:
+      name: ""
+      description: >-
+        VM name, optional instancetype/preference, and a package to install.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instancetype name
+          type: text
+          variable: ocpv_instancetype_name
+          required: false
+          default: u1.medium
+        - question_name: Preference name
+          type: text
+          variable: ocpv_preference_name
+          required: false
+          default: fedora
+        - question_name: Package to install
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 256

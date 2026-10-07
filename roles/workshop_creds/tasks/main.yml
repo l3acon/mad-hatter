@@ -1,0 +1,62 @@
+---
+# Extract vars from the OCP-V Workshop ResourceClaim provision_data.
+# Sets the same canonical variable names consumed by downstream roles
+# (openshift_virtualization_aap, aap_operator, etc.) so CasC playbooks
+# work identically regardless of the infrastructure provider.
+
+- name: Extract cluster access vars from workshop provision data
+  ansible.builtin.set_fact:
+    openshift_api_url: "{{ workshop_provision_data.openshift_api_url | default(workshop_provision_data.openshift_api_server_url) }}"
+    openshift_console_url: "{{ workshop_provision_data.openshift_cluster_console_url | default(workshop_provision_data.openshift_console_url) }}"
+    openshift_bearer_token: "{{ workshop_provision_data.openshift_bearer_token | default('') }}"
+    openshift_admin_password: "{{ workshop_provision_data.openshift_cluster_admin_password }}"
+    openshift_kubeadmin_password: "{{ workshop_provision_data.openshift_kubeadmin_password | default('') }}"
+    openshift_ingress_domain: "{{ workshop_provision_data.openshift_cluster_ingress_domain | default('') }}"
+
+- name: Extract AAP vars from workshop provision data
+  ansible.builtin.set_fact:
+    aap_hostname: "{{ workshop_provision_data.aap_controller_web_url }}"
+    aap_username: "{{ workshop_provision_data.aap_controller_admin_user | default('admin') }}"
+    aap_password: "{{ workshop_provision_data.aap_controller_admin_password }}"
+    aap_controller_token: "{{ workshop_provision_data.aap_controller_token | default('') }}"
+
+- name: Extract workshop metadata
+  ansible.builtin.set_fact:
+    workshop_guid: "{{ workshop_provision_data.guid }}"
+    workshop_cloud_provider: "{{ workshop_provision_data.cloud_provider | default('openshift_cnv') }}"
+    workshop_gitea_url: "{{ workshop_provision_data.gitea_console_url | default('') }}"
+    workshop_gitea_user: "{{ workshop_provision_data.gitea_user | default('') }}"
+    workshop_gitea_password: "{{ workshop_provision_data.gitea_password | default('') }}"
+    workshop_codeserver_url: "{{ workshop_provision_data.codeserver_url | default('') }}"
+    workshop_showroom_url: "{{ workshop_provision_data.showroom_primary_view_url | default(workshop_provision_data.lab_ui_url | default('')) }}"
+
+- name: Extract sandbox/bastion info (if present)
+  ansible.builtin.set_fact:
+    workshop_sandbox_api_url: "{{ workshop_job_vars.sandbox_openshift_api_url | default('') }}"
+    workshop_sandbox_namespace: "{{ workshop_job_vars.sandbox_openshift_namespace | default('') }}"
+    workshop_bastion_host: "{{ workshop_job_vars.openshift_cnv_ssh_address | default('') }}"
+
+- name: Assert required variables
+  ansible.builtin.assert:
+    that:
+      - openshift_api_url | length > 0
+      - openshift_console_url | length > 0
+      - (openshift_bearer_token | length > 0) or (openshift_admin_password | length > 0)
+      - aap_hostname | length > 0
+      - aap_password | length > 0
+    fail_msg: >-
+      Missing required workshop credentials. Ensure workshop_creds_file_path
+      points to a valid OCP-V Workshop ResourceClaim YAML.
+
+- name: Display extracted workshop configuration
+  ansible.builtin.debug:
+    msg:
+      - "═══════════════════════════════════════════════════════"
+      - "Workshop credentials loaded (guid: {{ workshop_guid }})"
+      - "═══════════════════════════════════════════════════════"
+      - "OCP API:     {{ openshift_api_url }}"
+      - "OCP Console: {{ openshift_console_url }}"
+      - "AAP URL:     {{ aap_hostname }}"
+      - "AAP Admin:   {{ aap_username }}"
+      - "Provider:    {{ workshop_cloud_provider }}"
+      - "═══════════════════════════════════════════════════════"

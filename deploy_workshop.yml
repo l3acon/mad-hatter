@@ -1,0 +1,44 @@
+---
+# Deploy OpenShift Virtualization CasC to a pre-provisioned OCP-V Workshop.
+#
+# The workshop already has AAP + CNV installed; this playbook:
+#   1. Parses ocp-v-workshop.creds.yml to extract cluster + AAP credentials
+#   2. Logs into the cluster
+#   3. Deploys CasC (JTs, workflows, inventories) to the existing AAP
+#
+# Usage:
+#   ansible-playbook deploy_workshop.yml
+#   ansible-playbook deploy_workshop.yml -e workshop_creds_file_path=./my-workshop.creds.yml
+- name: Deploy CasC to OCP-V Workshop environment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    workshop_creds_file_path: "{{ playbook_dir }}/ocp-v-workshop.creds.yml"
+  tasks:
+    - name: Parse workshop credentials
+      ansible.builtin.include_role:
+        name: workshop_creds
+
+    - name: Login to OCP cluster
+      ansible.builtin.command: >-
+        oc login {{ openshift_api_url }}
+        --token={{ openshift_bearer_token }}
+        --insecure-skip-tls-verify
+      register: _oc_login
+      changed_when: "'Login successful' in _oc_login.stdout"
+      when: openshift_bearer_token | default('') | length > 0
+
+    - name: Login to OCP cluster (password fallback)
+      ansible.builtin.command: >-
+        oc login {{ openshift_api_url }}
+        --username={{ aap_username }}
+        --password={{ openshift_admin_password }}
+        --insecure-skip-tls-verify
+      register: _oc_login_pw
+      changed_when: "'Login successful' in _oc_login_pw.stdout"
+      when: openshift_bearer_token | default('') | length == 0
+
+    - name: Deploy Workshop AAP CasC
+      ansible.builtin.include_role:
+        name: workshop_aap

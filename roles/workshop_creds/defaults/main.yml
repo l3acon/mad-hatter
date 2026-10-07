@@ -1,0 +1,16 @@
+---
+workshop_creds_file_path: "{{ playbook_dir }}/ocp-v-workshop.creds.yml"
+
+# The workshop ResourceClaim has a single resource entry (not two like ocp-mc).
+workshop_creds_resource_index: 0
+
+# Parsed from the creds file by tasks/main.yml.
+workshop_provision_data: >-
+  {{ (lookup('file', workshop_creds_file_path) | from_yaml)
+     .status.resources[workshop_creds_resource_index]
+     .state.spec.vars.provision_data }}
+
+workshop_job_vars: >-
+  {{ (lookup('file', workshop_creds_file_path) | from_yaml)
+     .status.resources[workshop_creds_resource_index]
+     .state.spec.vars.job_vars | default({}) }}
