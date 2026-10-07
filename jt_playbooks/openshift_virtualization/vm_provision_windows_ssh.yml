@@ -1,0 +1,217 @@
+---
+# Self-contained: clone a Windows golden image, create the VM, wait for SSH,
+# and install software via OpenSSH — all in one job template.
+#
+# For workshop environments where Windows golden images have OpenSSH enabled
+# instead of WinRM.
+#
+# Required: ocpv_vm_name, ocpv_vm_namespace, ocpv_win_root_dv_name,
+#           ocpv_windows_admin_password, ocpv_post_package_name
+- name: Provision Windows VM from golden image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - ocpv_vm_name is defined and ocpv_vm_name | length > 0
+          - ocpv_vm_namespace is defined and ocpv_vm_namespace | length > 0
+          - ocpv_win_root_dv_name is defined and ocpv_win_root_dv_name | length > 0
+          - ocpv_windows_admin_password is defined and ocpv_windows_admin_password | length > 0
+          - ocpv_post_package_name is defined and ocpv_post_package_name | length > 0
+        fail_msg: >-
+          Set ocpv_vm_name, ocpv_vm_namespace, ocpv_win_root_dv_name,
+          ocpv_windows_admin_password, and ocpv_post_package_name.
+
+    - name: Ensure target namespace exists
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: "{{ ocpv_vm_namespace }}"
+        state: present
+
+    # ── Read golden DV and resolve storage ───────────────────────────────
+    - name: Read golden source DataVolume
+      kubernetes.core.k8s_info:
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ ocpv_win_root_dv_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: _golden_dv
+
+    - name: Require golden DataVolume
+      ansible.builtin.assert:
+        that:
+          - _golden_dv.resources | length > 0
+        fail_msg: >-
+          Golden DataVolume "{{ ocpv_win_root_dv_name }}" not found in {{ ocpv_vm_namespace }}.
+
+    - name: Resolve storage size and class
+      ansible.builtin.set_fact:
+        _storage_size: >-
+          {{ _golden_dv.resources[0].spec.storage.resources.requests.storage
+             | default(_golden_dv.resources[0].spec.pvc.resources.requests.storage
+             | default('90Gi')) }}
+        _storage_class: >-
+          {{ _golden_dv.resources[0].spec.storage.storageClassName
+             | default(_golden_dv.resources[0].spec.pvc.storageClassName
+             | default('')) }}
+
+    # ── Clone and create VM ──────────────────────────────────────────────
+    - name: Set clone DV name
+      ansible.builtin.set_fact:
+        _clone_dv_name: "{{ ocpv_vm_name }}-win-os"
+
+    - name: Create clone DataVolume
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: "{{ _clone_dv_name }}"
+            namespace: "{{ ocpv_vm_namespace }}"
+            annotations:
+              cdi.kubevirt.io/storage.bind.immediate.requested: "true"
+          spec:
+            source:
+              pvc:
+                name: "{{ ocpv_win_root_dv_name }}"
+                namespace: "{{ ocpv_vm_namespace }}"
+            storage:
+              resources:
+                requests:
+                  storage: "{{ _storage_size }}"
+              storageClassName: "{{ _storage_class if _storage_class | length > 0 else omit }}"
+        wait: false
+
+    - name: Wait for clone to complete
+      kubernetes.core.k8s_info:
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ _clone_dv_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: _clone_wait
+      until: >-
+        _clone_wait.resources | length > 0
+        and _clone_wait.resources[0].status.phase | default('') == 'Succeeded'
+      retries: 60
+      delay: 15
+
+    - name: Create Windows VirtualMachine
+      redhat.openshift_virtualization.kubevirt_vm:
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+        state: present
+        instancetype:
+          name: "{{ ocpv_instancetype_name | default('u1.medium') }}"
+        preference:
+          name: "{{ ocpv_preference_name | default('windows.2k22') }}"
+        spec:
+          domain:
+            devices:
+              interfaces:
+                - name: default
+                  masquerade: {}
+          networks:
+            - name: default
+              pod: {}
+          volumes:
+            - name: rootdisk
+              dataVolume:
+                name: "{{ _clone_dv_name }}"
+        wait: true
+        wait_timeout: 900
+
+    # ── Wait for SSH ─────────────────────────────────────────────────────
+    - name: Wait until VMI reports a guest IP
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: _vmi
+      until: >-
+        _vmi.resources | length > 0
+        and (_vmi.resources[0].status.interfaces | default([])
+             | selectattr('ipAddress', 'defined')
+             | map(attribute='ipAddress')
+             | list | length > 0)
+      retries: 40
+      delay: 15
+
+    - name: Extract guest IP
+      ansible.builtin.set_fact:
+        _guest_ip: >-
+          {{ _vmi.resources[0].status.interfaces
+             | selectattr('ipAddress', 'defined')
+             | map(attribute='ipAddress')
+             | first }}
+
+    - name: Wait for SSH on Windows guest
+      ansible.builtin.wait_for:
+        host: "{{ _guest_ip }}"
+        port: 22
+        delay: 30
+        timeout: 600
+        state: started
+
+    - name: Add guest to inventory (SSH)
+      ansible.builtin.add_host:
+        name: win_guest
+        groups: win_guests
+        ansible_host: "{{ _guest_ip }}"
+        ansible_user: "{{ ocpv_windows_admin_user | default('Administrator') }}"
+        ansible_password: "{{ ocpv_windows_admin_password }}"
+        ansible_connection: ssh
+        ansible_shell_type: cmd
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+    - name: Display provisioning summary
+      ansible.builtin.debug:
+        msg:
+          - "Windows VM {{ ocpv_vm_name }} created in {{ ocpv_vm_namespace }}"
+          - "Guest IP: {{ _guest_ip }}"
+          - "Connection: SSH (OpenSSH for Windows)"
+          - "Installing: {{ ocpv_post_package_name }}"
+
+# ── Install software on Windows guest via SSH ────────────────────────────────
+- name: Install software on Windows guest
+  hosts: win_guests
+  gather_facts: false
+  tasks:
+    - name: Wait for SSH session
+      ansible.builtin.raw: echo ready
+      retries: 5
+      delay: 15
+      register: _ssh_test
+      until: _ssh_test is not failed
+
+    - name: Install Chocolatey if missing
+      ansible.builtin.raw: >-
+        powershell -Command "if (-not (Get-Command choco -ErrorAction SilentlyContinue))
+        { Set-ExecutionPolicy Bypass -Scope Process -Force;
+        [System.Net.ServicePointManager]::SecurityProtocol =
+        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072;
+        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) }"
+      register: _choco_install
+      changed_when: "'Chocolatey' in _choco_install.stdout"
+      retries: 3
+      delay: 30
+      until: _choco_install is not failed
+
+    - name: Install package with Chocolatey
+      ansible.builtin.raw: >-
+        powershell -Command "choco install -y '{{ ocpv_post_package_name }}' --limit-output"
+      register: _pkg_install
+      changed_when: _pkg_install.rc == 0
+      retries: 2
+      delay: 30
+      until: _pkg_install is not failed
+
+    - name: Confirm installation
+      ansible.builtin.debug:
+        msg: "Package '{{ ocpv_post_package_name }}' installed on {{ inventory_hostname }}"

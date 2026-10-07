@@ -237,11 +237,11 @@ controller_templates:
     organization: Default
     inventory: "{{ workshop_aap_inventory_name }}"
     project: "{{ workshop_aap_project_name }}"
-    playbook: jt_playbooks/openshift_virtualization/vm_provision_windows.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_provision_windows_ssh.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
-    execution_environment: "{{ workshop_aap_ee_windows_name }}"
+    execution_environment: "{{ workshop_aap_ee_name }}"
     ask_variables_on_launch: false
     extra_vars:
       ocpv_vm_namespace: "{{ workshop_aap_windows_namespace }}"
