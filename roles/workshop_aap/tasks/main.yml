@@ -74,6 +74,49 @@
   no_log: true
   when: not (workshop_aap_vm_ssh_enabled | bool)
 
+# ── RHSM credential type + credential ───────────────────────────────────────
+- name: Ensure RHSM credential type exists
+  when: workshop_aap_rhsm_enabled | bool
+  ansible.controller.credential_type:
+    name: "Red Hat Subscription Manager"
+    kind: cloud
+    inputs:
+      fields:
+        - id: rhsm_username
+          type: string
+          label: RHSM Username
+        - id: rhsm_password
+          type: string
+          label: RHSM Password
+          secret: true
+      required:
+        - rhsm_username
+        - rhsm_password
+    injectors:
+      extra_vars:
+        rhsm_username: "{% raw %}{{ rhsm_username }}{% endraw %}"
+        rhsm_password: "{% raw %}{{ rhsm_password }}{% endraw %}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ workshop_aap_verify_ssl }}"
+
+- name: Ensure RHSM credential exists
+  when: workshop_aap_rhsm_enabled | bool
+  ansible.controller.credential:
+    name: "{{ workshop_aap_rhsm_credential_name }}"
+    organization: Default
+    credential_type: "Red Hat Subscription Manager"
+    inputs:
+      rhsm_username: "{{ workshop_aap_rhsm_username }}"
+      rhsm_password: "{{ workshop_aap_rhsm_password }}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ workshop_aap_verify_ssl }}"
+
 # ── Ensure inventories (direct module calls, not dispatch) ──────────────────
 - name: Ensure runtime inventory exists
   ansible.controller.inventory:

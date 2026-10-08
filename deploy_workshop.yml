@@ -15,6 +15,7 @@
   gather_facts: false
   vars:
     workshop_creds_file_path: "{{ playbook_dir }}/ocp-v-workshop.creds.yml"
+    user_creds_file_path: "{{ playbook_dir }}/user.creds.yml"
   tasks:
     - name: Parse workshop credentials
       ansible.builtin.include_role:
@@ -39,6 +40,15 @@
       changed_when: "'Login successful' in _oc_login_pw.stdout"
       when: openshift_bearer_token | default('') | length == 0
 
+    - name: Load user credentials (RHSM)
+      ansible.builtin.include_vars:
+        file: "{{ user_creds_file_path }}"
+      ignore_errors: true
+
     - name: Deploy Workshop AAP CasC
       ansible.builtin.include_role:
         name: workshop_aap
+      vars:
+        workshop_aap_rhsm_enabled: "{{ (rhsm_username | default('') | length > 0) }}"
+        workshop_aap_rhsm_username: "{{ rhsm_username | default('') }}"
+        workshop_aap_rhsm_password: "{{ rhsm_password | default('') }}"

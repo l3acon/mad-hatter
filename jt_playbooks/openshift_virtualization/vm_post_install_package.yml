@@ -76,12 +76,24 @@
         ansible_connection: ssh
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-- name: Install requested package on guest
+- name: Register and install package on guest
   hosts: ocpv_guests
   gather_facts: false
+  become: true
   tasks:
+    - name: Register with Red Hat Subscription Manager
+      when:
+        - rhsm_username is defined
+        - rhsm_username | default('') | length > 0
+        - rhsm_password is defined
+        - rhsm_password | default('') | length > 0
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ rhsm_username }}"
+        password: "{{ rhsm_password }}"
+        auto_attach: true
+
     - name: Install package with dnf
       ansible.builtin.dnf:
         name: "{{ ocpv_post_package_name }}"
         state: present
-      become: true

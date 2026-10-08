@@ -129,16 +129,40 @@
           - "Guest IP: {{ _guest_ip }}"
           - "Installing package: {{ ocpv_post_package_name }}"
 
-# ── Install package on guest ─────────────────────────────────────────────────
-- name: Install requested package on guest
+# ── Register and install package on guest ─────────────────────────────────────
+- name: Register and install package on guest
   hosts: ocpv_guests
   gather_facts: false
+  become: true
   tasks:
+    - name: Register with Red Hat Subscription Manager
+      when:
+        - rhsm_username is defined
+        - rhsm_username | default('') | length > 0
+        - rhsm_password is defined
+        - rhsm_password | default('') | length > 0
+      block:
+        - name: Register system with RHSM
+          community.general.redhat_subscription:
+            state: present
+            username: "{{ rhsm_username }}"
+            password: "{{ rhsm_password }}"
+            auto_attach: true
+          register: _rhsm_result
+
+        - name: Display RHSM registration result
+          ansible.builtin.debug:
+            msg: "RHSM registration: {{ 'registered' if _rhsm_result.changed else 'already registered' }}"
+
+    - name: Skip RHSM warning
+      when: rhsm_username is not defined or (rhsm_username | default('') | length == 0)
+      ansible.builtin.debug:
+        msg: "RHSM credentials not provided — skipping subscription registration. Package install may fail if repos are unavailable."
+
     - name: Install package with dnf
       ansible.builtin.dnf:
         name: "{{ ocpv_post_package_name }}"
         state: present
-      become: true
 
     - name: Confirm installation
       ansible.builtin.debug:
