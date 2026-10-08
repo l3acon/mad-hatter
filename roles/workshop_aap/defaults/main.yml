@@ -24,6 +24,16 @@ workshop_aap_vm_ssh_private_key_file: /root/keys/my_priv_key
 workshop_aap_vm_ssh_public_key_file: /root/keys/my_pub_key.pub
 
 # ─── RHSM credential (for RHEL VM subscription) ──────────────────────────────
+# ─── ServiceNow integration ───────────────────────────────────────────────────
+workshop_aap_snow_enabled: false
+workshop_aap_snow_instance: ""
+workshop_aap_snow_username: ""
+workshop_aap_snow_password: ""
+workshop_aap_snow_credential_name: "ServiceNow Credential"
+workshop_aap_snow_ee_image: "registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9:latest"
+workshop_aap_snow_ee_name: "ServiceNow EE"
+workshop_aap_snow_workflow_name: "ServiceNow | Provision OpenShift VM (end-to-end)"
+
 workshop_aap_rhsm_enabled: false
 workshop_aap_rhsm_credential_name: "Red Hat Subscription"
 workshop_aap_rhsm_username: ""

@@ -14,6 +14,9 @@ controller_execution_environments:
   - name: "{{ workshop_aap_ee_windows_name }}"
     image: "{{ workshop_aap_ee_windows_image }}"
     pull: always
+  - name: "{{ workshop_aap_snow_ee_name }}"
+    image: "{{ workshop_aap_snow_ee_image }}"
+    pull: always
 
 controller_projects:
   - name: "{{ workshop_aap_project_name }}"
@@ -319,3 +322,98 @@ controller_workflows:
           required: true
           min: 1
           max: 256
+
+  # ── ServiceNow self-service JTs ──────────────────────────────────────────
+  - name: "ServiceNow | OCP-V - Acknowledge Catalog Request"
+    job_type: run
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/snow/selfservice_acknowledge_request.yml
+    credentials:
+      - "{{ workshop_aap_snow_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ workshop_aap_snow_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  - name: "ServiceNow | OCP-V - Update Catalog Item Status"
+    job_type: run
+    organization: Default
+    inventory: "{{ workshop_aap_inventory_name }}"
+    project: "{{ workshop_aap_project_name }}"
+    playbook: jt_playbooks/snow/selfservice_update_request.yml
+    credentials:
+      - "{{ workshop_aap_snow_credential_name }}"
+      - Controller Credential
+    execution_environment: "{{ workshop_aap_snow_ee_name }}"
+    ask_variables_on_launch: true
+    survey_enabled: false
+
+  # ── ServiceNow end-to-end workflow ──────────────────────────────────────
+  - name: "{{ workshop_aap_snow_workflow_name }}"
+    description: >-
+      End-to-end self-service VM provisioning triggered from a ServiceNow catalog item.
+      Acknowledges the SNOW request, creates a RHEL 9 VM on OpenShift Virtualization,
+      registers with RHSM, installs the requested package, then updates the SNOW
+      request with completion or failure status.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: true
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Acknowledge Request
+        unified_job_template: "ServiceNow | OCP-V - Acknowledge Catalog Request"
+        success_nodes:
+          - Provision VM
+      - identifier: Provision VM
+        unified_job_template: "OpenShift Virtualization | Provision RHEL VM (self-service)"
+        success_nodes:
+          - Update Request Complete
+        failure_nodes:
+          - Update Request Failed
+      - identifier: Update Request Complete
+        unified_job_template: "ServiceNow | OCP-V - Update Catalog Item Status"
+        extra_data:
+          snow_request_state: "3"
+      - identifier: Update Request Failed
+        unified_job_template: "ServiceNow | OCP-V - Update Catalog Item Status"
+        extra_data:
+          snow_request_state: "4"
+    survey_spec:
+      name: ""
+      description: >-
+        Parameters passed from the ServiceNow catalog item request.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instance size
+          type: multiplechoice
+          variable: ocpv_instancetype_name
+          required: true
+          choices:
+            - u1.medium
+            - u1.large
+            - u1.xlarge
+          default: u1.medium
+        - question_name: Package to install
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 256
+        - question_name: Catalog request sys_id
+          question_description: >-
+            sys_id of the sc_req_item record (passed automatically from SNOW).
+          type: text
+          variable: snow_request_sys_id
+          required: true
+        - question_name: Requested by
+          type: text
+          variable: snow_requested_by
+          required: false

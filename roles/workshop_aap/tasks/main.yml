@@ -74,6 +74,55 @@
   no_log: true
   when: not (workshop_aap_vm_ssh_enabled | bool)
 
+# ── ServiceNow credential type + credential ─────────────────────────────────
+- name: Ensure ServiceNow credential type exists
+  when: workshop_aap_snow_enabled | bool
+  ansible.controller.credential_type:
+    name: ServiceNow
+    kind: cloud
+    inputs:
+      fields:
+        - id: instance
+          type: string
+          label: Instance URL
+        - id: username
+          type: string
+          label: Username
+        - id: password
+          type: string
+          label: Password
+          secret: true
+      required:
+        - instance
+        - username
+        - password
+    injectors:
+      extra_vars:
+        snow_instance: "{% raw %}{{ instance }}{% endraw %}"
+        snow_username: "{% raw %}{{ username }}{% endraw %}"
+        snow_password: "{% raw %}{{ password }}{% endraw %}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ workshop_aap_verify_ssl }}"
+
+- name: Ensure ServiceNow credential exists
+  when: workshop_aap_snow_enabled | bool
+  ansible.controller.credential:
+    name: "{{ workshop_aap_snow_credential_name }}"
+    organization: Default
+    credential_type: ServiceNow
+    inputs:
+      instance: "{{ workshop_aap_snow_instance }}"
+      username: "{{ workshop_aap_snow_username }}"
+      password: "{{ workshop_aap_snow_password }}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ workshop_aap_verify_ssl }}"
+
 # ── RHSM credential type + credential ───────────────────────────────────────
 - name: Ensure RHSM credential type exists
   when: workshop_aap_rhsm_enabled | bool
