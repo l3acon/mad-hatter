@@ -1,0 +1,26 @@
+---
+# Deploy AAP operator on any cluster (standalone, no ROSA dependency).
+# Usage:
+#   ansible-playbook deploy_aap.yml
+- name: Deploy AAP on cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aap_operator_disable_lightspeed: true
+    aap_operator_operator_channel: "stable-2.7"
+    aap_operator_controller_admin_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') | default('Supersecret1@3', true) }}"
+    aap_operator_inject_manifest: true
+    aap_operator_inject_manifest_path: "/root/manifests/manifest.zip"
+  tasks:
+    - name: Verify cluster access
+      ansible.builtin.command: oc whoami
+      changed_when: false
+
+    - name: Deploy AAP Operator
+      ansible.builtin.include_role:
+        name: aap_operator
+        tasks_from: workload
+      vars:
+        aap_admin_password: "{{ aap_operator_controller_admin_password }}"
+        aap_manifest_path: "{{ aap_operator_inject_manifest_path }}"
