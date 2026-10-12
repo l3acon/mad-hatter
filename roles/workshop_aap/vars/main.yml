@@ -237,25 +237,27 @@ controller_templates:
   - name: "OpenShift Virtualization | Provision Windows VM (self-service)"
     job_type: run
     description: >-
-      Clone a Windows golden image and create a VM. The workshop golden images do not
-      support automated post-boot configuration (no Cloudbase-Init / WinRM). Connect
-      via the OpenShift console VNC after provisioning.
+      Self-contained: clone a Windows golden image, create the VM, wait for WinRM,
+      and install a Chocolatey package. Requires a sysprepped golden image with
+      Cloudbase-Init and WinRM pre-configured.
     organization: Default
     inventory: "{{ workshop_aap_inventory_name }}"
     project: "{{ workshop_aap_project_name }}"
-    playbook: jt_playbooks/openshift_virtualization/vm_create_windows_from_golden.yml
+    playbook: jt_playbooks/openshift_virtualization/vm_provision_windows.yml
     credentials:
       - Controller Credential
       - OpenShift Credential
-    execution_environment: "{{ workshop_aap_ee_name }}"
+    execution_environment: "{{ workshop_aap_ee_windows_name }}"
     ask_variables_on_launch: false
     extra_vars:
       ocpv_vm_namespace: "{{ workshop_aap_windows_namespace }}"
+      ocpv_use_cloudbase_nocloud: true
     survey_enabled: true
     survey_spec:
       name: ""
       description: >-
-        Provision a Windows VM from a golden DataVolume. Connect via OpenShift console VNC after launch.
+        Provision a Windows VM from a golden DataVolume, set the admin password
+        via Cloudbase-Init, connect via WinRM, and install a Chocolatey package.
       spec:
         - question_name: VM name
           type: text
@@ -277,6 +279,20 @@ controller_templates:
             - u1.large
             - u1.xlarge
           default: u1.medium
+        - question_name: Administrator password
+          type: password
+          variable: ocpv_windows_admin_password
+          required: true
+          min: 1
+          max: 256
+        - question_name: Chocolatey package
+          question_description: >-
+            Package name as used with choco install (e.g. notepadplusplus, firefox).
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 128
 
 # ── Workflows ─────────────────────────────────────────────────────────────────
   # ── ServiceNow self-service JTs ──────────────────────────────────────────
@@ -350,6 +366,51 @@ controller_workflows:
           required: true
           min: 1
           max: 256
+
+  - name: "OpenShift Virtualization | Provision Windows VM and install package"
+    description: >-
+      Clone a Windows golden image, create the VM, wait for WinRM (Cloudbase-Init
+      sets the admin password), then connect and install a Chocolatey package.
+    organization: Default
+    survey_enabled: true
+    ask_variables_on_launch: true
+    allow_simultaneous: false
+    destroy_current_nodes: true
+    simplified_workflow_nodes:
+      - identifier: Provision Windows VM
+        unified_job_template: "OpenShift Virtualization | Provision Windows VM (self-service)"
+    survey_spec:
+      name: ""
+      description: >-
+        Clone a golden Windows image, set admin password, and install a Chocolatey package.
+      spec:
+        - question_name: VM name
+          type: text
+          variable: ocpv_vm_name
+          required: true
+          min: 1
+          max: 253
+        - question_name: Instance size
+          type: multiplechoice
+          variable: ocpv_instancetype_name
+          required: true
+          choices:
+            - u1.medium
+            - u1.large
+            - u1.xlarge
+          default: u1.medium
+        - question_name: Administrator password
+          type: password
+          variable: ocpv_windows_admin_password
+          required: true
+          min: 1
+          max: 256
+        - question_name: Chocolatey package
+          type: text
+          variable: ocpv_post_package_name
+          required: true
+          min: 1
+          max: 128
 
   # ── ServiceNow end-to-end workflow ──────────────────────────────────────
   - name: "{{ workshop_aap_snow_workflow_name }}"

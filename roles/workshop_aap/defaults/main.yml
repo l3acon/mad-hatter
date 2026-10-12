@@ -46,3 +46,5 @@ workshop_aap_ee_windows_name: "OpenShift Virtualization Windows EE"
 # ─── Windows golden image ─────────────────────────────────────────────────────
 workshop_aap_windows_golden_dv: windows-server-golden
 workshop_aap_windows_admin_password: ""
+workshop_aap_windows_credential_name: "Windows Machine Credential"
+workshop_aap_windows_admin_user: Administrator

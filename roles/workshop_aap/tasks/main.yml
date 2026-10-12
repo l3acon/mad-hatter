@@ -123,6 +123,22 @@
     controller_password: "{{ aap_password }}"
     validate_certs: "{{ workshop_aap_verify_ssl }}"
 
+# ── Windows Machine credential (WinRM) ──────────────────────────────────────
+- name: Ensure Windows Machine credential exists
+  when: workshop_aap_windows_admin_password | default('') | length > 0
+  ansible.controller.credential:
+    name: "{{ workshop_aap_windows_credential_name }}"
+    organization: Default
+    credential_type: Machine
+    inputs:
+      username: "{{ workshop_aap_windows_admin_user }}"
+      password: "{{ workshop_aap_windows_admin_password }}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ workshop_aap_verify_ssl }}"
+
 # ── RHSM credential type + credential ───────────────────────────────────────
 - name: Ensure RHSM credential type exists
   when: workshop_aap_rhsm_enabled | bool

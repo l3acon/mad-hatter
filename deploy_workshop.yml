@@ -52,6 +52,7 @@
         workshop_aap_rhsm_enabled: "{{ (rhsm_username | default('') | length > 0) }}"
         workshop_aap_rhsm_username: "{{ rhsm_username | default('') }}"
         workshop_aap_rhsm_password: "{{ rhsm_password | default('') }}"
+        workshop_aap_windows_admin_password: "{{ lookup('env', 'OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD') | default(ocpv_win_admin_password | default(''), true) }}"
         workshop_aap_snow_enabled: "{{ (snow_instance | default('') | length > 0) }}"
         workshop_aap_snow_instance: "{{ snow_instance | default('') }}"
         workshop_aap_snow_username: "{{ snow_username | default('') }}"
