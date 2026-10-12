@@ -1,0 +1,262 @@
+---
+# Build a Windows Server golden image for OCP-V from an ISO.
+#
+# This is the end-to-end pipeline that creates a sysprepped golden DataVolume
+# ready for CDI-clone provisioning. It orchestrates:
+#   1. Create the virt-windows namespace
+#   2. Upload the Windows ISO to a CDI DataVolume
+#   3. Create a blank OS DataVolume (install target)
+#   4. Build the autounattend answer ISO (VirtIO drivers + Autounattend.xml + bootstrap scripts)
+#   5. Boot the installer VM (ISO + answer ISO + VirtIO drivers + blank disk)
+#
+# After the installer VM completes (30-60 min), the golden DV is ready.
+# GoldenBootstrap.ps1 → prepare-win.ps1 → WinRM + Cloudbase-Init + sysprep.
+#
+# Usage:
+#   export OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD='<your-password>'
+#   ansible-playbook deploy_windows_golden.yml \
+#     -e ocpv_win_iso_local_path=~/Downloads/SERVER_EVAL_x64FRE_en-us.iso
+#
+# Repeatable: safe to re-run. Uses replace_existing flags to rebuild from scratch.
+- name: Build Windows Server golden image for OCP-V
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    # ── Namespace ──────────────────────────────────────────────────────────
+    ocpv_win_namespace: virt-windows
+
+    # ── Windows ISO ────────────────────────────────────────────────────────
+    ocpv_win_iso_local_path: "{{ lookup('env', 'WIN_ISO_PATH') | default('~/Downloads/SERVER_EVAL_x64FRE_en-us.iso', true) }}"
+    ocpv_win_iso_dv_name: windows-server-eval-iso
+    ocpv_win_iso_dv_size: 8Gi
+
+    # ── Storage ────────────────────────────────────────────────────────────
+    # Override for your cluster's storage class (ROSA: gp3-csi, workshop CNV: ocs-external-*)
+    ocpv_win_storage_class: "{{ lookup('env', 'OCPV_STORAGE_CLASS') | default('', true) }}"
+
+    # ── Golden image disk ──────────────────────────────────────────────────
+    ocpv_win_os_blank_dv_name: windows-server-golden
+    ocpv_win_os_disk_size: 60Gi
+
+    # ── Autounattend ───────────────────────────────────────────────────────
+    ocpv_win_autounattend_enabled: true
+    ocpv_win_autounattend_admin_password: "{{ lookup('env', 'OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD') | default('', true) }}"
+    ocpv_unattend_wim_index: 4
+
+    # ── Installer VM ───────────────────────────────────────────────────────
+    ocpv_win_installer_vm_name: windows-server-installer
+    ocpv_win_installer_cpu_cores: 4
+    ocpv_win_installer_memory: 8Gi
+    ocpv_win_virtio_containerdisk_image: quay.io/kubevirt/virtio-container-disk:v1.4.0
+
+    # ── CDI / virtctl ──────────────────────────────────────────────────────
+    ocpv_win_virtctl_insecure: true
+    ocpv_win_os_blank_recreate: true
+
+  tasks:
+    # ── Preflight ──────────────────────────────────────────────────────────
+    - name: Require admin password
+      ansible.builtin.assert:
+        that:
+          - ocpv_win_autounattend_admin_password | length > 0
+        fail_msg: >-
+          Set OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD env var.
+
+    - name: Verify cluster access
+      ansible.builtin.command: oc whoami
+      changed_when: false
+
+    - name: Auto-detect storage class if not set
+      when: ocpv_win_storage_class | length == 0
+      block:
+        - name: Get default storage class
+          ansible.builtin.command: >-
+            oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}'
+          changed_when: false
+          register: _default_sc
+
+        - name: Check for immediate variant
+          ansible.builtin.command: >-
+            oc get sc -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+          changed_when: false
+          register: _all_sc
+
+        - name: Set storage class
+          ansible.builtin.set_fact:
+            ocpv_win_storage_class: >-
+              {{ (_default_sc.stdout | trim ~ '-immediate')
+                 if (_default_sc.stdout | trim ~ '-immediate') in _all_sc.stdout_lines
+                 else (_default_sc.stdout | trim) }}
+
+    - name: Display configuration
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════"
+          - "Windows Golden Image Pipeline"
+          - "═══════════════════════════════════════════════════════"
+          - "Namespace:      {{ ocpv_win_namespace }}"
+          - "ISO:            {{ ocpv_win_iso_local_path }}"
+          - "WIM Index:      {{ ocpv_unattend_wim_index }} (Datacenter Evaluation Desktop Experience)"
+          - "Storage class:  {{ ocpv_win_storage_class }}"
+          - "Golden DV:      {{ ocpv_win_os_blank_dv_name }}"
+          - "OS disk size:   {{ ocpv_win_os_disk_size }}"
+          - "Installer VM:   {{ ocpv_win_installer_vm_name }}"
+          - "═══════════════════════════════════════════════════════"
+
+    # ── 1. Namespace ───────────────────────────────────────────────────────
+    - name: Ensure namespace exists
+      kubernetes.core.k8s:
+        api_version: v1
+        kind: Namespace
+        name: "{{ ocpv_win_namespace }}"
+        state: present
+
+    # ── 2. Upload Windows ISO ──────────────────────────────────────────────
+    - name: Check if ISO DataVolume already exists
+      kubernetes.core.k8s_info:
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ ocpv_win_iso_dv_name }}"
+        namespace: "{{ ocpv_win_namespace }}"
+      register: _iso_dv
+
+    - name: Stat local ISO
+      ansible.builtin.stat:
+        path: "{{ ocpv_win_iso_local_path }}"
+      register: _iso_stat
+
+    - name: Upload Windows ISO with virtctl
+      when:
+        - _iso_dv.resources | length == 0
+        - _iso_stat.stat.exists | bool
+      block:
+        - name: Build virtctl upload command
+          ansible.builtin.set_fact:
+            _virtctl_iso_args: >-
+              virtctl image-upload dv {{ ocpv_win_iso_dv_name }}
+              --namespace={{ ocpv_win_namespace }}
+              --size={{ ocpv_win_iso_dv_size }}
+              --storage-class={{ ocpv_win_storage_class }}
+              --image-path={{ ocpv_win_iso_local_path }}
+              --force-bind
+              {{ '--insecure' if ocpv_win_virtctl_insecure | bool else '' }}
+
+        - name: Upload ISO (this may take 10-15 minutes)
+          ansible.builtin.command:
+            cmd: "{{ _virtctl_iso_args }}"
+          async: 7200
+          poll: 60
+          register: _iso_upload
+
+    - name: ISO already exists
+      when: _iso_dv.resources | length > 0
+      ansible.builtin.debug:
+        msg: "ISO DataVolume {{ ocpv_win_iso_dv_name }} already exists — skipping upload."
+
+    # ── 3. Create blank OS DataVolume ──────────────────────────────────────
+    - name: Delete installer VM if recreating (releases RWO DV)
+      when: ocpv_win_os_blank_recreate | bool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ ocpv_win_installer_vm_name }}"
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 600
+      failed_when: false
+
+    - name: Delete existing golden DV if recreating
+      when: ocpv_win_os_blank_recreate | bool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: "{{ ocpv_win_os_blank_dv_name }}"
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 600
+      failed_when: false
+
+    - name: Create blank OS DataVolume
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: "{{ ocpv_win_os_blank_dv_name }}"
+            namespace: "{{ ocpv_win_namespace }}"
+            annotations:
+              cdi.kubevirt.io/storage.bind.immediate.requested: "true"
+          spec:
+            source:
+              blank: {}
+            storage:
+              resources:
+                requests:
+                  storage: "{{ ocpv_win_os_disk_size }}"
+              storageClassName: "{{ ocpv_win_storage_class }}"
+
+    # ── 4. Build autounattend answer ISO ───────────────────────────────────
+    # This is a standalone play — run it as an import_playbook can't be
+    # done from tasks. We use command to invoke it as a subprocess.
+    - name: Delete existing autounattend DV (for rebuild)
+      kubernetes.core.k8s:
+        state: absent
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataVolume
+        name: windows-autounattend-iso
+        namespace: "{{ ocpv_win_namespace }}"
+        wait: true
+        wait_timeout: 300
+      failed_when: false
+
+    - name: Build and upload autounattend ISO (subprocess)
+      ansible.builtin.command:
+        cmd: >-
+          ansible-playbook
+          jt_playbooks/openshift_virtualization/windows/autounattend_iso_pipeline.yml -v
+          -e ocpv_win_autounattend_enabled=true
+          -e ocpv_win_namespace={{ ocpv_win_namespace }}
+          -e ocpv_win_storage_class={{ ocpv_win_storage_class }}
+          -e ocpv_win_autounattend_admin_password='{{ ocpv_win_autounattend_admin_password }}'
+          -e ocpv_unattend_wim_index={{ ocpv_unattend_wim_index }}
+          -e ocpv_win_autounattend_replace_existing=true
+          -e ocpv_win_virtctl_insecure={{ ocpv_win_virtctl_insecure }}
+      register: _autounattend_result
+
+    - name: Show autounattend result
+      ansible.builtin.debug:
+        msg: "{{ _autounattend_result.stdout_lines | last }}"
+
+    # ── 5. Boot installer VM ───────────────────────────────────────────────
+    - name: Apply installer VirtualMachine
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'jt_playbooks/openshift_virtualization/windows/templates/windows_installer_vm.yaml.j2') | from_yaml }}"
+        wait: false
+
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════"
+          - "Installer VM '{{ ocpv_win_installer_vm_name }}' is booting."
+          - "═══════════════════════════════════════════════════════"
+          - "Windows will install unattended (~20-40 min)."
+          - "After install, GoldenBootstrap.ps1 will:"
+          - "  1. Fix mini-setup registry flags"
+          - "  2. Install NetKVM VirtIO driver"
+          - "  3. Download and run prepare-win.ps1"
+          - "  4. Configure WinRM + install Cloudbase-Init"
+          - "  5. Sysprep generalize the image"
+          - ""
+          - "Monitor via console:"
+          - "  oc console {{ ocpv_win_installer_vm_name }} -n {{ ocpv_win_namespace }}"
+          - ""
+          - "When sysprep completes, the VM will shut down."
+          - "The golden DV '{{ ocpv_win_os_blank_dv_name }}' is then ready for cloning."
+          - "═══════════════════════════════════════════════════════"
