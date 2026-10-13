@@ -472,6 +472,8 @@ controller_workflows:
           - Restore
       - identifier: Post-check
         unified_job_template: "OpenShift Virtualization | Patch - Post-check"
+        failure_nodes:
+          - Restore
       - identifier: Restore
         unified_job_template: "OpenShift Virtualization | Patch - Restore from Snapshot"
     survey_spec:

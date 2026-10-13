@@ -16,6 +16,34 @@
           - ocpv_patch_targets is defined and ocpv_patch_targets | length > 0
         fail_msg: "Set ocpv_patch_targets (comma-separated VM names)"
 
+    - name: Verify target VMs exist
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ item }}"
+        namespace: "{{ ocpv_patch_namespace }}"
+      register: _vm_check
+      loop: "{{ ocpv_patch_vm_names }}"
+
+    - name: Fail if any target VM not found
+      ansible.builtin.assert:
+        that:
+          - item.resources | length > 0
+        fail_msg: "VM '{{ item.item }}' not found in namespace {{ ocpv_patch_namespace }}"
+      loop: "{{ _vm_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Delete stale snapshots if they exist (allow re-run)
+      kubernetes.core.k8s:
+        state: absent
+        api_version: snapshot.kubevirt.io/v1beta1
+        kind: VirtualMachineSnapshot
+        name: "{{ ocpv_snapshot_prefix }}-{{ item }}"
+        namespace: "{{ ocpv_patch_namespace }}"
+      loop: "{{ ocpv_patch_vm_names }}"
+      failed_when: false
+
     - name: Create VirtualMachineSnapshot for each target
       kubernetes.core.k8s:
         state: present
