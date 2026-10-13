@@ -1,151 +1,199 @@
 # Mad Hatter
 
 Ansible-driven deployer for Red Hat Ansible Automation Platform (AAP) on
-OpenShift. Provisions AAP, optional add-ons (ContainerLab, OpenShift
-Virtualization product demos, Automation Portal), and applies Configuration
-as Code -- all from a single `ansible-playbook` or `ansible-navigator` command.
+OpenShift. Provisions AAP, optional add-ons (OpenShift Virtualization,
+ServiceNow integration, Self-Service Portal), and applies Configuration
+as Code — all from a single `ansible-playbook` or `ansible-navigator` command.
 
 ## Overview
 
-The project targets two managed OpenShift platforms and separates deployment
-into two phases: **infrastructure provisioning** and **Configuration as Code**.
+The project supports multiple OpenShift environments and separates deployment
+into modular playbooks that follow the `*-deploy.yml` naming convention.
 
-| Phase | Playbook | What it does |
+| Playbook | Purpose |
+|---|---|
+| `infra-deploy.yml` | Platform login, AAP operator, bare-metal nodes (ROSA/ARO) |
+| `casc-deploy.yml` | CasC for SNOW, product demos, ContainerLab (ROSA/ARO) |
+| `aap-deploy.yml` | Deploy AAP operator standalone (any cluster) |
+| `ocpv-deploy.yml` | Deploy OpenShift Virtualization operator |
+| `workshop-deploy.yml` | Deploy OCP-V CasC to pre-provisioned workshop clusters |
+| `windows-golden-deploy.yml` | Build Windows Server golden image from ISO |
+| `portal-deploy.yml` | Self-Service Portal (RHAAP Developer Hub via Helm) |
+| `snow-deploy.yml` | Deploy SNOW catalog items |
+| `ao-deploy.yml` | Automation Orchestrator operator |
+| `rosa-deploy.yml` | ROSA-specific deployment |
+| `aro-deploy.yml` | ARO-specific deployment |
+
+### Supported environments
+
+| Environment | Creds file | Deploy playbooks |
 |---|---|---|
-| **Infra** | `infra-deploy.yml` | Platform login, AAP operator, bare-metal nodes, ContainerLab hypervisor |
-| **CasC** | `casc-deploy.yml` | ServiceNow integration, OCP-V product demos, network workshop CasC |
-| **Portal** | `deploy_portal.yml` | Ansible Automation Portal (Helm) |
-| **AO** | `deploy_ao.yml` | Automation Orchestrator operator |
+| **ROSA** (AWS) | `rosa.creds.yml` | `infra-deploy.yml --tags rosa,aap,ocpv` → `casc-deploy.yml` |
+| **ARO** (Azure) | `aro.creds.yml` | `infra-deploy.yml --tags aro,aap` → `casc-deploy.yml` |
+| **OCP-V Workshop** | `ocp-v-workshop.creds.yml` | `aap-deploy.yml` → `ocpv-deploy.yml` → `workshop-deploy.yml` |
+| **OCP Multi-Cloud** | `ocp-mc.creds.yml` | `aap-deploy.yml` → `ocpv-deploy.yml` → `workshop-deploy.yml` |
 
 ### AAP 2.7
 
-The `aap_operator` role defaults to the `stable-2.7` operator channel.
-Override with `-e aap_operator_operator_channel=stable-2.6` for older
-clusters. Key 2.7 changes this repo accounts for:
+The `aap_operator` role defaults to `stable-2.7`. Key changes this repo accounts for:
 
-- The **platform gateway** is the sole API entry point; direct `/api/v2/` access is removed.
+- The **platform gateway** is the sole API entry point.
 - CasC modules authenticate via gateway OAuth tokens (`ansible.platform.token`).
-- The `ansible.platform` collection replaces the deprecated `ansible.hub` modules.
-- The Automation Portal uses OCI plugin delivery from `registry.redhat.io`.
+- The Self-Service Portal uses OCI plugin delivery from `registry.redhat.io`.
 
 ## Prerequisites
 
 | Tool | Required for | Notes |
 |---|---|---|
-| `ansible-navigator` | Running playbooks inside an EE | [Install guide](https://ansible.readthedocs.io/projects/navigator/installation/) |
+| `ansible-navigator` / `ansible-playbook` | Running playbooks | [Install guide](https://ansible.readthedocs.io/projects/navigator/installation/) |
 | `oc` | All playbooks | Logged into the target cluster |
-| `helm` v3+ | `deploy_portal.yml` | [Install guide](https://helm.sh/docs/intro/install/) |
-| `podman` | Building Execution Environments | Only needed if rebuilding EE images |
+| `helm` v3+ | `portal-deploy.yml` | [Install guide](https://helm.sh/docs/intro/install/) |
+| `virtctl` | `windows-golden-deploy.yml` | Installed from cluster: `oc get consoleclidownload` |
+| `podman` | EE builds, golden image pipeline | Only needed if rebuilding EE images |
 | SSH key pair | AAP machine credentials | Mounted into the EE at `/root/keys/` |
 | AAP manifest | `aap_operator` role | Mounted into the EE at `/root/manifests/manifest.zip` |
 
 ## Quick Start
 
+### ROSA environment
+
 ```bash
-# 1. Clone
+# Clone and configure
 git clone https://github.com/l3acon/mad-hatter.git && cd mad-hatter
+cp examples/user.creds.yml user.creds.yml   # edit with your passwords
+# Copy RHDP YAML tab → rosa.creds.yml
 
-# 2. Copy and fill in credential files
-cp examples/user.creds.yml user.creds.yml        # edit with your passwords/tokens
-# then copy the RHDP YAML tab output for your environment:
-#   ARO -> aro.creds.yml    ROSA -> rosa.creds.yml
+export CONTROLLER_PASSWORD='<aap-admin-password>'
+export AAP_MACHINE_CRED_PASSWORD='<machine-cred-password>'
+export K8S_AUTH_PASSWORD='<openshift-admin-password>'
 
-# 3. Copy the navigator config and adjust volume-mount paths
-cp examples/ansible-navigator.yml ansible-navigator.yml
-
-# 4. Export required environment variables
-export CONTROLLER_PASSWORD='YourAAP AdminPass'
-export AAP_MACHINE_CRED_PASSWORD='MachineCredPass1!'
-export K8S_AUTH_PASSWORD='YourAAP AdminPass'
-
-# 5. Deploy infrastructure (ROSA with AAP as an example)
-ansible-navigator run infra-deploy.yml --tags rosa,aap \
+# Deploy infrastructure + AAP + OCP-V
+ansible-navigator run infra-deploy.yml --tags rosa,aap,ocpv \
   --eei quay.io/matferna/mh-rosa:latest
 
-# 6. Apply Configuration as Code (SNOW + product demos)
+# Apply CasC
 ansible-navigator run casc-deploy.yml --tags snow,apd \
   --eei quay.io/matferna/mh-rosa:latest
+```
+
+### Workshop / standalone OCP environment
+
+```bash
+# Copy RHDP YAML tab → ocp-v-workshop.creds.yml
+# Login to the cluster
+oc login ...
+
+# Deploy AAP (if not pre-installed)
+ansible-playbook aap-deploy.yml
+
+# Deploy OCP-V operator (if not pre-installed)
+ansible-playbook ocpv-deploy.yml
+
+# Deploy CasC (JTs, workflows, inventories, credentials, SNOW)
+ansible-playbook workshop-deploy.yml \
+  -e snow_instance=https://your-snow.service-now.com \
+  -e snow_username=admin \
+  -e snow_password='YourPassword'
 ```
 
 ## Playbooks
 
-### `infra-deploy.yml` -- Infrastructure Provisioning
-
-Use `--tags` to select a platform and features:
+### `infra-deploy.yml` — Infrastructure Provisioning
 
 | Tags | Description |
 |---|---|
-| `--tags rosa,aap` | ROSA login + AAP operator. |
-| `--tags rosa,aap,ocpv` | ROSA + AAP + bare-metal machinepool for OCP Virtualization. |
-| `--tags aro,aap` | ARO login + AAP operator. |
-| `--tags aro,aap,clab` | ARO + AAP + ContainerLab hypervisor. |
+| `--tags rosa,aap` | ROSA login + AAP operator |
+| `--tags rosa,aap,ocpv` | ROSA + AAP + bare-metal machinepool for OCP-V |
+| `--tags aro,aap` | ARO login + AAP operator |
+| `--tags aro,aap,clab` | ARO + AAP + ContainerLab hypervisor |
 
-**Infrastructure:** order an environment from RHDP, then copy the YAML tab:
-- **ARO:** [ARO Open Environment](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/azure-gpte.open-environment-aro4-sub.prod&utm_source=webapp&utm_medium=share-link) → `aro.creds.yml`
-- **ROSA:** [ROSA Open Environment](https://catalog.demo.redhat.com/catalog?item=babylon-catalog-prod/sandboxes-gpte.rosa.prod&utm_source=webapp&utm_medium=share-link) → `rosa.creds.yml`
-
-```bash
-ansible-navigator run infra-deploy.yml --tags rosa,aap \
-  --eei quay.io/matferna/mh-rosa:latest
-```
-
-### `casc-deploy.yml` -- Configuration as Code
-
-Apply CasC to an existing AAP instance. Run after `infra-deploy.yml` or standalone.
+### `casc-deploy.yml` — Configuration as Code
 
 | Tags | Description |
 |---|---|
-| `--tags snow` | ServiceNow integration CasC (CMDB, ITSM, self-service, compliance). |
-| `--tags apd` | OpenShift Virtualization product demos CasC. |
-| `--tags clab` | ContainerLab multi-vendor network workshop CasC. |
-| `--tags snow,apd` | SNOW + product demos. |
-| `--tags apd,clab` | Product demos + network workshop. |
+| `--tags snow` | ServiceNow integration (CMDB, ITSM, self-service, compliance) |
+| `--tags apd` | OpenShift Virtualization product demos |
+| `--tags clab` | ContainerLab multi-vendor network workshop |
+
+### `workshop-deploy.yml` — Workshop CasC
+
+Deploys OCP-V day-2 automation content to pre-provisioned workshop environments.
+Parses `ocp-v-workshop.creds.yml` for cluster/AAP credentials. Includes:
+
+- RHEL VM provisioning (DataSource-backed, RHSM registration, dnf install)
+- Windows VM provisioning (golden DV clone, WinRM, Chocolatey install)
+- KubeVirt dynamic inventories (RHEL + WinRM)
+- ServiceNow integration (acknowledge/update catalog requests)
+- VM lifecycle (start/stop/restart), snapshots, delete
+
+### `windows-golden-deploy.yml` — Windows Golden Image Pipeline
+
+Builds a Windows Server golden image for OCP-V from an ISO:
+
+1. Uploads the Windows ISO to a CDI DataVolume
+2. Builds the autounattend answer ISO (VirtIO drivers + Autounattend.xml + bootstrap)
+3. Creates a blank OS DataVolume
+4. Boots the installer VM for unattended install
 
 ```bash
-# Source credentials first
-source .env
-
-ansible-navigator run casc-deploy.yml --tags snow,apd \
-  --eei quay.io/matferna/mh-rosa:latest
+export OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD='YourPassword'
+ansible-playbook windows-golden-deploy.yml \
+  -e ocpv_win_iso_local_path=~/Downloads/SERVER_EVAL_x64FRE_en-us.iso
 ```
 
-### `deploy_portal.yml` -- Automation Portal
+> **Pre-built golden image:** A pre-built golden image (5.1 GB compressed) is
+> maintained by the repo owner. Contact @l3acon for access. Upload with:
+> ```bash
+> virtctl image-upload dv windows-server-golden --namespace=virt-windows \
+>   --size=60Gi --storage-class=<sc> --image-path=~/Downloads/windows-server-golden.img.gz \
+>   --force-bind --insecure
+> ```
 
-Deploys the Ansible Automation Portal on OpenShift via the
-`redhat-rhaap-portal` Helm chart. Requires AAP 2.7+. Features enabled out of
-the box:
+### `portal-deploy.yml` — Self-Service Portal
 
-- **EE Builder** -- visual wizard for defining Execution Environments.
-- **Content catalog** -- syncs collections from Private Automation Hub and discovers Ansible content in Git orgs.
-- **OCI plugin delivery** -- plugins pulled from `registry.redhat.io`; registry auth is provisioned automatically from the cluster pull-secret.
+Deploys the RHAAP Developer Hub (Backstage) on OpenShift via Helm. Requires AAP 2.7+.
 
 ```bash
-ansible-playbook deploy_portal.yml \
+ansible-playbook portal-deploy.yml \
   -e controller_host=https://aap.apps.example.com \
   -e controller_username=admin \
-  -e controller_password='YourPassword' \
-  -e github_token=ghp_xxxxxxxxxxxxxxxxxxxx   # optional, enables save-to-Git
+  -e controller_password='YourPassword'
 ```
 
-See [roles/self-service/README.md](roles/self-service/README.md) for the full
-variable reference, tag list, and troubleshooting.
+### `aap-deploy.yml` — AAP Operator (standalone)
 
-### Deprecated playbooks
+Deploys the AAP operator on any cluster without ROSA/ARO dependencies.
 
-The following playbooks are thin wrappers that `import_playbook` the new
-playbooks. They will be removed in a future release.
+### `ocpv-deploy.yml` — OCP-V Operator
 
-| Old | Replacement |
+Deploys the OpenShift Virtualization (CNV) operator and HyperConverged CR.
+
+## Roles
+
+| Role | Purpose |
 |---|---|
-| `deploy_aro.yml` | `infra-deploy.yml --tags aro,...` |
-| `deploy_rosa.yml` | `infra-deploy.yml --tags rosa,...` |
-| `deploy_snow.yml` | `casc-deploy.yml --tags snow` |
+| `aap_operator` | Install AAP operator + manifest injection |
+| `ocpv_operator` | Install OCP-V operator + HyperConverged CR |
+| `openshift_virtualization_aap` | Full OCP-V CasC for ROSA (JTs, workflows, SNOW, cost optimization) |
+| `workshop_aap` | Lightweight OCP-V CasC for workshop environments |
+| `workshop_creds` | Parse workshop ResourceClaim YAML for cluster/AAP credentials |
+| `rosa_creds` | Parse ROSA ResourceClaim for AWS/cluster credentials |
+| `user_creds` | Parse user credentials (AAP password, SSH keys, manifest) |
+| `snow` | ServiceNow CMDB/ITSM integration CasC |
+| `product_demos` | Ansible Product Demos bootstrap |
+| `self-service` | Self-Service Portal (Helm deployment) |
+| `install_operator` | Generic OLM operator installer |
+| `ao_operator` | Automation Orchestrator operator |
 
 ## JT Playbooks
 
-Job template playbooks (used by AAP job templates that reference this
-project as an SCM source) live in `jt_playbooks/`. These are not run
-directly -- they are launched by AAP workflows and job templates.
+Job template playbooks live in `jt_playbooks/` — launched by AAP, not run directly.
+
+| Directory | Content |
+|---|---|
+| `jt_playbooks/openshift_virtualization/` | VM create, delete, lifecycle, backup, provision (RHEL + Windows) |
+| `jt_playbooks/openshift_virtualization/windows/` | Golden image pipeline, autounattend, VirtIO drivers |
+| `jt_playbooks/snow/` | ServiceNow ITSM, CMDB, self-service, catalog deploy |
 
 ## Configuration
 
@@ -153,50 +201,37 @@ directly -- they are launched by AAP workflows and job templates.
 
 | File | Source | Used by |
 |---|---|---|
-| `user.creds.yml` | Copy from [examples/user.creds.yml](examples/user.creds.yml) | All playbooks -- AAP admin password, Lightspeed token |
-| `aro.creds.yml` | RHDP YAML tab (ARO) | `infra-deploy.yml --tags aro` -- cluster API URL, kubeadmin password, Azure SP |
-| `rosa.creds.yml` | RHDP YAML tab (ROSA) | `infra-deploy.yml --tags rosa` -- bastion host, cluster details, AWS keys |
+| `user.creds.yml` | [examples/user.creds.yml](examples/user.creds.yml) | AAP admin password, SSH keys, RHSM credentials |
+| `rosa.creds.yml` | RHDP YAML tab (ROSA) | `infra-deploy.yml --tags rosa` |
+| `aro.creds.yml` | RHDP YAML tab (ARO) | `infra-deploy.yml --tags aro` |
+| `ocp-v-workshop.creds.yml` | RHDP YAML tab (OCP-V Workshop) | `workshop-deploy.yml` |
+| `ocp-mc.creds.yml` | RHDP YAML tab (OCP Multi-Cloud) | `workshop-deploy.yml` |
 
 ### Environment variables
 
-These are passed through `ansible-navigator` (or exported in your shell) and
-consumed by the `user_creds` role:
-
-| Variable | Maps to | Description |
-|---|---|---|
-| `CONTROLLER_PASSWORD` | `aap_admin_password` | AAP admin password |
-| `AAP_MACHINE_CRED_PASSWORD` | `aap_machine_cred_password` | Machine credential password (must meet Windows complexity: 8+ chars, 3 of 4 character classes) |
-| `K8S_AUTH_PASSWORD` | `openshift_admin_password` | OpenShift admin password (also set in `user.creds.yml`) |
-
-### ansible-navigator
-
-Copy [examples/ansible-navigator.yml](examples/ansible-navigator.yml) to the
-project root and adjust the volume-mount `src` paths to your local key and
-manifest directories. The example mounts `~/keys` to `/root/keys` and
-`~/manifests` to `/root/manifests` inside the EE.
+| Variable | Description |
+|---|---|
+| `CONTROLLER_PASSWORD` | AAP admin password |
+| `AAP_MACHINE_CRED_PASSWORD` | Machine credential password (Windows complexity: 8+ chars, 3/4 classes) |
+| `K8S_AUTH_PASSWORD` | OpenShift admin password |
+| `OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD` | Windows golden image admin password |
 
 ## Execution Environments
 
-Pre-built images are available at `quay.io/matferna/mh-aro:latest` and
-`quay.io/matferna/mh-rosa:latest`. To rebuild or customize, see
-[execution_environments/README.md](execution_environments/README.md) for
-build scripts, registry authentication, and validation.
+Pre-built images:
+- `quay.io/matferna/mh-rosa:latest` — ROSA / general OCP-V automation
+- `quay.io/matferna/mh-windows:latest` — Windows automation (ansible.windows + pywinrm)
+
+See [execution_environments/README.md](execution_environments/README.md) for build instructions.
 
 ## Troubleshooting
 
-**CasC module errors are redacted by default.** Add the following flag to see
-full credential/config details in the Ansible output:
+**CasC module errors redacted:** Add `-e controller_configuration_credentials_secure_logging=false`
 
-```bash
--e controller_configuration_credentials_secure_logging=false
-```
+**Portal init CrashLoopBackOff:** OCI plugin pull failure. Check `oc describe pod` — usually missing registry auth. See [roles/self-service/README.md](roles/self-service/README.md#troubleshooting).
 
-**Portal init container `CrashLoopBackOff`:** usually an OCI plugin pull
-failure. Check pod events with `oc describe pod` -- common causes are missing
-registry auth or an image tag mismatch. See
-[roles/self-service/README.md](roles/self-service/README.md#troubleshooting).
+**AAP 503 during manifest injection:** Gateway is up before controller API. Wait for `/api/controller/v2/ping/` to return 200.
 
-**AAP controller 503 during manifest injection:** the gateway may be up before
-the controller API is fully ready. The `aap_operator` role includes a readiness
-check, but if running manually, wait for
-`/api/controller/v2/ping/` to return 200.
+**Windows golden image build stuck:** Check VM console (`oc console <vm> -n virt-windows`). Common issues: VirtIO drivers not loading in WinPE, disk partitioning errors.
+
+**WinRM connection refused on cloned Windows VMs:** Non-sysprepped clones go through post-clone OOBE with WinRM restart. The playbook includes a 90s settle delay + IP re-probe to handle this.
