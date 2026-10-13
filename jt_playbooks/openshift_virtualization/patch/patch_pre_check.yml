@@ -1,0 +1,58 @@
+---
+# Pre-check: identify missing security advisories on RHEL VMs.
+- name: Pre-check patch applicability
+  hosts: "{{ ocpv_patch_targets | default('all') }}"
+  become: true
+  gather_facts: false
+  vars:
+    _raw_cve_input: "{{ input_cve_ids | default('all') }}"
+    patch_all_security: "{{ _raw_cve_input | trim | lower == 'all' }}"
+    cve_advisory_ids: >-
+      {{ [] if patch_all_security else
+         (_raw_cve_input.split(',') | map('trim') | list) }}
+  tasks:
+    - name: Register with RHSM if credentials available
+      when:
+        - rhsm_username is defined
+        - rhsm_username | default('') | length > 0
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ rhsm_username }}"
+        password: "{{ rhsm_password }}"
+        auto_attach: true
+      register: _rhsm
+      failed_when: false
+
+    - name: Check RHSM status
+      ansible.builtin.command: subscription-manager identity
+      register: _rhsm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Set registration fact
+      ansible.builtin.set_fact:
+        rhsm_registered: "{{ _rhsm_check.rc == 0 }}"
+
+    - name: Query DNF for applicable advisories
+      ansible.builtin.command: >-
+        dnf updateinfo list
+        {{ 'security' if patch_all_security else
+           cve_advisory_ids | map('regex_replace', '^', '--advisory=') | join(' ') }}
+      register: _dnf_check
+      changed_when: false
+      when: rhsm_registered | bool
+
+    - name: Identify missing patches
+      ansible.builtin.set_fact:
+        missing_patches: >-
+          {{ (_dnf_check.stdout_lines | default([])
+              | map('regex_search', '(RHSA-\d{4}:\d+|CVE-\d{4}-\d+)')
+              | select('string') | list | unique) }}
+        patch_needed: true
+      when: rhsm_registered | bool
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: {{ missing_patches | default([]) | length }} advisories pending
+          {{ '(RHSM not registered — skipped)' if not (rhsm_registered | default(false) | bool) else '' }}

@@ -1,0 +1,52 @@
+---
+# Apply security patches to RHEL VMs.
+- name: Apply security patches
+  hosts: "{{ ocpv_patch_targets | default('all') }}"
+  become: true
+  gather_facts: false
+  vars:
+    _raw_cve_input: "{{ input_cve_ids | default('all') }}"
+    patch_all_security: "{{ _raw_cve_input | trim | lower == 'all' }}"
+    cve_advisory_ids: >-
+      {{ [] if patch_all_security else
+         (_raw_cve_input.split(',') | map('trim') | list) }}
+  tasks:
+    - name: Register with RHSM if credentials available
+      when:
+        - rhsm_username is defined
+        - rhsm_username | default('') | length > 0
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ rhsm_username }}"
+        password: "{{ rhsm_password }}"
+        auto_attach: true
+      failed_when: false
+
+    - name: Check RHSM status
+      ansible.builtin.command: subscription-manager identity
+      register: _rhsm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Apply security updates
+      ansible.builtin.command:
+        cmd: >-
+          dnf update -y
+          {{ '--security' if (patch_all_security | bool) else
+             '--advisory=' ~ (cve_advisory_ids | join(' --advisory=')) }}
+      register: _dnf_result
+      changed_when: "'Nothing to do' not in _dnf_result.stdout"
+      when: _rhsm_check.rc == 0
+
+    - name: Check if reboot required
+      ansible.builtin.command: needs-restarting -r
+      register: _reboot_check
+      failed_when: false
+      changed_when: false
+      when: _rhsm_check.rc == 0
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "{{ inventory_hostname }}: {{ 'Patches applied' if _dnf_result.changed | default(false) else 'No updates needed' }}"
+          - "Reboot required: {{ 'YES' if (_reboot_check.rc | default(0)) != 0 else 'NO' }}"

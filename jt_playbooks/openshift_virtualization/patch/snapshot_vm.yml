@@ -1,0 +1,51 @@
+---
+# Take a VirtualMachineSnapshot before patching (OCP-V equivalent of EC2 snapshot).
+- name: Snapshot VirtualMachines before patching
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    ocpv_patch_namespace: "{{ ocpv_vm_namespace | default('virt-rhel') }}"
+    ocpv_patch_vm_names: "{{ ocpv_patch_targets.split(',') | map('trim') | list }}"
+    ocpv_snapshot_prefix: "patch-snapshot"
+  tasks:
+    - name: Validate inputs
+      ansible.builtin.assert:
+        that:
+          - ocpv_patch_targets is defined and ocpv_patch_targets | length > 0
+        fail_msg: "Set ocpv_patch_targets (comma-separated VM names)"
+
+    - name: Create VirtualMachineSnapshot for each target
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: snapshot.kubevirt.io/v1beta1
+          kind: VirtualMachineSnapshot
+          metadata:
+            name: "{{ ocpv_snapshot_prefix }}-{{ item }}"
+            namespace: "{{ ocpv_patch_namespace }}"
+          spec:
+            source:
+              apiGroup: kubevirt.io
+              kind: VirtualMachine
+              name: "{{ item }}"
+      loop: "{{ ocpv_patch_vm_names }}"
+
+    - name: Wait for snapshots to be ready
+      kubernetes.core.k8s_info:
+        api_version: snapshot.kubevirt.io/v1beta1
+        kind: VirtualMachineSnapshot
+        name: "{{ ocpv_snapshot_prefix }}-{{ item }}"
+        namespace: "{{ ocpv_patch_namespace }}"
+      register: _snap
+      until: >-
+        _snap.resources | length > 0
+        and (_snap.resources[0].status.readyToUse | default(false) | bool)
+      retries: 30
+      delay: 10
+      loop: "{{ ocpv_patch_vm_names }}"
+
+    - name: Display snapshot summary
+      ansible.builtin.debug:
+        msg: "Created snapshots for: {{ ocpv_patch_vm_names | join(', ') }}"

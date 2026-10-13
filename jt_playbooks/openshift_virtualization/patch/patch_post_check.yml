@@ -1,0 +1,37 @@
+---
+# Post-check: verify patches were applied successfully.
+- name: Post-check patch verification
+  hosts: "{{ ocpv_patch_targets | default('all') }}"
+  become: true
+  gather_facts: false
+  vars:
+    _raw_cve_input: "{{ input_cve_ids | default('all') }}"
+    patch_all_security: "{{ _raw_cve_input | trim | lower == 'all' }}"
+    cve_advisory_ids: >-
+      {{ [] if patch_all_security else
+         (_raw_cve_input.split(',') | map('trim') | list) }}
+  tasks:
+    - name: Query DNF for remaining advisories
+      ansible.builtin.command: >-
+        dnf updateinfo list
+        {{ 'security' if patch_all_security else
+           cve_advisory_ids | map('regex_replace', '^', '--advisory=') | join(' ') }}
+      register: _post_check
+      changed_when: false
+
+    - name: Identify remaining patches
+      ansible.builtin.set_fact:
+        remaining_patches: >-
+          {{ (_post_check.stdout_lines | default([])
+              | map('regex_search', '(RHSA-\d{4}:\d+|CVE-\d{4}-\d+)')
+              | select('string') | list | unique) }}
+
+    - name: Determine compliance
+      ansible.builtin.set_fact:
+        is_compliant: "{{ remaining_patches | length == 0 }}"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ 'COMPLIANT' if is_compliant else 'NON-COMPLIANT — remaining: ' ~ remaining_patches | join(', ') }}
