@@ -5,6 +5,7 @@
   become: true
   gather_facts: false
   vars:
+    ansible_user: cloud-user
     _raw_cve_input: "{{ input_cve_ids | default('all') }}"
     patch_all_security: "{{ _raw_cve_input | trim | lower == 'all' }}"
     cve_advisory_ids: >-
