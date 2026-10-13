@@ -335,9 +335,13 @@
       ansible.builtin.wait_for:
         host: "{{ ocpv_guest_ip }}"
         port: "{{ ocpv_windows_winrm_port | default(5985) }}"
-        delay: 15
+        delay: 30
         timeout: 900
         state: started
+
+    - name: Allow WinRM service to fully initialize after port open
+      ansible.builtin.pause:
+        seconds: "{{ ocpv_windows_winrm_settle_delay | default(60) }}"
 
     - name: Add guest to in-memory inventory for WinRM
       ansible.builtin.add_host:
