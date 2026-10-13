@@ -1,7 +1,11 @@
 ---
 # Post-check: verify patches were applied successfully.
 - name: Post-check patch verification
-  hosts: "{{ ocpv_patch_targets | default('all') }}"
+  hosts: "{{ _ocpv_inventory_hosts }}"
+  vars:
+    _ocpv_ns: "{{ ocpv_vm_namespace | default('virt-rhel') }}"
+    _ocpv_inventory_hosts: >-
+      {{ ocpv_patch_targets.split(',') | map('trim') | map('regex_replace', '^(?!' ~ _ocpv_ns ~ '-)', _ocpv_ns ~ '-') | join(':') }}
   become: true
   gather_facts: false
   vars:
