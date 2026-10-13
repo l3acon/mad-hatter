@@ -18,6 +18,25 @@
 #     -e ocpv_win_iso_local_path=~/Downloads/SERVER_EVAL_x64FRE_en-us.iso
 #
 # Repeatable: safe to re-run. Uses replace_existing flags to rebuild from scratch.
+#
+# ── Pre-built golden image shortcut ──────────────────────────────────────────
+# A pre-built golden image (5.1 GB compressed) is maintained by the repo owner.
+# Contact @l3acon for access. To skip the 30-60 min build and upload directly:
+#
+#   virtctl image-upload dv windows-server-golden \
+#     --namespace=virt-windows \
+#     --size=60Gi \
+#     --storage-class=<your-storage-class> \
+#     --image-path=~/Downloads/windows-server-golden.img.gz \
+#     --force-bind --insecure
+#
+# The image contains: Windows Server 2022 Datacenter Evaluation (Desktop Experience)
+#   - WinRM HTTP (5985) + HTTPS (5986) enabled, AllowUnencrypted=true, NTLM auth
+#   - Administrator password: set during build via OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD
+#   - VirtIO storage + network drivers installed
+#   - No Cloudbase-Init (prepare-win.ps1 did not complete in workshop environments)
+#   - Not sysprepped (clone boots with same password, may do post-clone OOBE)
+# ─────────────────────────────────────────────────────────────────────────────
 - name: Build Windows Server golden image for OCP-V
   hosts: localhost
   connection: local

@@ -33,6 +33,7 @@ workshop_aap_snow_credential_name: "ServiceNow Credential"
 workshop_aap_snow_ee_image: "registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9:latest"
 workshop_aap_snow_ee_name: "ServiceNow EE"
 workshop_aap_snow_workflow_name: "ServiceNow | Provision OpenShift VM (end-to-end)"
+workshop_aap_snow_windows_workflow_name: "ServiceNow | Provision Windows VM (end-to-end)"
 
 workshop_aap_rhsm_enabled: false
 workshop_aap_rhsm_credential_name: "Red Hat Subscription"

@@ -124,6 +124,53 @@ snow_catalog_items:
         help_text: "Package name to install via dnf (e.g. vim, httpd, git)"
         order: 400
 
+  - name: "Provision Windows VM"
+    short_description: "Provision a Windows Server VM on OpenShift Virtualization and install software"
+    description: |
+      Self-service provisioning of a Windows Server 2022 virtual machine on OpenShift
+      Virtualization. Backed by an AAP workflow that:
+      1. Acknowledges your request (updates RITM state)
+      2. Clones a golden Windows Server image
+      3. Creates the VM and waits for WinRM connectivity
+      4. Installs the requested Chocolatey package
+      5. Updates this request with completion status
+    category: Infrastructure
+    catalog: Ansible Automation Platform
+    aap_resource_type: workflow_job_template
+    aap_resource_name: "ServiceNow | Provision Windows VM (end-to-end)"
+    variables:
+      - name: ocpv_vm_name
+        label: VM Name
+        type: String
+        mandatory: true
+        help_text: "A unique name for the virtual machine (lowercase, no spaces)"
+        order: 100
+      - name: ocpv_instancetype_name
+        label: Instance Size
+        type: Select Box
+        mandatory: true
+        default_value: u1.xlarge
+        choices:
+          - label: "Medium (1 vCPU, 4 GiB)"
+            value: u1.medium
+          - label: "Large (2 vCPU, 8 GiB)"
+            value: u1.large
+          - label: "XLarge (4 vCPU, 16 GiB)"
+            value: u1.xlarge
+        order: 200
+      - name: ocpv_windows_admin_password
+        label: Administrator Password
+        type: SecureString
+        mandatory: true
+        help_text: "Password for the local Administrator account"
+        order: 300
+      - name: ocpv_post_package_name
+        label: Chocolatey Package
+        type: String
+        mandatory: true
+        help_text: "Package name to install via Chocolatey (e.g. notepadplusplus, firefox)"
+        order: 400
+
   - name: "Create Incident"
     short_description: "Create a new incident via Ansible Automation Platform"
     description: |
