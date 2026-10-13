@@ -339,9 +339,41 @@
         timeout: 900
         state: started
 
-    - name: Allow WinRM service to fully initialize after port open
+    - name: Allow Windows to complete post-clone setup (reboots, OOBE)
       ansible.builtin.pause:
-        seconds: "{{ ocpv_windows_winrm_settle_delay | default(60) }}"
+        seconds: "{{ ocpv_windows_winrm_settle_delay | default(90) }}"
+
+    - name: Re-check VMI IP after settle (may change after reboot)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ ocpv_vm_name }}"
+        namespace: "{{ ocpv_vm_namespace }}"
+      register: ocpv_vmi_recheck
+      until: >-
+        ocpv_vmi_recheck.resources | length > 0
+        and (ocpv_vmi_recheck.resources[0].status.interfaces | default([])
+             | selectattr('ipAddress', 'defined')
+             | map(attribute='ipAddress')
+             | list | length > 0)
+      retries: 20
+      delay: 15
+
+    - name: Update guest IP from re-check
+      ansible.builtin.set_fact:
+        ocpv_guest_ip: >-
+          {{ ocpv_vmi_recheck.resources[0].status.interfaces
+             | selectattr('ipAddress', 'defined')
+             | map(attribute='ipAddress')
+             | first }}
+
+    - name: Wait for WinRM to stabilize on final IP
+      ansible.builtin.wait_for:
+        host: "{{ ocpv_guest_ip }}"
+        port: "{{ ocpv_windows_winrm_port | default(5985) }}"
+        delay: 10
+        timeout: 600
+        state: started
 
     - name: Add guest to in-memory inventory for WinRM
       ansible.builtin.add_host:
