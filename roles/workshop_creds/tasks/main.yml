@@ -6,19 +6,20 @@
 
 - name: Extract cluster access vars from workshop provision data
   ansible.builtin.set_fact:
-    openshift_api_url: "{{ workshop_provision_data.openshift_api_url | default(workshop_provision_data.openshift_api_server_url) }}"
-    openshift_console_url: "{{ workshop_provision_data.openshift_cluster_console_url | default(workshop_provision_data.openshift_console_url) }}"
-    openshift_bearer_token: "{{ workshop_provision_data.openshift_bearer_token | default('') }}"
-    openshift_admin_password: "{{ workshop_provision_data.openshift_cluster_admin_password }}"
+    openshift_api_url: "{{ workshop_provision_data.openshift_api_url | default(workshop_provision_data.openshift_api_server_url | default('')) }}"
+    openshift_console_url: "{{ workshop_provision_data.openshift_cluster_console_url | default(workshop_provision_data.openshift_console_url | default('')) }}"
+    openshift_bearer_token: "{{ workshop_provision_data.openshift_bearer_token | default(workshop_provision_data.openshift_cluster_admin_token | default('')) }}"
+    openshift_admin_password: "{{ workshop_provision_data.openshift_cluster_admin_password | default(workshop_provision_data.openshift_kubeadmin_password | default('')) }}"
     openshift_kubeadmin_password: "{{ workshop_provision_data.openshift_kubeadmin_password | default('') }}"
     openshift_ingress_domain: "{{ workshop_provision_data.openshift_cluster_ingress_domain | default('') }}"
 
 - name: Extract AAP vars from workshop provision data
   ansible.builtin.set_fact:
-    aap_hostname: "{{ workshop_provision_data.aap_controller_web_url }}"
+    aap_hostname: "{{ workshop_provision_data.aap_controller_web_url | default('') }}"
     aap_username: "{{ workshop_provision_data.aap_controller_admin_user | default('admin') }}"
-    aap_password: "{{ workshop_provision_data.aap_controller_admin_password }}"
+    aap_password: "{{ workshop_provision_data.aap_controller_admin_password | default('') }}"
     aap_controller_token: "{{ workshop_provision_data.aap_controller_token | default('') }}"
+  when: aap_hostname is not defined or aap_hostname | length == 0
 
 - name: Extract workshop metadata
   ansible.builtin.set_fact:
