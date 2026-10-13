@@ -1,11 +1,7 @@
 ---
 # Pre-check: identify missing security advisories on RHEL VMs.
 - name: Pre-check patch applicability
-  hosts: "{{ _ocpv_inventory_hosts }}"
-  vars:
-    _ocpv_ns: "{{ ocpv_vm_namespace | default('virt-rhel') }}"
-    _ocpv_inventory_hosts: >-
-      {{ ocpv_patch_targets.split(',') | map('trim') | map('regex_replace', '^(?!' ~ _ocpv_ns ~ '-)', _ocpv_ns ~ '-') | join(':') }}
+  hosts: "{{ ocpv_patch_targets.split(',') | map('trim') | map('regex_replace', '^(?!' ~ (ocpv_vm_namespace | default('virt-rhel')) ~ '-)', (ocpv_vm_namespace | default('virt-rhel')) ~ '-') | join(':') }}"
   become: true
   gather_facts: false
   vars:
