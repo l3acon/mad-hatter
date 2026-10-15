@@ -36,9 +36,9 @@ aap_operator_extra_wait_minutes: 10
 aap_operator_disable_lightspeed: true
 aap_operator_disable_lightspeed_chatbot_config_secret_name: chatbot-configuration-secret
 aap_operator_chatbot_llm_provider_type: openai
-aap_operator_chatbot_model: gpt-4o-mini
+aap_operator_chatbot_model: gpt-oss-120b
 aap_operator_chatbot_token: REPLACEME
-aap_operator_chatbot_url: https://api.openai.com/v1/
+aap_operator_chatbot_url: https://maas-rhdp.apps.maas.redhatworkshops.io/v1/
 
 
 # ---------------------------------------------------------------
