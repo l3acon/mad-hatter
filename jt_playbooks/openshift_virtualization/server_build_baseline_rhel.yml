@@ -1,0 +1,52 @@
+---
+- name: Discover the approved RHEL guest
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Discover guest connectivity
+      ansible.builtin.include_tasks: tasks/server_build_discover_guest.yml
+
+    - name: Add RHEL guest using the attached Machine credential
+      ansible.builtin.add_host:
+        name: server_build_rhel_guest
+        groups: server_build_rhel_guests
+        ansible_host: "{{ server_build_guest_ip }}"
+        ansible_user: "{{ server_build_ssh_user }}"
+        ansible_connection: ssh
+
+- name: Apply and verify the RHEL ownership notice
+  hosts: server_build_rhel_guests
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Wait for SSH authentication and guest readiness
+      ansible.builtin.wait_for_connection:
+        timeout: 900
+
+    - name: Install the standard message of the day
+      ansible.builtin.copy:
+        dest: /etc/motd
+        content: "{{ server_build_banner_text | trim }}\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Read back the message of the day
+      ansible.builtin.slurp:
+        src: /etc/motd
+      register: server_build_motd
+
+    - name: Verify the ownership notice
+      ansible.builtin.assert:
+        that:
+          - server_build_motd.content | b64decode == (server_build_banner_text | trim ~ '\n')
+
+    - name: Publish verified server details
+      ansible.builtin.set_stats:
+        data:
+          server_build_verified: true
+          server_build_guest_ip: "{{ ansible_host }}"
+        per_host: false

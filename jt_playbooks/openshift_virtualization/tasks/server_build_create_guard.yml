@@ -1,0 +1,37 @@
+---
+- name: Require the authorization artifact from the ServiceNow preflight node
+  ansible.builtin.assert:
+    that:
+      - server_build_authorized | default(false) | bool
+      - server_build_parameters.server_build_os == server_build_expected_os
+      - server_build_parameters.ocpv_vm_name is match('^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')
+      - server_build_parameters.ocpv_vm_name | length <= 63
+      - server_build_namespace | length > 0
+    fail_msg: This job requires an authorized server-build workflow.
+
+- name: Check whether the VM name is already in use
+  kubernetes.core.k8s_info:
+    api_version: kubevirt.io/v1
+    kind: VirtualMachine
+    namespace: "{{ server_build_namespace }}"
+    name: "{{ server_build_parameters.ocpv_vm_name }}"
+  register: server_build_existing_vm
+
+- name: Check whether the new root disk name is already in use
+  kubernetes.core.k8s_info:
+    api_version: "{{ item.api }}"
+    kind: "{{ item.kind }}"
+    namespace: "{{ server_build_namespace }}"
+    name: >-
+      {{ server_build_parameters.ocpv_vm_name }}{{ '-rootdisk' if server_build_expected_os == 'rhel' else '-win-os' }}
+  loop:
+    - {api: cdi.kubevirt.io/v1beta1, kind: DataVolume}
+    - {api: v1, kind: PersistentVolumeClaim}
+  register: server_build_existing_disks
+
+- name: Refuse to adopt or modify an existing VM or disk
+  ansible.builtin.assert:
+    that:
+      - server_build_existing_vm.resources | length == 0
+      - server_build_existing_disks.results | map(attribute='resources') | flatten | length == 0
+    fail_msg: The requested VM or root disk already exists. Choose another VM name or investigate the previous build.

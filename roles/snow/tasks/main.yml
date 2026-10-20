@@ -5,12 +5,30 @@
       - aap_hostname is defined
       - aap_username is defined
       - aap_password is defined
+      - aap_password | default('', true) | string | trim | length > 0
       - snow_instance | length > 0
       - snow_username | length > 0
       - snow_password | length > 0
     fail_msg: >-
       Missing required variables. Ensure aap_hostname, aap_username, aap_password,
       and SNOW_INSTANCE/SNOW_USERNAME/SNOW_PASSWORD environment variables are set.
+
+- name: Require the ContainerLab device password
+  ansible.builtin.assert:
+    that:
+      - snow_clab_device_password | default('', true) | string | trim | length > 0
+      - snow_clab_device_password is match('^[A-Za-z0-9!@#%^*()_+=.,:-]+$')
+    fail_msg: >-
+      Set clab_device_password in user.creds.yml, snow_clab_device_password,
+      or CLAB_DEVICE_PASSWORD. Device configuration supports letters, digits,
+      and !@#%^*()_+=.,:- without whitespace.
+
+- name: Require the ServiceNow portal user's password when enabled
+  when: snow_ssp_user_enabled | bool
+  ansible.builtin.assert:
+    that:
+      - snow_ssp_user_password | default('', true) | string | trim | length > 0
+    fail_msg: Set snow_ssp_user_password or SNOW_SSP_USER_PASSWORD, or disable snow_ssp_user_enabled.
 
 - name: Build ServiceNow credential for dispatch
   ansible.builtin.set_fact:
@@ -113,7 +131,6 @@
         ansible_port: 2122
         ansible_network_os: cisco.nxos.nxos
         ansible_user: admin
-        ansible_password: "admin@123"
         ansible_connection: ansible.netcommon.network_cli
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
     - name: cat8kv
@@ -121,7 +138,6 @@
         ansible_port: 2123
         ansible_network_os: cisco.ios.ios
         ansible_user: admin
-        ansible_password: "admin@123"
         ansible_connection: ansible.netcommon.network_cli
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
   loop_control:
@@ -171,12 +187,47 @@
     credential_type: Machine
     inputs:
       username: admin
-      password: "admin@123"
+      password: "{{ snow_clab_device_password }}"
     state: present
     controller_host: "{{ aap_hostname }}"
     controller_username: "{{ aap_username }}"
     controller_password: "{{ aap_password }}"
     validate_certs: "{{ snow_aap_verify_ssl }}"
+  no_log: true
+
+- name: Ensure ContainerLab bootstrap credential type exists
+  ansible.controller.credential_type:
+    name: Containerlab Bootstrap
+    kind: cloud
+    inputs:
+      fields:
+        - id: password
+          type: string
+          label: Device administrator password
+          secret: true
+      required: [password]
+    injectors:
+      env:
+        CLAB_DEVICE_PASSWORD: "{% raw %}{{ password }}{% endraw %}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+
+- name: Ensure ContainerLab bootstrap credential exists
+  ansible.controller.credential:
+    name: Containerlab Bootstrap
+    organization: Default
+    credential_type: Containerlab Bootstrap
+    inputs:
+      password: "{{ snow_clab_device_password }}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ snow_aap_verify_ssl }}"
+  no_log: true
 
 - name: Create self-service portal user on the controller
   when: snow_ssp_user_enabled | bool

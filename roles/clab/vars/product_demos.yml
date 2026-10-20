@@ -12,7 +12,7 @@ controller_hosts:
     enabled: true
     variables:
       ansible_user: admin
-      ansible_password: Admin_1234!
+      ansible_password: "{{ clab_device_password }}"
       ansible_network_os: cisco.nxos.nxos
       ansible_connection: ansible.netcommon.network_cli
       ansible_host: sandbox-nxos-1.cisco.com

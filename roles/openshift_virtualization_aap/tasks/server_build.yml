@@ -1,0 +1,68 @@
+---
+- name: Validate approval-driven server-build prerequisites
+  ansible.builtin.assert:
+    that:
+      - openshift_virt_aap_server_build_enabled | bool
+      - openshift_virt_aap_snow_enabled | bool
+      - openshift_virt_aap_snow_instance | length > 0
+      - openshift_virt_aap_snow_username | length > 0
+      - openshift_virt_aap_snow_password | length > 0
+      - openshift_virt_aap_vm_ssh_machine_cred_enabled | bool
+      - openshift_virt_aap_server_build_windows_password | length > 0
+      - openshift_virt_aap_server_build_banner_text | trim | length > 0
+      - openshift_virt_aap_server_build_windows_golden_dv | length > 0
+    fail_msg: Configure ServiceNow, the RHEL SSH keypair, the Windows golden image password, and the ownership notice.
+  no_log: true
+
+- name: Ensure the server-build Windows credential type exists
+  ansible.controller.credential_type:
+    name: Server Build Windows
+    kind: cloud
+    inputs:
+      fields:
+        - id: username
+          type: string
+          label: Golden image Administrator username
+        - id: password
+          type: string
+          label: Golden image Administrator password
+          secret: true
+      required: [username, password]
+    injectors:
+      env:
+        SERVER_BUILD_WINDOWS_USER: "{% raw %}{{ username }}{% endraw %}"
+        SERVER_BUILD_WINDOWS_PASSWORD: "{% raw %}{{ password }}{% endraw %}"
+    state: present
+    controller_host: "{{ aap_hostname }}"
+    controller_username: "{{ aap_username }}"
+    controller_password: "{{ aap_password }}"
+    validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
+
+- name: Load server-build job and workflow definitions
+  ansible.builtin.include_vars: "{{ role_path }}/vars/server_build.yml"
+
+- name: Merge server-build configuration for dispatch
+  ansible.builtin.set_fact:
+    controller_credentials: >-
+      {{ controller_credentials + [{
+        'name': openshift_virt_aap_server_build_windows_credential_name,
+        'credential_type': 'Server Build Windows',
+        'organization': 'Default',
+        'update_secrets': true,
+        'inputs': {
+          'username': openshift_virt_aap_server_build_windows_username,
+          'password': openshift_virt_aap_server_build_windows_password
+        }
+      }, {
+        'name': openshift_virt_aap_server_build_rhel_credential_name,
+        'credential_type': 'Machine',
+        'organization': 'Default',
+        'update_secrets': true,
+        'inputs': {
+          'username': openshift_virt_aap_server_build_rhel_username,
+          'ssh_key_data': lookup('file', openshift_virt_aap_vm_ssh_private_key_file)
+        }
+      }] }}
+    controller_templates: "{{ controller_templates + openshift_virt_aap_server_build_templates }}"
+    controller_workflows: "{{ controller_workflows + openshift_virt_aap_server_build_workflows }}"
+  no_log: true

@@ -37,7 +37,7 @@ controller_hosts:
     enabled: true
     variables:
       ansible_user: admin
-      ansible_password: Admin_1234!
+      ansible_password: "{{ mvnw_sandbox_password }}"
       ansible_network_os: cisco.nxos.nxos
       ansible_connection: ansible.netcommon.network_cli
       ansible_host: sandbox-nxos-1.cisco.com
@@ -104,7 +104,7 @@ controller_credentials:
     credential_type: "Machine"
     inputs:
       username: "admin"
-      password: "ansible@123"
+      password: "{{ mvnw_machine_password }}"
 
 #  - name: Gitea Credential
 #    organization: "Red Hat network organization"
@@ -112,7 +112,7 @@ controller_credentials:
 #    description: ""
 #    inputs:
 #      username: "gitea"
-#      password: "gitea"
+#      password: "{{ gitea_password }}"
 #      email: admin@example.com
 
 controller_templates:

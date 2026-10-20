@@ -1,0 +1,269 @@
+---
+openshift_virt_aap_server_build_templates:
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Prepare RHEL
+  playbook: jt_playbooks/snow/server_build_prepare.yml
+  credentials:
+  - '{{ openshift_virt_aap_snow_credential_name }}'
+  execution_environment: '{{ openshift_virt_aap_snow_ee_name }}'
+  extra_vars:
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+    server_build_expected_os: rhel
+    server_build_namespace: '{{ openshift_virt_aap_rhel_namespace }}'
+    server_build_banner_text: '{{ openshift_virt_aap_server_build_banner_text }}'
+    server_build_banner_title: '{{ openshift_virt_aap_server_build_banner_title }}'
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Create RHEL
+  playbook: jt_playbooks/openshift_virtualization/server_build_create_rhel.yml
+  credentials:
+  - OpenShift Credential
+  execution_environment: '{{ openshift_virt_aap_ee_name }}'
+  extra_vars:
+    server_build_vm_wait_timeout: '{{ openshift_virt_aap_server_build_vm_wait_timeout }}'
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+    server_build_expected_os: rhel
+    server_build_namespace: '{{ openshift_virt_aap_rhel_namespace }}'
+    server_build_banner_text: '{{ openshift_virt_aap_server_build_banner_text }}'
+    server_build_banner_title: '{{ openshift_virt_aap_server_build_banner_title }}'
+    ocpv_ssh_public_key: '{{ lookup(''file'', openshift_virt_aap_vm_ssh_public_key_file) }}'
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Baseline RHEL
+  playbook: jt_playbooks/openshift_virtualization/server_build_baseline_rhel.yml
+  credentials:
+  - OpenShift Credential
+  - '{{ openshift_virt_aap_server_build_rhel_credential_name }}'
+  execution_environment: '{{ openshift_virt_aap_ee_name }}'
+  extra_vars:
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+    server_build_expected_os: rhel
+    server_build_namespace: '{{ openshift_virt_aap_rhel_namespace }}'
+    server_build_banner_text: '{{ openshift_virt_aap_server_build_banner_text }}'
+    server_build_banner_title: '{{ openshift_virt_aap_server_build_banner_title }}'
+    server_build_ssh_user: '{{ openshift_virt_aap_server_build_rhel_username }}'
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Prepare Windows
+  playbook: jt_playbooks/snow/server_build_prepare.yml
+  credentials:
+  - '{{ openshift_virt_aap_snow_credential_name }}'
+  execution_environment: '{{ openshift_virt_aap_snow_ee_name }}'
+  extra_vars:
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+    server_build_expected_os: windows
+    server_build_namespace: '{{ openshift_virt_aap_windows_namespace }}'
+    server_build_banner_text: '{{ openshift_virt_aap_server_build_banner_text }}'
+    server_build_banner_title: '{{ openshift_virt_aap_server_build_banner_title }}'
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Create Windows
+  playbook: jt_playbooks/openshift_virtualization/server_build_create_windows.yml
+  credentials:
+  - OpenShift Credential
+  execution_environment: '{{ openshift_virt_aap_ee_name }}'
+  extra_vars:
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+    server_build_expected_os: windows
+    server_build_namespace: '{{ openshift_virt_aap_windows_namespace }}'
+    server_build_banner_text: '{{ openshift_virt_aap_server_build_banner_text }}'
+    server_build_banner_title: '{{ openshift_virt_aap_server_build_banner_title }}'
+    server_build_windows_golden_dv: '{{ openshift_virt_aap_server_build_windows_golden_dv }}'
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Baseline Windows
+  playbook: jt_playbooks/openshift_virtualization/server_build_baseline_windows.yml
+  credentials:
+  - OpenShift Credential
+  - '{{ openshift_virt_aap_server_build_windows_credential_name }}'
+  execution_environment: '{{ openshift_virt_aap_ee_windows_name }}'
+  extra_vars:
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+    server_build_expected_os: windows
+    server_build_namespace: '{{ openshift_virt_aap_windows_namespace }}'
+    server_build_banner_text: '{{ openshift_virt_aap_server_build_banner_text }}'
+    server_build_banner_title: '{{ openshift_virt_aap_server_build_banner_title }}'
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Complete
+  playbook: jt_playbooks/snow/server_build_complete.yml
+  credentials:
+  - '{{ openshift_virt_aap_snow_credential_name }}'
+  execution_environment: '{{ openshift_virt_aap_snow_ee_name }}'
+  extra_vars:
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+- job_type: run
+  organization: Default
+  inventory: '{{ openshift_virt_aap_inventory_name }}'
+  project: '{{ openshift_virt_aap_project_name }}'
+  ask_variables_on_launch: true
+  survey_enabled: false
+  name: ServiceNow | Server Build - Failed
+  playbook: jt_playbooks/snow/server_build_failed.yml
+  credentials:
+  - '{{ openshift_virt_aap_snow_credential_name }}'
+  execution_environment: '{{ openshift_virt_aap_snow_ee_name }}'
+  extra_vars:
+    server_build_aap_url: '{{ aap_hostname | regex_replace(''/$'', '''') }}'
+    server_build_snow_validate_certs: '{{ openshift_virt_aap_server_build_snow_validate_certs }}'
+openshift_virt_aap_server_build_workflows:
+- name: ServiceNow | Server Build - RHEL
+  description: Approved standard RHEL server build with verified ownership notice and change closure.
+  organization: Default
+  survey_enabled: true
+  ask_variables_on_launch: false
+  allow_simultaneous: false
+  destroy_current_nodes: true
+  simplified_workflow_nodes:
+  - identifier: Prepare
+    unified_job_template: ServiceNow | Server Build - Prepare RHEL
+    failure_nodes:
+    - Report Prepare Failure
+    success_nodes:
+    - Create
+  - identifier: Report Prepare Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Prepare
+  - identifier: Create
+    unified_job_template: ServiceNow | Server Build - Create RHEL
+    failure_nodes:
+    - Report Create Failure
+    success_nodes:
+    - Baseline
+  - identifier: Report Create Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Create
+  - identifier: Baseline
+    unified_job_template: ServiceNow | Server Build - Baseline RHEL
+    failure_nodes:
+    - Report Baseline Failure
+    success_nodes:
+    - Complete
+  - identifier: Report Baseline Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Baseline
+  - identifier: Complete
+    unified_job_template: ServiceNow | Server Build - Complete
+    failure_nodes:
+    - Report Complete Failure
+  - identifier: Report Complete Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Complete
+  survey_spec:
+    name: Server-build change identity
+    description: Only ServiceNow record identities are accepted; inputs come from the approved CR.
+    spec:
+    - question_name: Change sys_id
+      type: text
+      variable: snow_change_sys_id
+      required: true
+      min: 32
+      max: 32
+    - question_name: Catalog request sys_id
+      type: text
+      variable: snow_request_sys_id
+      required: true
+      min: 32
+      max: 32
+- name: ServiceNow | Server Build - Windows
+  description: Approved standard Windows server build with verified ownership notice and change closure.
+  organization: Default
+  survey_enabled: true
+  ask_variables_on_launch: false
+  allow_simultaneous: false
+  destroy_current_nodes: true
+  simplified_workflow_nodes:
+  - identifier: Prepare
+    unified_job_template: ServiceNow | Server Build - Prepare Windows
+    failure_nodes:
+    - Report Prepare Failure
+    success_nodes:
+    - Create
+  - identifier: Report Prepare Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Prepare
+  - identifier: Create
+    unified_job_template: ServiceNow | Server Build - Create Windows
+    failure_nodes:
+    - Report Create Failure
+    success_nodes:
+    - Baseline
+  - identifier: Report Create Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Create
+  - identifier: Baseline
+    unified_job_template: ServiceNow | Server Build - Baseline Windows
+    failure_nodes:
+    - Report Baseline Failure
+    success_nodes:
+    - Complete
+  - identifier: Report Baseline Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Baseline
+  - identifier: Complete
+    unified_job_template: ServiceNow | Server Build - Complete
+    failure_nodes:
+    - Report Complete Failure
+  - identifier: Report Complete Failure
+    unified_job_template: ServiceNow | Server Build - Failed
+    extra_data:
+      server_build_failed_stage: Complete
+  survey_spec:
+    name: Server-build change identity
+    description: Only ServiceNow record identities are accepted; inputs come from the approved CR.
+    spec:
+    - question_name: Change sys_id
+      type: text
+      variable: snow_change_sys_id
+      required: true
+      min: 32
+      max: 32
+    - question_name: Catalog request sys_id
+      type: text
+      variable: snow_request_sys_id
+      required: true
+      min: 32
+      max: 32

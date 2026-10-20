@@ -9,6 +9,7 @@
 #   ansible-playbook jt_playbooks/snow/catalog_deploy_updateset.yml
 - name: Deploy SNOW catalog integration via Update Set
   hosts: localhost
+  connection: local
   gather_facts: false
   vars:
     snow_instance: "{{ lookup('env', 'SNOW_INSTANCE') }}"
@@ -48,7 +49,13 @@
         aap_host: "{{ aap_host }}"
         aap_username: "{{ aap_username }}"
         aap_password: "{{ aap_password }}"
-        catalog_items: "{{ snow_catalog_items }}"
+        catalog_items: >-
+          {{ snow_catalog_items | selectattr('approval_required', 'defined') | list
+             if snow_server_build_only | default(false) | bool else snow_catalog_items }}
+        server_build:
+          enabled: "{{ snow_server_build_enabled | default(false) | bool }}"
+          assignment_group: "{{ snow_server_build_assignment_group | default('') }}"
+          planned_duration_minutes: "{{ snow_server_build_planned_duration_minutes | default(60) | int }}"
         rest_message: "{{ resolved_rest_message }}"
         update_set_name: "AAP ServiceNow Integration"
         commit: true

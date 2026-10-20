@@ -3,8 +3,8 @@
 # ~/.ansible-navigator.yml) so ansible-navigator picks it up automatically.
 #
 # Volume mounts expose SSH keys and manifests inside the execution environment
-# at /root/keys and /root/manifests, which is where the user_creds role
-# defaults expect them.
+# at /root/keys and /root/manifests. Set aap_manifest_path in user.creds.yml
+# to the path inside the execution environment (or pass AAP_MANIFEST_PATH).
 #
 # Environment variables are used by the user_creds role:
 #   CONTROLLER_PASSWORD  -> aap_admin_password
@@ -27,5 +27,11 @@ ansible-navigator:
       pass:
         - AAP_MACHINE_CRED_PASSWORD
         - CONTROLLER_PASSWORD
-      set:
-        K8S_AUTH_PASSWORD: "changeme"
+        - K8S_AUTH_PASSWORD
+        - AAP_MANIFEST_PATH
+        - AAP_LIGHTSPEED_TOKEN
+        - CLAB_DEVICE_PASSWORD
+        - MVNW_SANDBOX_PASSWORD
+        - MVNW_MACHINE_PASSWORD
+        - SNOW_SSP_USER_PASSWORD
+        - OCPV_SSP_USER_PASSWORD

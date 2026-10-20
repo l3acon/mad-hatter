@@ -1,0 +1,38 @@
+---
+- name: Require an explicitly configured AAP admin password
+  ansible.builtin.assert:
+    that:
+      - aap_operator_admin_password | default('', true) | string | trim | length > 0
+    fail_msg: >-
+      Set aap_admin_password in user.creds.yml for aap-deploy.yml,
+      export CONTROLLER_PASSWORD, or supply aap_operator_controller_admin_password.
+
+- name: Require a Lightspeed API token when enabled
+  when: not (aap_operator_disable_lightspeed | bool)
+  ansible.builtin.assert:
+    that:
+      - aap_operator_chatbot_token | default('', true) | string | trim | length > 0
+    fail_msg: Set aap_operator_chatbot_token or AAP_LIGHTSPEED_TOKEN when enabling Lightspeed.
+
+- name: Validate manifest before changing the cluster
+  when: aap_operator_inject_manifest | bool
+  block:
+    - name: Require an explicit manifest path
+      ansible.builtin.assert:
+        that:
+          - aap_operator_inject_manifest_path | default('', true) | string | trim | length > 0
+        fail_msg: Set aap_manifest_path in user.creds.yml or export AAP_MANIFEST_PATH.
+
+    - name: Check the manifest on the Ansible execution host
+      ansible.builtin.stat:
+        path: "{{ aap_operator_inject_manifest_path }}"
+      register: aap_operator_manifest_file
+
+    - name: Require a readable manifest file
+      ansible.builtin.assert:
+        that:
+          - aap_operator_manifest_file.stat.isreg | default(false)
+          - aap_operator_manifest_file.stat.readable | default(false)
+        fail_msg: >-
+          The configured AAP manifest is missing or unreadable. Check aap_manifest_path
+          and mount the file into the execution environment when using ansible-navigator.

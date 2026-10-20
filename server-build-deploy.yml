@@ -1,0 +1,54 @@
+---
+# Requires an authenticated oc session, the existing CasC collections/EE, and
+# SNOW_INSTANCE, SNOW_USERNAME, SNOW_PASSWORD, SERVER_BUILD_WINDOWS_PASSWORD.
+# Supply snow_server_build_assignment_group (group sys_id) with -e or a vars file.
+- name: Load optional local credentials for server-build deployment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Check for local credential file
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/user.creds.yml"
+      register: server_build_user_creds
+
+    - name: Load local credential values
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/user.creds.yml"
+        name: server_build_local_credentials
+      when: server_build_user_creds.stat.exists
+      no_log: true
+
+    - name: Apply nonempty server-build credential values
+      ansible.builtin.set_fact:
+        "{{ item.key }}": "{{ item.value }}"
+      loop: "{{ server_build_local_credentials | default({}) | dict2items }}"
+      when:
+        - item.key in ['snow_instance', 'snow_username', 'snow_password', 'windows_username', 'windows_password']
+        - item.value | default('', true) | string | length > 0
+      no_log: true
+
+- name: Deploy approval-driven AAP server-build workflows
+  ansible.builtin.import_playbook: jt_playbooks/openshift_virtualization/aap_rollout_casc.yml
+  vars:
+    aap_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default('admin', true) }}"
+    openshift_virt_aap_server_build_enabled: true
+    openshift_virt_aap_server_build_only: true
+    openshift_virt_aap_ssp_user_enabled: false
+    openshift_virt_aap_project_name: Server Build (mad-hatter)
+    openshift_virt_aap_snow_credential_name: Server Build ServiceNow
+    openshift_virt_aap_snow_enabled: true
+    openshift_virt_aap_server_build_windows_username: "{{ windows_username | default('Administrator', true) }}"
+    openshift_virt_aap_server_build_windows_password: "{{ windows_password | default(lookup('env', 'SERVER_BUILD_WINDOWS_PASSWORD'), true) }}"
+    openshift_virt_aap_snow_instance: "{{ snow_instance | default(lookup('env', 'SNOW_INSTANCE'), true) }}"
+    openshift_virt_aap_snow_username: "{{ snow_username | default(lookup('env', 'SNOW_USERNAME'), true) }}"
+    openshift_virt_aap_snow_password: "{{ snow_password | default(lookup('env', 'SNOW_PASSWORD'), true) }}"
+
+- name: Deploy the server-build catalog item and approval rules
+  ansible.builtin.import_playbook: jt_playbooks/snow/catalog_deploy_updateset.yml
+  vars:
+    aap_username: "{{ lookup('env', 'CONTROLLER_USERNAME') | default('admin', true) }}"
+    snow_server_build_enabled: true
+    snow_server_build_only: true
+    # The rollout discovers these facts from oc unless explicitly overridden.
+    aap_host: "{{ aap_hostname }}"

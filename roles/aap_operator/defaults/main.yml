@@ -24,7 +24,7 @@ aap_operator_catalog_snapshot_image_tag: ""
 # For Ansible Automation Platform 2.5+
 # ---------------------------------------------------------------
 aap_operator_admin_password: >-
-  {{ common_password | default(aap_operator_controller_admin_password) }}
+  {{ common_password | default(aap_operator_controller_admin_password | default(lookup('env', 'CONTROLLER_PASSWORD'), true), true) }}
 aap_operator_disable_controller: false
 aap_operator_disable_eda: false
 aap_operator_disable_hub: true
@@ -37,7 +37,7 @@ aap_operator_disable_lightspeed: true
 aap_operator_disable_lightspeed_chatbot_config_secret_name: chatbot-configuration-secret
 aap_operator_chatbot_llm_provider_type: openai
 aap_operator_chatbot_model: gpt-oss-120b
-aap_operator_chatbot_token: REPLACEME
+aap_operator_chatbot_token: "{{ lookup('env', 'AAP_LIGHTSPEED_TOKEN') }}"
 aap_operator_chatbot_url: https://maas-rhdp.apps.maas.redhatworkshops.io/v1/
 
 
@@ -52,10 +52,7 @@ aap_operator_ocp_token_lifecycle: 1209600
 # Inject Ansible Automation Platform 2.5 Manifest
 # ---------------------------------------------------------------
 aap_operator_inject_manifest: false
-aap_operator_manifest:
-  url: https://example.com/manifest
-  username: jonsnow
-  password: got2023
+aap_operator_inject_manifest_path: "{{ aap_manifest_path | default(lookup('env', 'AAP_MANIFEST_PATH'), true) }}"
 
 # ---------------------------------------------------------------
 # EDA Cluster-admin rolebinding

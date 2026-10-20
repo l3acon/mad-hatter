@@ -10,6 +10,11 @@
     snow_clab_admin_user: ec2-user
     snow_clab_purpose_tag: containerlab
   tasks:
+    - name: Require device credentials before provisioning
+      ansible.builtin.include_tasks: ../../../roles/clab/tasks/validate_password.yml
+      vars:
+        clab_device_password: "{{ lookup('env', 'CLAB_DEVICE_PASSWORD') }}"
+
     - name: Discover hypervisor IP from EC2 tags
       amazon.aws.ec2_instance_info:
         region: "{{ snow_clab_aws_region }}"
@@ -50,6 +55,7 @@
     snow_clab_ebs_mount: /mnt/data
     snow_clab_podman_image_path: /mnt/data/images
     snow_clab_topology: product_demos
+    clab_device_password: "{{ lookup('env', 'CLAB_DEVICE_PASSWORD') }}"
     snow_clab_images:
       - "registry.gitlab.com/redhatautomation/cat8:17.13.01a"
       - "registry.gitlab.com/redhatautomation/nexus10-ee:10.5.3.F"
@@ -147,6 +153,12 @@
         dest: ~/clab/{{ snow_clab_topology }}/
         mode: '0644'
 
+    - name: Render startup configuration with managed device credentials
+      ansible.builtin.include_tasks: ../../../roles/clab/tasks/render_configs.yml
+      vars:
+        clab_config_source_dir: "{{ playbook_dir }}/../../../roles/clab/files/clab/{{ snow_clab_topology }}/configs"
+        clab_config_dest_dir: "/root/clab/{{ snow_clab_topology }}/configs"
+
     - name: Deploy containerlab topology
       ansible.builtin.command:
         cmd: containerlab deploy --reconfigure --runtime podman
@@ -174,8 +186,9 @@
       ansible.builtin.debug:
         msg:
           - "Containerlab topology '{{ snow_clab_topology }}' deployed"
-          - "n9kv:   ssh -p 2122 admin@{{ ansible_host }} (password: admin@123)"
-          - "cat8kv: ssh -p 2123 admin@{{ ansible_host }} (password: admin@123)"
+          - "n9kv:   ssh -p 2122 admin@{{ ansible_host }}"
+          - "cat8kv: ssh -p 2123 admin@{{ ansible_host }}"
+          - "Device password is supplied by the Containerlab Device Access credential."
 
 - name: Update ContainerLab Inventory in AAP
   hosts: localhost
@@ -203,7 +216,6 @@
           ansible_port: 2122
           ansible_network_os: cisco.nxos.nxos
           ansible_user: admin
-          ansible_password: "admin@123"
           ansible_connection: ansible.netcommon.network_cli
           ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
         _cat8kv_vars:
@@ -211,7 +223,6 @@
           ansible_port: 2123
           ansible_network_os: cisco.ios.ios
           ansible_user: admin
-          ansible_password: "admin@123"
           ansible_connection: ansible.netcommon.network_cli
           ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
       when: clab_host_ip is defined

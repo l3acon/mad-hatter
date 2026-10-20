@@ -1,0 +1,67 @@
+---
+- name: Close a verified standard server build
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read change before closing
+      ansible.builtin.include_tasks: tasks/server_build_read_change.yml
+
+    - name: Require a verified build and the original approved workflow
+      ansible.builtin.assert:
+        that:
+          - server_build_verified | default(false) | bool
+          - server_build_guest_ip | default('') | length > 0
+          - server_build_change.approval == 'approved'
+          - server_build_change.state | string == '-1'
+          - server_build_change.u_aap_workflow_job_id | string == awx_workflow_job_id | string
+        fail_msg: The build is not verified, approved, or owned by this workflow.
+
+    - name: Build completion evidence
+      ansible.builtin.set_fact:
+        server_build_completion_notes: >-
+          [AAP] Standard server build completed and ownership notice verified.
+          VM: {{ server_build_parameters.ocpv_vm_name }}.
+          OS: {{ server_build_parameters.server_build_os }}.
+          Namespace: {{ server_build_namespace }}. Guest IP: {{ server_build_guest_ip }}.
+          Workflow: {{ server_build_aap_url }}/execution/jobs/workflow/{{ awx_workflow_job_id }}/output
+
+    - name: Complete the verified implementation and testing tasks
+      ansible.builtin.include_tasks: tasks/server_build_complete_tasks.yml
+
+    - name: Enter post-implementation review
+      ansible.builtin.include_tasks: tasks/server_build_transition.yml
+      vars:
+        server_build_next_state: '0'
+        server_build_transition_fields:
+          work_end: "{{ now(utc=true, fmt='%Y-%m-%d %H:%M:%S') }}"
+          work_notes: "{{ server_build_completion_notes }}"
+
+    - name: Close the successful change
+      ansible.builtin.include_tasks: tasks/server_build_transition.yml
+      vars:
+        server_build_next_state: '3'
+        server_build_transition_fields:
+          close_code: successful
+          close_notes: "{{ server_build_completion_notes }}"
+
+    - name: Complete catalog request only after successful change closure
+      ansible.builtin.uri:
+        url: "{{ snow_instance | regex_replace('/$', '') }}/api/now/table/sc_req_item/{{ snow_request_sys_id }}"
+        method: PATCH
+        url_username: "{{ snow_username }}"
+        url_password: "{{ snow_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+        body_format: json
+        body:
+          state: '3'
+          close_notes: "{{ server_build_completion_notes }}"
+          work_notes: "{{ server_build_completion_notes }}"
+        status_code: 200
+      register: server_build_ritm_result
+
+    - name: Verify catalog closure
+      ansible.builtin.assert:
+        that:
+          - server_build_ritm_result.json.result.state | string == '3'

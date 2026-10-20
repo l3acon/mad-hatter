@@ -20,6 +20,7 @@ into modular playbooks that follow the `*-deploy.yml` naming convention.
 | `windows-golden-deploy.yml` | Build Windows Server golden image from ISO |
 | `portal-deploy.yml` | Self-Service Portal (RHAAP Developer Hub via Helm) |
 | `snow-deploy.yml` | Deploy SNOW catalog items |
+| `server-build-deploy.yml` | Deploy approval-driven RHEL/Windows server builds ([setup](docs/server-build.md)) |
 | `ao-deploy.yml` | Automation Orchestrator operator |
 | `rosa-deploy.yml` | ROSA-specific deployment |
 | `aro-deploy.yml` | ARO-specific deployment |
@@ -51,7 +52,7 @@ The `aap_operator` role defaults to `stable-2.7`. Key changes this repo accounts
 | `virtctl` | `windows-golden-deploy.yml` | Installed from cluster: `oc get consoleclidownload` |
 | `podman` | EE builds, golden image pipeline | Only needed if rebuilding EE images |
 | SSH key pair | AAP machine credentials | Mounted into the EE at `/root/keys/` |
-| AAP manifest | `aap_operator` role | Mounted into the EE at `/root/manifests/manifest.zip` |
+| AAP manifest | `aap_operator` role | Set `aap_manifest_path`; mount that path into the EE |
 
 ## Quick Start
 
@@ -66,6 +67,7 @@ cp examples/user.creds.yml user.creds.yml   # edit with your passwords
 export CONTROLLER_PASSWORD='<aap-admin-password>'
 export AAP_MACHINE_CRED_PASSWORD='<machine-cred-password>'
 export K8S_AUTH_PASSWORD='<openshift-admin-password>'
+export AAP_MANIFEST_PATH='<path-to-manifest-visible-inside-the-EE>'
 
 # Deploy infrastructure + AAP + OCP-V
 ansible-navigator run infra-deploy.yml --tags rosa,aap,ocpv \
@@ -163,6 +165,10 @@ ansible-playbook portal-deploy.yml \
 ### `aap-deploy.yml` — AAP Operator (standalone)
 
 Deploys the AAP operator on any cluster without ROSA/ARO dependencies.
+Loads an optional `user.creds.yml`: set `aap_admin_password` and
+`aap_manifest_path` there, or export `CONTROLLER_PASSWORD` and
+`AAP_MANIFEST_PATH`. The password and a readable manifest are required;
+validation fails before changing the cluster when either is missing.
 
 ### `ocpv-deploy.yml` — OCP-V Operator
 
@@ -201,7 +207,7 @@ Job template playbooks live in `jt_playbooks/` — launched by AAP, not run dire
 
 | File | Source | Used by |
 |---|---|---|
-| `user.creds.yml` | [examples/user.creds.yml](examples/user.creds.yml) | AAP admin password, SSH keys, RHSM credentials |
+| `user.creds.yml` | [examples/user.creds.yml](examples/user.creds.yml) | AAP admin password, manifest path, SSH keys, optional integration credentials |
 | `rosa.creds.yml` | RHDP YAML tab (ROSA) | `infra-deploy.yml --tags rosa` |
 | `aro.creds.yml` | RHDP YAML tab (ARO) | `infra-deploy.yml --tags aro` |
 | `ocp-v-workshop.creds.yml` | RHDP YAML tab (OCP-V Workshop) | `workshop-deploy.yml` |
@@ -212,9 +218,31 @@ Job template playbooks live in `jt_playbooks/` — launched by AAP, not run dire
 | Variable | Description |
 |---|---|
 | `CONTROLLER_PASSWORD` | AAP admin password |
+| `AAP_MANIFEST_PATH` | Readable manifest file path on the Ansible execution host |
 | `AAP_MACHINE_CRED_PASSWORD` | Machine credential password (Windows complexity: 8+ chars, 3/4 classes) |
 | `K8S_AUTH_PASSWORD` | OpenShift admin password |
 | `OCPV_WIN_AUTOUNATTEND_ADMIN_PASSWORD` | Windows golden image admin password |
+| `AAP_LIGHTSPEED_TOKEN` | API token, required when Lightspeed is enabled |
+| `CLAB_DEVICE_PASSWORD` | ContainerLab device password, required for ContainerLab and full SNOW CasC |
+| `MVNW_SANDBOX_PASSWORD` | External sandbox device password for network workshop CasC |
+| `MVNW_MACHINE_PASSWORD` | Network workshop Machine credential password |
+| `SNOW_SSP_USER_PASSWORD` | Required when the ServiceNow portal user is enabled |
+| `OCPV_SSP_USER_PASSWORD` | Required when the OCP-V portal user is enabled |
+
+Deployment content has no built-in password values. Supply credentials explicitly
+through `user.creds.yml`, Ansible variables, environment variables, or AAP-managed
+credentials. File values are preserved; empty required values fail validation.
+Portal-user passwords are checked only when their user is enabled. ContainerLab
+renders startup configs with the supplied password, including fresh hashes for
+EOS and Junos (requires `passlib`, included in the ROSA/ARO EE build requirements).
+The ServiceNow topology job receives its device password through the managed
+`Containerlab Bootstrap` credential; network jobs use `Containerlab Device Access`.
+
+Run the regression checks with Python, Ansible, PyYAML, Node.js, and `passlib`:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -p 'test_*.py' -v
+```
 
 ## Execution Environments
 

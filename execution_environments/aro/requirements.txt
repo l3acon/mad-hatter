@@ -1,5 +1,6 @@
 kubernetes
 jmespath
+passlib
 # included for/from azcollection
 packaging
 requests[security]

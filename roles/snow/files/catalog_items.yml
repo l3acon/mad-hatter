@@ -11,6 +11,46 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 snow_catalog_items:
+  - name: server-build
+    short_description: Request an approved standard RHEL or Windows server build
+    description: >-
+      Creates a normal change request using the existing approval policy. After final authorization,
+      AAP builds the OpenShift Virtualization server, applies and verifies the government ownership
+      notice, and closes the change and catalog request. No VM is created before approval.
+    category: Infrastructure
+    catalog: Ansible Automation Platform
+    approval_required: true
+    aap_workflows:
+      rhel: ServiceNow | Server Build - RHEL
+      windows: ServiceNow | Server Build - Windows
+    variables:
+      - name: server_build_os
+        label: Operating system
+        type: Select Box
+        mandatory: true
+        default_value: rhel
+        order: 100
+        choices:
+          - {label: RHEL 9, value: rhel}
+          - {label: Windows Server 2022, value: windows}
+      - name: ocpv_vm_name
+        label: VM name
+        type: String
+        mandatory: true
+        help_text: A unique lowercase DNS label, 1-63 characters.
+        order: 200
+      - name: ocpv_instancetype_name
+        label: Instance size
+        type: Select Box
+        mandatory: true
+        default_value: u1.xlarge
+        order: 300
+        choices:
+          - {label: 'Medium (1 vCPU, 4 GiB)', value: u1.medium}
+          - {label: 'Large (2 vCPU, 8 GiB)', value: u1.large}
+          - {label: 'XLarge (4 vCPU, 16 GiB)', value: u1.xlarge}
+          - {label: '2XLarge (8 vCPU, 32 GiB)', value: u1.2xlarge}
+
   - name: "Order RHEL VM"
     short_description: "Provision a Red Hat Enterprise Linux virtual machine in AWS"
     description: |

@@ -15,11 +15,21 @@
   vars:
     aap_hostname: "{{ lookup('env', 'CONTROLLER_HOST') }}"
     aap_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
-    aap_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+    aap_password: "{{ aap_admin_password | default(lookup('env', 'CONTROLLER_PASSWORD'), true) }}"
     snow_instance: "{{ lookup('env', 'SNOW_INSTANCE') }}"
     snow_username: "{{ lookup('env', 'SNOW_USERNAME') }}"
     snow_password: "{{ lookup('env', 'SNOW_PASSWORD') }}"
   tasks:
+    - name: Load optional local credentials
+      tags: always
+      ansible.builtin.include_role:
+        name: user_creds
+        tasks_from: load
+        apply:
+          tags: always
+      vars:
+        user_creds_file_path: "{{ playbook_dir }}/user.creds.yml"
+
     # ── always: validate AAP credentials ──────────────────────────────────
     - name: Validate AAP credentials are configured
       tags: always

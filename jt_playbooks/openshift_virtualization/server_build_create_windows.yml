@@ -1,0 +1,21 @@
+---
+- name: Check the new server identity before provisioning
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Check authorization and resource collisions
+      ansible.builtin.include_tasks: tasks/server_build_create_guard.yml
+
+- name: Create the approved server using the existing provisioning playbook
+  ansible.builtin.import_playbook: vm_create_windows_from_golden.yml
+  vars:
+    ocpv_vm_name: "{{ server_build_parameters.ocpv_vm_name }}"
+    ocpv_vm_namespace: "{{ server_build_namespace }}"
+    ocpv_instancetype_name: "{{ server_build_parameters.ocpv_instancetype_name }}"
+    ocpv_preference_name: windows.2k22
+    ocpv_win_root_dv_name: "{{ server_build_windows_golden_dv }}"
+    ocpv_clone_golden_root: true
+    ocpv_use_cloudbase_nocloud: false

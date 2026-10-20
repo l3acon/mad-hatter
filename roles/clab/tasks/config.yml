@@ -13,6 +13,12 @@
     src: clab/
     dest: ~/clab/
 
+- name: Render device credentials before starting containers
+  ansible.builtin.include_tasks: render_configs.yml
+  vars:
+    clab_config_source_dir: "{{ role_path }}/files/clab/{{ clab_topology_deployment }}/configs"
+    clab_config_dest_dir: "/root/clab/{{ clab_topology_deployment }}/configs"
+
 - name: "Start containers for {{ clab_topology_deployment }} deployment"
   ansible.builtin.shell:
     cmd: containerlab deploy --reconfigure --runtime podman

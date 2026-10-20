@@ -1,0 +1,73 @@
+---
+- name: Authorize server build and enter implementation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read approved change
+      ansible.builtin.include_tasks: tasks/server_build_read_change.yml
+      vars:
+        server_build_wait_for_dispatch: true
+
+    - name: Require final authorization and a unique AAP workflow launch
+      ansible.builtin.assert:
+        that:
+          - server_build_change.approval == 'approved'
+          - server_build_change.state | string == '-2'
+          - server_build_change.u_aap_launch_status in ['launching', 'launched']
+          - awx_workflow_job_id | default('') | string is match('^[0-9]+$')
+          - >-
+            server_build_change.u_aap_workflow_job_id | default('') | string
+            in ['', awx_workflow_job_id | string]
+        fail_msg: The change must be finally approved, Scheduled, and dispatched to this AAP workflow.
+
+    - name: Decode the immutable build snapshot
+      ansible.builtin.set_fact:
+        server_build_parameters: "{{ server_build_change.u_aap_build_parameters | from_json }}"
+
+    - name: Validate approved build inputs
+      ansible.builtin.assert:
+        that:
+          - server_build_parameters.server_build_os == server_build_expected_os
+          - server_build_parameters.ocpv_vm_name is match('^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')
+          - server_build_parameters.ocpv_vm_name | length <= 63
+          - server_build_parameters.ocpv_instancetype_name in ['u1.medium', 'u1.large', 'u1.xlarge', 'u1.2xlarge']
+          - server_build_namespace | length > 0
+          - server_build_banner_text | trim | length > 0
+        fail_msg: Invalid approved server-build inputs or administrator baseline configuration.
+
+    - name: Enter implementation and bind the workflow to this change
+      ansible.builtin.include_tasks: tasks/server_build_transition.yml
+      vars:
+        server_build_next_state: '-1'
+        server_build_transition_fields:
+          u_aap_workflow_job_id: "{{ awx_workflow_job_id | string }}"
+          work_start: "{{ now(utc=true, fmt='%Y-%m-%d %H:%M:%S') }}"
+          work_notes: >-
+            [AAP] Implementing {{ server_build_parameters.server_build_os }} server build.
+            Workflow: {{ server_build_aap_url }}/execution/jobs/workflow/{{ awx_workflow_job_id }}/output
+
+    - name: Mark the catalog request in progress
+      ansible.builtin.uri:
+        url: "{{ snow_instance | regex_replace('/$', '') }}/api/now/table/sc_req_item/{{ snow_request_sys_id }}"
+        method: PATCH
+        url_username: "{{ snow_username }}"
+        url_password: "{{ snow_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+        body_format: json
+        body:
+          state: '2'
+          work_notes: "[AAP] Change {{ server_build_change.number }} approved; standard server build started."
+        status_code: 200
+
+    - name: Publish approved inputs for subsequent workflow nodes
+      ansible.builtin.set_stats:
+        data:
+          server_build_authorized: true
+          server_build_parameters: "{{ server_build_parameters }}"
+          server_build_namespace: "{{ server_build_namespace }}"
+          server_build_banner_text: "{{ server_build_banner_text }}"
+          server_build_banner_title: "{{ server_build_banner_title }}"
+          snow_change_number: "{{ server_build_change.number }}"
+        per_host: false

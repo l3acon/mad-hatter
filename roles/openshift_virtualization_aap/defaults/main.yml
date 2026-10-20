@@ -88,6 +88,8 @@ openshift_virt_aap_controller_inventory_sources:
 
 controller_validate_certs: false
 controller_configuration_async_delay: 3
+# infra.aap_configuration 4.x requires an explicit directory with newer ansible-core.
+aap_configuration_async_dir: "{{ lookup('env', 'HOME') }}/.ansible_async"
 
 # Appended in tasks/main.yml after OpenShift token credential (and with openshift_virt_aap_extra_controller_credentials)
 openshift_virt_aap_extra_controller_credentials: []
@@ -174,7 +176,7 @@ openshift_virt_aap_cost_opt_schedule_enabled: true
 # Self-service portal non-admin user (created by gateway_users dispatch).
 openshift_virt_aap_ssp_user_enabled: true
 openshift_virt_aap_ssp_user_name: win-vm-user
-openshift_virt_aap_ssp_user_password: "{{ lookup('env', 'OCPV_SSP_USER_PASSWORD') | default('ChangeMe123!', true) }}"
+openshift_virt_aap_ssp_user_password: "{{ lookup('env', 'OCPV_SSP_USER_PASSWORD') }}"
 
 # Self-service survey dropdown choices (multiplechoice).
 # Golden source DataVolumes available for CDI-cloning.
@@ -344,3 +346,21 @@ controller_schedules: >-
     if (openshift_virt_aap_cost_opt_schedule_enabled | default(true) | bool)
     else []
   }}
+
+# Approval-driven ServiceNow server-build (enable after configuring existing change policy).
+openshift_virt_aap_server_build_enabled: false
+# Deploy only the approval-driven resources when using server-build-deploy.yml.
+openshift_virt_aap_server_build_only: false
+# Initial cloud volume snapshots can exceed the generic VM job ten-minute wait.
+openshift_virt_aap_server_build_vm_wait_timeout: 1800
+openshift_virt_aap_server_build_banner_title: United States Government System
+openshift_virt_aap_server_build_banner_text: >-
+  This system is owned by the United States Government. Access is restricted to authorized users.
+  Use may be monitored.
+openshift_virt_aap_server_build_windows_golden_dv: windows-server-os-work
+openshift_virt_aap_server_build_windows_credential_name: Server Build Windows
+openshift_virt_aap_server_build_windows_username: Administrator
+openshift_virt_aap_server_build_windows_password: "{{ lookup('env', 'SERVER_BUILD_WINDOWS_PASSWORD') }}"
+openshift_virt_aap_server_build_snow_validate_certs: true
+openshift_virt_aap_server_build_rhel_credential_name: Server Build RHEL SSH
+openshift_virt_aap_server_build_rhel_username: cloud-user

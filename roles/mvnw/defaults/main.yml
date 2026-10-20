@@ -1,0 +1,3 @@
+---
+mvnw_sandbox_password: "{{ lookup('env', 'MVNW_SANDBOX_PASSWORD') }}"
+mvnw_machine_password: "{{ lookup('env', 'MVNW_MACHINE_PASSWORD') }}"

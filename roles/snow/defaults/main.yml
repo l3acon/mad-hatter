@@ -69,6 +69,7 @@ snow_clab_aws_region: us-east-2
 snow_clab_instance_type: c8i.2xlarge
 snow_clab_vpc_name: clab-snow-vpc
 snow_clab_purpose_tag: containerlab
+snow_clab_device_password: "{{ clab_device_password | default(lookup('env', 'CLAB_DEVICE_PASSWORD'), true) }}"
 
 # ─── OpenSCAP compliance scanning ─────────────────────────────────────────────
 snow_oscap_profile: "xccdf_org.ssgproject.content_profile_cis_server_l1"
@@ -105,4 +106,4 @@ snow_drift_workflow_name: "ServiceNow | Config Drift Check and Remediate"
 # Self-service portal user.
 snow_ssp_user_enabled: true
 snow_ssp_user_name: snow-user
-snow_ssp_user_password: "{{ lookup('env', 'SNOW_SSP_USER_PASSWORD') | default('ChangeMe123!', true) }}"
+snow_ssp_user_password: "{{ lookup('env', 'SNOW_SSP_USER_PASSWORD') }}"

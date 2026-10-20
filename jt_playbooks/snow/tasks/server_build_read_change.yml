@@ -1,0 +1,39 @@
+---
+- name: Validate ServiceNow record identifiers
+  ansible.builtin.assert:
+    that:
+      - snow_change_sys_id | default('') is match('^[a-f0-9]{32}$')
+      - snow_request_sys_id | default('') is match('^[a-f0-9]{32}$')
+    fail_msg: Both the change and catalog request sys_ids are required.
+
+- name: Read server-build change from ServiceNow
+  ansible.builtin.uri:
+    url: >-
+      {{ snow_instance | regex_replace('/$', '') }}/api/now/table/change_request/{{ snow_change_sys_id
+      }}?sysparm_exclude_reference_link=true&sysparm_display_value=false
+    method: GET
+    url_username: "{{ snow_username }}"
+    url_password: "{{ snow_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+    return_content: true
+    status_code: 200
+  register: server_build_change_response
+  # The source approval transaction can still be committing when AAP starts.
+  until: >-
+    not (server_build_wait_for_dispatch | default(false) | bool) or
+    (server_build_change_response.json.result.u_aap_launch_status | default('')) not in ['', 'pending']
+  retries: "{{ 20 if server_build_wait_for_dispatch | default(false) | bool else 1 }}"
+  delay: 3
+
+- name: Resolve change record
+  ansible.builtin.set_fact:
+    server_build_change: "{{ server_build_change_response.json.result }}"
+
+- name: Require a linked server-build change
+  ansible.builtin.assert:
+    that:
+      - server_build_change.u_aap_integration == 'server-build'
+      - server_build_change.parent == snow_request_sys_id
+      - server_build_change.correlation_id == snow_request_sys_id
+    fail_msg: The change is not a server-build request linked to this catalog item.

@@ -5,6 +5,12 @@
       - "aap_hostname is defined"
       - "aap_username is defined"
       - "aap_password is defined"
+      - aap_password | default('', true) | string | trim | length > 0
+      - mvnw_sandbox_password | default('', true) | string | trim | length > 0
+      - mvnw_machine_password | default('', true) | string | trim | length > 0
+    fail_msg: >-
+      Configure AAP credentials and set mvnw_sandbox_password / MVNW_SANDBOX_PASSWORD
+      and mvnw_machine_password / MVNW_MACHINE_PASSWORD before deploying the network workshop.
 
 - name: Execute automation controller resource configuration
   ansible.builtin.include_role:

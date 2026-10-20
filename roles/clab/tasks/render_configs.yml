@@ -1,0 +1,31 @@
+---
+- name: Find device startup templates
+  ansible.builtin.find:
+    paths: "{{ clab_config_source_dir }}"
+    patterns: startup-config.cfg
+    recurse: true
+    file_type: file
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: clab_config_templates
+
+- name: Require startup templates for the selected topology
+  ansible.builtin.assert:
+    that:
+      - clab_config_templates.matched > 0
+    fail_msg: No ContainerLab startup templates were found for the selected topology.
+
+- name: Generate the configured password hash for EOS and Junos
+  ansible.builtin.set_fact:
+    clab_device_password_hash: "{{ clab_device_password | password_hash('sha512') }}"
+  no_log: true
+
+- name: Render startup configuration with explicit device credentials
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "{{ clab_config_dest_dir }}/{{ item | dirname | basename }}/{{ item | basename }}"
+    mode: '0600'
+  loop: "{{ clab_config_templates.files | map(attribute='path') | sort | list }}"
+  no_log: true

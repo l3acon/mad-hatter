@@ -1,4 +1,7 @@
 ---
+- name: Validate credentials and manifest before deployment
+  ansible.builtin.import_tasks: preflight.yml
+
 - name: Setup environment vars
   block:
     - name: Check for existing OperatorGroup in namespace
@@ -38,12 +41,14 @@
         state: present
         definition: "{{ lookup('template', 'admin_secret.j2') }}"
       register: r_aap_admin_secret_apply
+      no_log: true
 
     - name: Create Lightspeed
       when: aap_operator_disable_lightspeed is not true
       kubernetes.core.k8s:
         state: present
         definition: "{{ lookup('template', 'lightspeed_secret.j2') }}"
+      no_log: true
 
     - name: Create Ansilbe Automation Platform
       kubernetes.core.k8s:

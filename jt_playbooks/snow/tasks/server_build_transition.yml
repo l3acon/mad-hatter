@@ -1,0 +1,22 @@
+---
+- name: Update change through the ServiceNow state model
+  ansible.builtin.uri:
+    url: "{{ snow_instance | regex_replace('/$', '') }}/api/now/table/change_request/{{ snow_change_sys_id }}"
+    method: PATCH
+    url_username: "{{ snow_username }}"
+    url_password: "{{ snow_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+    body_format: json
+    body: "{{ server_build_transition_fields | default({}) | combine({'state': server_build_next_state}) }}"
+    return_content: true
+    status_code: 200
+  register: server_build_transition_response
+
+- name: Verify ServiceNow accepted the transition
+  ansible.builtin.assert:
+    that:
+      - server_build_transition_response.json.result.state | string == server_build_next_state | string
+    fail_msg: >-
+      ServiceNow did not accept the requested change state {{ server_build_next_state }}.
+      Review the instance change model, required fields, and integration account permissions.

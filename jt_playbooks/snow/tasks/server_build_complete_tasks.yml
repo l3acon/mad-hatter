@@ -1,0 +1,52 @@
+---
+- name: Read active child change tasks for this verified build
+  ansible.builtin.uri:
+    url: >-
+      {{ snow_instance | regex_replace('/$', '') }}/api/now/table/change_task?sysparm_query=change_request%3D{{
+      snow_change_sys_id }}%5Eactive%3Dtrue&sysparm_exclude_reference_link=true&sysparm_fields=sys_id,number,change_task_type,state
+    method: GET
+    url_username: "{{ snow_username }}"
+    url_password: "{{ snow_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+    status_code: 200
+    return_content: true
+  register: server_build_child_tasks
+
+- name: Require manual review for child tasks outside the automated build
+  ansible.builtin.assert:
+    that:
+      - item.change_task_type in ['implementation', 'testing']
+    fail_msg: "Change task {{ item.number }} is outside the implementation/testing baseline and needs operator review."
+  loop: "{{ server_build_child_tasks.json.result }}"
+  loop_control:
+    label: "{{ item.number }}"
+
+- name: Complete implementation and testing tasks using the verified build evidence
+  ansible.builtin.uri:
+    url: "{{ snow_instance | regex_replace('/$', '') }}/api/now/table/change_task/{{ item.sys_id }}"
+    method: PATCH
+    url_username: "{{ snow_username }}"
+    url_password: "{{ snow_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+    body_format: json
+    body:
+      state: '3'
+      close_notes: "{{ server_build_completion_notes }}"
+      work_notes: "{{ server_build_completion_notes }}"
+    status_code: 200
+    return_content: true
+  loop: "{{ server_build_child_tasks.json.result }}"
+  loop_control:
+    label: "{{ item.number }}"
+  register: server_build_completed_tasks
+
+- name: Verify every automated child task closed successfully
+  ansible.builtin.assert:
+    that:
+      - item.json.result.state | string == '3'
+    fail_msg: A child change task did not close. Review ServiceNow policy before closing the parent change.
+  loop: "{{ server_build_completed_tasks.results }}"
+  loop_control:
+    label: "{{ item.item.number }}"

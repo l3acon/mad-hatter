@@ -1,0 +1,11 @@
+---
+- name: Check for local user credential file
+  ansible.builtin.stat:
+    path: "{{ user_creds_file_path }}"
+  register: user_creds_file
+
+- name: Load local user credential values
+  ansible.builtin.include_vars:
+    file: "{{ user_creds_file_path }}"
+  when: user_creds_file.stat.exists
+  no_log: true

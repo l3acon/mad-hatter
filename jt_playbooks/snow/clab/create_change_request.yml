@@ -28,6 +28,7 @@
         short_description: "{{ snow_change_short_description }}"
         description: "{{ snow_change_description }}"
         other:
+          correlation_display: network-configuration
           category: "{{ snow_change_category }}"
           assignment_group: "Service Desk"
       register: snow_cr_result

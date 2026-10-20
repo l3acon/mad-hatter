@@ -548,6 +548,7 @@ controller_templates:
     credentials:
       - "{{ snow_aws_credential_name }}"
       - Containerlab SSH
+      - Containerlab Bootstrap
       - Controller Credential
     execution_environment: "{{ snow_aap_ee_name }}"
     ask_variables_on_launch: true

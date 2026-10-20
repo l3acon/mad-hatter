@@ -1,0 +1,77 @@
+---
+- name: Discover the approved Windows guest
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  tasks:
+    - name: Discover guest connectivity
+      ansible.builtin.include_tasks: tasks/server_build_discover_guest.yml
+
+    - name: Require AAP-managed Windows guest credentials
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'SERVER_BUILD_WINDOWS_USER') | length > 0
+          - lookup('env', 'SERVER_BUILD_WINDOWS_PASSWORD') | length > 0
+        fail_msg: Attach the Server Build Windows credential matching the golden image.
+      no_log: true
+
+    - name: Add Windows guest using AAP-managed credentials
+      ansible.builtin.add_host:
+        name: server_build_windows_guest
+        groups: server_build_windows_guests
+        ansible_host: "{{ server_build_guest_ip }}"
+        ansible_user: "{{ lookup('env', 'SERVER_BUILD_WINDOWS_USER') }}"
+        ansible_password: "{{ lookup('env', 'SERVER_BUILD_WINDOWS_PASSWORD') }}"
+        ansible_connection: winrm
+        ansible_port: 5985
+        ansible_winrm_transport: ntlm
+        ansible_winrm_scheme: http
+        ansible_winrm_operation_timeout_sec: 120
+        ansible_winrm_read_timeout_sec: 150
+      no_log: true
+
+- name: Apply and verify the Windows ownership notice
+  hosts: server_build_windows_guests
+  gather_facts: false
+  vars:
+    server_build_notice_path: HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+  tasks:
+    - name: Wait for Windows authentication and guest readiness
+      ansible.builtin.wait_for_connection:
+        timeout: 900
+
+    - name: Set the interactive logon notice
+      ansible.windows.win_regedit:
+        path: "{{ server_build_notice_path }}"
+        name: "{{ item.name }}"
+        data: "{{ item.value }}"
+        type: string
+      loop:
+        - name: legalnoticecaption
+          value: "{{ server_build_banner_title }}"
+        - name: legalnoticetext
+          value: "{{ server_build_banner_text | trim }}"
+
+    - name: Read back the interactive logon notice
+      ansible.windows.win_reg_stat:
+        path: "{{ server_build_notice_path }}"
+        name: "{{ item }}"
+      loop:
+        - legalnoticecaption
+        - legalnoticetext
+      register: server_build_logon_notice
+
+    - name: Verify the logon notice title and text
+      ansible.builtin.assert:
+        that:
+          - server_build_logon_notice.results[0].value == server_build_banner_title
+          - server_build_logon_notice.results[1].value == server_build_banner_text | trim
+
+    - name: Publish verified server details
+      ansible.builtin.set_stats:
+        data:
+          server_build_verified: true
+          server_build_guest_ip: "{{ ansible_host }}"
+        per_host: false

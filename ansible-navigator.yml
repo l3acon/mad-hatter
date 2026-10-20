@@ -10,11 +10,18 @@ ansible-navigator:
       - src: "/home/matt/keys"
         dest: "/root/keys"
         options: "Z"
-      - src: "/home/matt/manifests"
-        dest: "/root/manifests"
+      - src: "/home/matferna/manifest.zip"
+        dest: "/home/matferna/manifest.zip"
         options: "Z"
     environment-variables:
       pass:
         - AAP_MACHINE_CRED_PASSWORD
         - CONTROLLER_PASSWORD
         - K8S_AUTH_PASSWORD
+        - AAP_MANIFEST_PATH
+        - AAP_LIGHTSPEED_TOKEN
+        - CLAB_DEVICE_PASSWORD
+        - MVNW_SANDBOX_PASSWORD
+        - MVNW_MACHINE_PASSWORD
+        - SNOW_SSP_USER_PASSWORD
+        - OCPV_SSP_USER_PASSWORD

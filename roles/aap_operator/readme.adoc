@@ -43,16 +43,19 @@ By default *no* Manifest is injected. To inject a manifest, you need to provide 
 
 [source,yaml]
 ----
-aap_operator_manifest:
-  inject: true
-  url: https://example.com/manifest <1>
-  username: <USER> <2>
-  password: <PASSWORD> <3>
+aap_operator_inject_manifest: true
+aap_operator_inject_manifest_path: /absolute/path/to/manifest.zip
 ----
 
-. Valid Automation Controller Manifest file
-. username - username for an external authentication eg external CDN via htpasswd etc
-. password - password for an external authentication eg external CDN via htpasswd etc
+The manifest must be a readable local file on the Ansible execution host.
+For `aap-deploy.yml`, set `aap_manifest_path` in the git-ignored
+`user.creds.yml` or export `AAP_MANIFEST_PATH`. Mount the same path into
+the execution environment when using ansible-navigator.
+
+The admin password is required: set `aap_admin_password` in `user.creds.yml`
+for `aap-deploy.yml`, export `CONTROLLER_PASSWORD`, or supply
+`aap_operator_controller_admin_password` to the role. Missing passwords and
+missing or unreadable manifests fail validation before cluster changes.
 
 
 === Deploy a Workload with the `ocp-workload` playbook [Mostly for testing]

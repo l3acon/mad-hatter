@@ -2,6 +2,14 @@
 # Loaded by the user_creds role via include_vars.
 # Copy this file to the project root as user.creds.yml and fill in your values.
 
+# AAP deployment. No password or manifest path is supplied by default.
+# Environment alternatives: CONTROLLER_PASSWORD, AAP_MACHINE_CRED_PASSWORD,
+# and AAP_MANIFEST_PATH. The manifest must be readable inside the execution
+# environment when using ansible-navigator.
+aap_admin_password: ""
+aap_machine_cred_password: ""
+aap_manifest_path: ""
+
 # OpenAI API token for AAP Lightspeed (ALIA). Leave empty to skip if
 # aap_operator_disable_lightspeed is set to true in your playbook.
 aap_operator_chatbot_token: ""
@@ -9,3 +17,18 @@ aap_operator_chatbot_token: ""
 # Password used for the OpenShift admin user (kubeadmin on ARO, cluster-admin
 # on ROSA). Also passed as K8S_AUTH_PASSWORD via navigator env vars.
 openshift_admin_password: ""
+
+# Optional approval-driven server-build credentials (server-build-deploy.yml).
+snow_instance: ""
+snow_username: ""
+snow_password: ""
+windows_username: Administrator
+windows_password: ""
+
+# Required only for the matching optional feature. Uncomment and fill in,
+# or use the named environment variable instead.
+# clab_device_password: ""                # CLAB_DEVICE_PASSWORD
+# mvnw_sandbox_password: ""               # MVNW_SANDBOX_PASSWORD
+# mvnw_machine_password: ""               # MVNW_MACHINE_PASSWORD
+# snow_ssp_user_password: ""              # SNOW_SSP_USER_PASSWORD
+# openshift_virt_aap_ssp_user_password: "" # OCPV_SSP_USER_PASSWORD

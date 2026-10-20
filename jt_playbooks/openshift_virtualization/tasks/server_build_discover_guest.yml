@@ -1,0 +1,34 @@
+---
+- name: Require an authorized server-build workflow
+  ansible.builtin.assert:
+    that:
+      - server_build_authorized | default(false) | bool
+      - server_build_parameters.server_build_os == server_build_expected_os
+      - server_build_banner_text | trim | length > 0
+
+- name: Wait for the guest IP address
+  kubernetes.core.k8s_info:
+    api_version: kubevirt.io/v1
+    kind: VirtualMachineInstance
+    namespace: "{{ server_build_namespace }}"
+    name: "{{ server_build_parameters.ocpv_vm_name }}"
+  register: server_build_vmi
+  until: >-
+    server_build_vmi.resources | length > 0 and
+    (server_build_vmi.resources[0].status.interfaces | default([])
+     | selectattr('ipAddress', 'defined') | list | length > 0)
+  retries: 60
+  delay: 15
+
+- name: Resolve guest address
+  ansible.builtin.set_fact:
+    server_build_guest_ip: >-
+      {{ server_build_vmi.resources[0].status.interfaces
+         | selectattr('ipAddress', 'defined') | map(attribute='ipAddress') | first }}
+
+- name: Wait for the guest management port
+  ansible.builtin.wait_for:
+    host: "{{ server_build_guest_ip }}"
+    port: "{{ 22 if server_build_expected_os == 'rhel' else 5985 }}"
+    timeout: 900
+    delay: 15

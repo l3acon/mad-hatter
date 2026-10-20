@@ -33,3 +33,4 @@ clab_images:
 
 # Containerlab deployment
 clab_topology_deployment: product_demos
+clab_device_password: "{{ lookup('env', 'CLAB_DEVICE_PASSWORD') }}"

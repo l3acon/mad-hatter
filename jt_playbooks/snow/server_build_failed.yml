@@ -1,0 +1,58 @@
+---
+- name: Record a failed standard server build without deleting resources
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read the linked change before reporting failure
+      ansible.builtin.include_tasks: tasks/server_build_read_change.yml
+
+    - name: Require the dispatched workflow before writing failure status
+      ansible.builtin.assert:
+        that:
+          - awx_workflow_job_id | default('') | string is match('^[0-9]+$')
+          - >-
+            server_build_change.u_aap_workflow_job_id | default('') | string
+            in ['', awx_workflow_job_id | string]
+          - server_build_change.u_aap_launch_status in ['launching', 'launched']
+        fail_msg: Failure reporting is restricted to the dispatched server-build workflow.
+
+    - name: Build failure evidence
+      ansible.builtin.set_fact:
+        server_build_failure_notes: >-
+          [AAP] Standard server build failed at {{ server_build_failed_stage | default('unknown stage') }}.
+          Any created resources are retained for operator review. Inspect workflow job logs:
+          {{ server_build_aap_url }}/execution/jobs/workflow/{{ awx_workflow_job_id }}/output.
+          No successful completion is recorded by this failure handler.
+
+    - name: Add failure notes without closing or changing the CR state
+      ansible.builtin.uri:
+        url: "{{ snow_instance | regex_replace('/$', '') }}/api/now/table/change_request/{{ snow_change_sys_id }}"
+        method: PATCH
+        url_username: "{{ snow_username }}"
+        url_password: "{{ snow_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+        body_format: json
+        body:
+          work_notes: "{{ server_build_failure_notes }}"
+        status_code: 200
+
+    - name: Mark catalog request incomplete
+      ansible.builtin.uri:
+        url: "{{ snow_instance | regex_replace('/$', '') }}/api/now/table/sc_req_item/{{ snow_request_sys_id }}"
+        method: PATCH
+        url_username: "{{ snow_username }}"
+        url_password: "{{ snow_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ server_build_snow_validate_certs | default(true) }}"
+        body_format: json
+        body:
+          state: '4'
+          close_notes: "{{ server_build_failure_notes }}"
+          work_notes: "{{ server_build_failure_notes }}"
+        status_code: 200
+
+    - name: Keep the AAP workflow failed after reporting to ServiceNow
+      ansible.builtin.fail:
+        msg: "{{ server_build_failure_notes }}"

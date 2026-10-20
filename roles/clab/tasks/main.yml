@@ -1,4 +1,7 @@
 ---
+- name: Require explicit device credentials before provisioning
+  ansible.builtin.import_tasks: validate_password.yml
+
 - name: Build Azure resources
   ansible.builtin.include_tasks: azure.yml
 

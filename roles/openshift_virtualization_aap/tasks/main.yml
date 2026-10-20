@@ -5,9 +5,20 @@
       - aap_hostname is defined
       - aap_username is defined
       - aap_password is defined
+      - aap_password | default('', true) | string | trim | length > 0
       - openshift_api_url is defined
       - openshift_bearer_token is defined
       - openshift_bearer_token | length > 0
+      - not (openshift_virt_aap_server_build_only | bool) or (openshift_virt_aap_server_build_enabled | bool)
+
+- name: Require the OCP-V portal user's password when enabled
+  when: openshift_virt_aap_ssp_user_enabled | bool
+  ansible.builtin.assert:
+    that:
+      - openshift_virt_aap_ssp_user_password | default('', true) | string | trim | length > 0
+    fail_msg: >-
+      Set openshift_virt_aap_ssp_user_password or OCPV_SSP_USER_PASSWORD,
+      or disable openshift_virt_aap_ssp_user_enabled.
 
 - name: Verify Fedora VM SSH key files exist (when auto Machine credential enabled)
   when: openshift_virt_aap_vm_ssh_machine_cred_enabled | bool
@@ -55,7 +66,7 @@
   ansible.builtin.set_fact:
     controller_credentials: >-
       {{
-        openshift_virt_aap_controller_credentials
+        ([] if openshift_virt_aap_server_build_only | bool else openshift_virt_aap_controller_credentials)
         + (openshift_virt_aap_extra_controller_credentials | default([]))
         + (
             [
@@ -70,7 +81,7 @@
                 },
               },
             ]
-            if openshift_virt_aap_vm_ssh_machine_cred_enabled | bool else []
+            if (openshift_virt_aap_vm_ssh_machine_cred_enabled | bool and not openshift_virt_aap_server_build_only | bool) else []
           )
         + (
             [
@@ -85,7 +96,7 @@
                 },
               },
             ]
-            if openshift_virt_aap_windows_vm_ssh_machine_cred_enabled | bool else []
+            if (openshift_virt_aap_windows_vm_ssh_machine_cred_enabled | bool and not openshift_virt_aap_server_build_only | bool) else []
           )
         + openshift_virt_aap_openshift_credential
         + (
@@ -101,7 +112,8 @@
                 },
               },
             ]
-            if (openshift_virt_aap_bastion_cred_enabled | bool
+            if (not openshift_virt_aap_server_build_only | bool
+                and openshift_virt_aap_bastion_cred_enabled | bool
                 and (openshift_virt_aap_bastion_password | length) > 0) else []
           )
         + (
@@ -214,6 +226,10 @@
     controller_password: "{{ aap_password }}"
     validate_certs: "{{ openshift_virt_aap_verify_ssl }}"
 
+- name: Configure approval-driven server builds
+  ansible.builtin.include_tasks: server_build.yml
+  when: openshift_virt_aap_server_build_enabled | bool
+
 - name: Publish CasC lists for dispatch (nested role defaults would otherwise mask ours)
   ansible.builtin.set_fact:
     controller_host: "{{ aap_hostname }}"
@@ -221,13 +237,17 @@
     controller_password: "{{ aap_password }}"
     controller_execution_environments: "{{ controller_execution_environments }}"
     controller_projects: "{{ controller_projects }}"
+    controller_templates: >-
+      {{ openshift_virt_aap_server_build_templates if openshift_virt_aap_server_build_only | bool else controller_templates }}
     controller_inventories: []
-    controller_inventory_sources: "{{ openshift_virt_aap_controller_inventory_sources_for_dispatch }}"
+    controller_inventory_sources: >-
+      {{ [] if openshift_virt_aap_server_build_only | bool else openshift_virt_aap_controller_inventory_sources_for_dispatch }}
     controller_hosts: "{{ controller_hosts }}"
-    controller_workflows: "{{ controller_workflows }}"
-    controller_roles: "{{ controller_roles }}"
-    controller_schedules: "{{ controller_schedules }}"
-    controller_instance_groups: "{{ controller_instance_groups }}"
+    controller_workflows: >-
+      {{ openshift_virt_aap_server_build_workflows if openshift_virt_aap_server_build_only | bool else controller_workflows }}
+    controller_roles: "{{ [] if openshift_virt_aap_server_build_only | bool else controller_roles }}"
+    controller_schedules: "{{ [] if openshift_virt_aap_server_build_only | bool else controller_schedules }}"
+    controller_instance_groups: "{{ [] if openshift_virt_aap_server_build_only | bool else controller_instance_groups }}"
 
 - name: Apply Automation Controller configuration (OpenShift Virtualization CasC)
   ansible.builtin.include_role:
