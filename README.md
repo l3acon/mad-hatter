@@ -115,6 +115,7 @@ ansible-playbook workshop-deploy.yml \
 |---|---|
 | `--tags snow` | ServiceNow integration (CMDB, ITSM, self-service, compliance) |
 | `--tags apd` | OpenShift Virtualization product demos |
+| `--tags splunk` | Splunk Universal Forwarder demo for APD cloud RHEL VMs ([setup](docs/splunk-forwarder.md)) |
 | `--tags clab` | ContainerLab multi-vendor network workshop |
 
 ### `workshop-deploy.yml` — Workshop CasC
@@ -227,6 +228,11 @@ Job template playbooks live in `jt_playbooks/` — launched by AAP, not run dire
 | `MVNW_SANDBOX_PASSWORD` | External sandbox device password for network workshop CasC |
 | `MVNW_MACHINE_PASSWORD` | Network workshop Machine credential password |
 | `SNOW_SSP_USER_PASSWORD` | Required when the ServiceNow portal user is enabled |
+| `SPLUNK_URL`, `SPLUNK_API_URL` | Splunk UI and management API URLs |
+| `SPLUNK_USERNAME`, `SPLUNK_PASSWORD` | Splunk server login credentials |
+| `SPLUNK_RECEIVER_HOST`, `SPLUNK_RECEIVER_PORT` | Forwarder receiver; host defaults to the UI hostname |
+| `SPLUNK_FORWARDER_PASSWORD` | Local forwarder administrator password, kept separate from the server login |
+| `SPLUNK_API_VALIDATE_CERTS` | Verify Splunk API TLS certificates (defaults to true) |
 | `OCPV_SSP_USER_PASSWORD` | Required when the OCP-V portal user is enabled |
 
 Deployment content has no built-in password values. Supply credentials explicitly

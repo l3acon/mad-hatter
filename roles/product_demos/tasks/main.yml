@@ -57,133 +57,166 @@
       name: "{{ apd_organization }}"
     status_code: [200, 201]
 
+- name: Obtain a gateway token for APD configuration
+  ansible.builtin.uri:
+    url: "{{ apd_aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/tokens/"
+    method: POST
+    validate_certs: "{{ apd_aap_validate_certs }}"
+    url_username: "{{ apd_aap_username }}"
+    url_password: "{{ apd_aap_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      description: APD configuration as code
+      scope: write
+      application: null
+    status_code: [200, 201]
+    return_content: true
+  register: _apd_gateway_token
+  no_log: true
+
 # ── Bootstrap via infra.aap_configuration.dispatch ──────────────────────────
 # Mirrors install-apd.yml + common/bootstrap-vars.yml from the product-demos
 # repo, but injects ROSA AWS keys and the local SSH key instead of env vars.
-- name: Apply APD bootstrap CasC via dispatch
-  ansible.builtin.include_role:
-    name: infra.aap_configuration.dispatch
-  vars:
-    controller_host: "{{ apd_aap_hostname }}"
-    controller_username: "{{ apd_aap_username }}"
-    controller_password: "{{ apd_aap_password }}"
-    validate_certs: "{{ apd_aap_validate_certs }}"
-    controller_dependency_check: false
+- name: Apply APD bootstrap configuration
+  block:
+    - name: Apply APD bootstrap CasC via dispatch
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        controller_host: "{{ apd_aap_hostname }}"
+        controller_username: "{{ apd_aap_username }}"
+        controller_password: "{{ apd_aap_password }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        aap_token: "{{ _apd_gateway_token.json.token }}"
+        aap_validate_certs: "{{ apd_aap_validate_certs }}"
+        controller_dependency_check: false
 
-    # Disable async for gateway roles (ansible.platform 2.7 workaround)
-    gateway_configuration_async_retries: 0
-    controller_configuration_projects_async_retries: 90
+        # Disable async for gateway roles (ansible.platform 2.7 workaround)
+        gateway_configuration_async_retries: 0
+        controller_configuration_projects_async_retries: 90
 
-    # Organization already created above (gateway async workaround)
+        # Organization already created above (gateway async workaround)
 
-    # ── Credentials ───────────────────────────────────────────────────────
-    controller_credentials:
-      - name: AAP Credential
-        credential_type: Red Hat Ansible Automation Platform
-        organization: "{{ apd_organization }}"
-        update_secrets: false
-        state: exists
-        inputs:
-          host: "{{ apd_aap_hostname }}"
-          username: "{{ apd_aap_username }}"
-          password: "{{ apd_aap_password }}"
-          verify_ssl: "{{ apd_aap_validate_certs }}"
+        # ── Credentials ───────────────────────────────────────────────────────
+        controller_credentials:
+          - name: AAP Credential
+            credential_type: Red Hat Ansible Automation Platform
+            organization: "{{ apd_organization }}"
+            update_secrets: false
+            state: present
+            inputs:
+              host: "{{ apd_aap_hostname }}"
+              username: "{{ apd_aap_username }}"
+              password: "{{ apd_aap_password }}"
+              verify_ssl: "{{ apd_aap_validate_certs }}"
 
-      - name: APD Machine Credential
-        description: Machine credential for Linux (SSH key) and Windows (password) instances
-        credential_type: Machine
-        organization: "{{ apd_organization }}"
-        update_secrets: true
-        inputs:
-          username: "{{ apd_machine_credential_username }}"
-          ssh_key_data: "{{ apd_machine_credential_ssh_key }}"
-          password: "{{ apd_machine_credential_password | default(omit) }}"
+          - name: APD Machine Credential
+            description: Machine credential for Linux (SSH key) and Windows (password) instances
+            credential_type: Machine
+            organization: "{{ apd_organization }}"
+            update_secrets: true
+            inputs:
+              username: "{{ apd_machine_credential_username }}"
+              ssh_key_data: "{{ apd_machine_credential_ssh_key }}"
+              password: "{{ apd_machine_credential_password | default(omit) }}"
 
-      - name: AWS
-        credential_type: Amazon Web Services
-        organization: "{{ apd_organization }}"
-        update_secrets: true
-        inputs:
-          username: "{{ apd_aws_access_key }}"
-          password: "{{ apd_aws_secret_key }}"
+          - name: AWS
+            credential_type: Amazon Web Services
+            organization: "{{ apd_organization }}"
+            update_secrets: true
+            inputs:
+              username: "{{ apd_aws_access_key }}"
+              password: "{{ apd_aws_secret_key }}"
 
-    # ── Inventory ─────────────────────────────────────────────────────────
-    controller_inventories:
-      - name: "{{ apd_inventory_name }}"
-        organization: "{{ apd_organization }}"
+        # ── Inventory ─────────────────────────────────────────────────────────
+        controller_inventories:
+          - name: "{{ apd_inventory_name }}"
+            organization: "{{ apd_organization }}"
 
-    # ── Execution Environment ─────────────────────────────────────────────
-    controller_execution_environments:
-      - name: "{{ apd_ee_name }}"
-        image: "{{ _apd_ee_image }}"
+        # ── Execution Environment ─────────────────────────────────────────────
+        controller_execution_environments:
+          - name: "{{ apd_ee_name }}"
+            image: "{{ _apd_ee_image }}"
 
-    # ── Project ───────────────────────────────────────────────────────────
-    controller_projects:
-      - name: "{{ apd_project_name }}"
-        organization: "{{ apd_organization }}"
-        scm_type: git
-        scm_url: "{{ apd_project_scm_url }}"
-        scm_branch: "{{ apd_project_scm_branch }}"
-        default_environment: "{{ apd_ee_name }}"
-        wait: true
+        # ── Project ───────────────────────────────────────────────────────────
+        controller_projects:
+          - name: "{{ apd_project_name }}"
+            organization: "{{ apd_organization }}"
+            scm_type: git
+            scm_url: "{{ apd_project_scm_url }}"
+            scm_branch: "{{ apd_project_scm_branch }}"
+            default_environment: "{{ apd_ee_name }}"
+            wait: true
 
-    # ── Setup Job Templates ───────────────────────────────────────────────
-    controller_templates:
-      - name: "APD | Single demo setup"
-        job_type: run
-        inventory: "{{ apd_inventory_name }}"
-        project: "{{ apd_project_name }}"
-        playbook: setup_demo.yml
-        credentials: AAP Credential
-        execution_environment: "{{ apd_ee_name }}"
-        allow_simultaneous: true
-        extra_vars:
-          aap_request_timeout: 10
-        survey_enabled: true
-        survey_spec:
-          name: ""
-          description: ""
-          spec:
-            - type: multiplechoice
-              question_name: Demo Category
-              variable: demo
-              required: true
-              choices:
-                - linux
-                - windows
-                - cloud
-                - network
-                - openshift
-                - infrastructure
-                - satellite
+        # ── Setup Job Templates ───────────────────────────────────────────────
+        controller_templates:
+          - name: "APD | Single demo setup"
+            job_type: run
+            inventory: "{{ apd_inventory_name }}"
+            project: "{{ apd_project_name }}"
+            playbook: setup_demo.yml
+            credentials: AAP Credential
+            execution_environment: "{{ apd_ee_name }}"
+            allow_simultaneous: true
+            extra_vars:
+              aap_request_timeout: 10
+            survey_enabled: true
+            survey_spec:
+              name: ""
+              description: ""
+              spec:
+                - type: multiplechoice
+                  question_name: Demo Category
+                  variable: demo
+                  required: true
+                  choices:
+                    - linux
+                    - windows
+                    - cloud
+                    - network
+                    - openshift
+                    - infrastructure
+                    - satellite
 
-      - name: "APD | Multi-demo setup"
-        job_type: run
-        inventory: "{{ apd_inventory_name }}"
-        project: "{{ apd_project_name }}"
-        playbook: multi_select_setup.yml
-        credentials: AAP Credential
-        execution_environment: "{{ apd_ee_name }}"
-        extra_vars:
-          aap_request_timeout: 10
-        survey_enabled: true
-        survey_spec:
-          name: ""
-          description: ""
-          spec:
-            - question_name: "Which demos do you want to configure?"
-              type: multiselect
-              variable: demos
-              required: true
-              default: "cloud\ninfrastructure\nlinux\nnetwork\nopenshift\nwindows"
-              choices:
-                - cloud
-                - infrastructure
-                - linux
-                - network
-                - openshift
-                - satellite
-                - windows
+          - name: "APD | Multi-demo setup"
+            job_type: run
+            inventory: "{{ apd_inventory_name }}"
+            project: "{{ apd_project_name }}"
+            playbook: multi_select_setup.yml
+            credentials: AAP Credential
+            execution_environment: "{{ apd_ee_name }}"
+            extra_vars:
+              aap_request_timeout: 10
+            survey_enabled: true
+            survey_spec:
+              name: ""
+              description: ""
+              spec:
+                - question_name: "Which demos do you want to configure?"
+                  type: multiselect
+                  variable: demos
+                  required: true
+                  default: "cloud\ninfrastructure\nlinux\nnetwork\nopenshift\nwindows"
+                  choices:
+                    - cloud
+                    - infrastructure
+                    - linux
+                    - network
+                    - openshift
+                    - satellite
+                    - windows
+
+  always:
+    - name: Revoke the APD configuration token
+      ansible.builtin.uri:
+        url: "{{ apd_aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/tokens/{{ _apd_gateway_token.json.id }}/"
+        method: DELETE
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        headers:
+          Authorization: "Bearer {{ _apd_gateway_token.json.token }}"
+        status_code: [204, 404]
+      no_log: true
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 - name: Display APD deployment summary

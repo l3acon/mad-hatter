@@ -1,0 +1,160 @@
+---
+- name: Validate Splunk configuration before creating AAP resources
+  ansible.builtin.assert:
+    that:
+      - splunk_ui_url is match('^https?://[^/]+')
+      - splunk_ui_username | length > 0
+      - splunk_ui_password | length > 0
+      - splunk_api_url is match('^https?://[^/]+')
+      - splunk_receiver_host | default('', true) | length > 0
+      - splunk_receiver_port | string is match('^[0-9]+$')
+      - splunk_receiver_port | int > 0
+      - splunk_receiver_port | int < 65536
+      - splunk_forwarder_username | length > 0
+      - splunk_forwarder_password | length > 0
+    fail_msg: >-
+      Configure SPLUNK_URL, SPLUNK_API_URL, SPLUNK_USERNAME, SPLUNK_PASSWORD,
+      SPLUNK_RECEIVER_PORT, and SPLUNK_FORWARDER_PASSWORD. Set
+      SPLUNK_RECEIVER_HOST if it differs from the UI hostname.
+  no_log: true
+
+- name: Obtain an AAP gateway token for Splunk CasC
+  ansible.builtin.uri:
+    url: "{{ aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/tokens/"
+    method: POST
+    url_username: "{{ aap_username }}"
+    url_password: "{{ aap_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ splunk_aap_validate_certs }}"
+    body_format: json
+    body:
+      description: Splunk forwarder configuration as code
+      scope: write
+      application: null
+    status_code: [200, 201]
+    return_content: true
+  register: _splunk_aap_token
+  no_log: true
+
+- name: Configure Splunk resources in AAP
+  block:
+    - name: Apply Splunk configuration as code
+      ansible.builtin.include_role:
+        name: infra.aap_configuration.dispatch
+      vars:
+        aap_token: "{{ _splunk_aap_token.json.token }}"
+        aap_validate_certs: "{{ splunk_aap_validate_certs }}"
+        controller_dependency_check: false
+        controller_configuration_projects_async_retries: 90
+
+        controller_credential_types:
+          - name: Splunk Server
+            description: Splunk UI and management API credentials
+            kind: cloud
+            inputs:
+              fields:
+                - {id: url, type: string, label: Splunk UI URL}
+                - {id: api_url, type: string, label: Splunk management API URL}
+                - {id: validate_certs, type: boolean, label: Verify API TLS certificates}
+                - {id: username, type: string, label: Username}
+                - {id: password, type: string, label: Password, secret: true}
+              required: [url, api_url, username, password]
+            injectors:
+              env:
+                SPLUNK_URL: !unsafe '{{ url }}'
+                SPLUNK_API_URL: !unsafe '{{ api_url }}'
+                SPLUNK_API_VALIDATE_CERTS: !unsafe '{{ validate_certs }}'
+                SPLUNK_USERNAME: !unsafe '{{ username }}'
+                SPLUNK_PASSWORD: !unsafe '{{ password }}'
+          - name: Splunk Forwarder
+            description: Local administrator credentials for Splunk Universal Forwarder
+            kind: cloud
+            inputs:
+              fields:
+                - {id: username, type: string, label: Username}
+                - {id: password, type: string, label: Password, secret: true}
+              required: [username, password]
+            injectors:
+              env:
+                SPLUNK_FORWARDER_USERNAME: !unsafe '{{ username }}'
+                SPLUNK_FORWARDER_PASSWORD: !unsafe '{{ password }}'
+
+        controller_credentials:
+          - name: Splunk Server
+            credential_type: Splunk Server
+            organization: "{{ splunk_aap_organization }}"
+            update_secrets: true
+            inputs:
+              url: "{{ splunk_ui_url }}"
+              api_url: "{{ splunk_api_url }}"
+              validate_certs: "{{ splunk_api_validate_certs | bool }}"
+              username: "{{ splunk_ui_username }}"
+              password: "{{ splunk_ui_password }}"
+          - name: Splunk Forwarder
+            credential_type: Splunk Forwarder
+            organization: "{{ splunk_aap_organization }}"
+            update_secrets: true
+            inputs:
+              username: "{{ splunk_forwarder_username }}"
+              password: "{{ splunk_forwarder_password }}"
+
+        controller_execution_environments:
+          - name: "{{ splunk_aap_ee_name }}"
+            image: "{{ splunk_aap_ee_image }}"
+            pull: always
+
+        controller_projects:
+          - name: "{{ splunk_aap_project_name }}"
+            organization: "{{ splunk_aap_organization }}"
+            scm_type: git
+            scm_url: "{{ splunk_aap_project_scm_url }}"
+            scm_branch: "{{ splunk_aap_project_scm_branch }}"
+            default_environment: "{{ splunk_aap_ee_name }}"
+            scm_update_on_launch: true
+            wait: true
+
+        controller_templates:
+          - name: "Splunk | Deploy Universal Forwarder"
+            description: Install and configure the forwarder on APD cloud RHEL hosts
+            job_type: run
+            inventory: "{{ splunk_aap_inventory }}"
+            project: "{{ splunk_aap_project_name }}"
+            playbook: jt_playbooks/splunk/deploy_forwarder.yml
+            execution_environment: "{{ splunk_aap_ee_name }}"
+            credentials:
+              - "{{ splunk_aap_machine_credential }}"
+              - Splunk Server
+              - Splunk Forwarder
+            extra_vars:
+              splunk_target_hosts: "{{ splunk_forwarder_targets }}"
+              splunk_receiver_host: "{{ splunk_receiver_host }}"
+              splunk_receiver_port: "{{ splunk_receiver_port | int }}"
+              splunk_forwarder_version: "{{ splunk_forwarder_version }}"
+              splunk_forwarder_release_id: "{{ splunk_forwarder_release_id }}"
+              splunk_demo_index: "{{ splunk_demo_index }}"
+          - name: "Splunk | Verify Forwarder Events"
+            description: Send a unique demo event and verify it through the Splunk API
+            job_type: run
+            inventory: "{{ splunk_aap_inventory }}"
+            project: "{{ splunk_aap_project_name }}"
+            playbook: jt_playbooks/splunk/verify_forwarder.yml
+            execution_environment: "{{ splunk_aap_ee_name }}"
+            credentials:
+              - "{{ splunk_aap_machine_credential }}"
+              - Splunk Server
+              - Splunk Forwarder
+            extra_vars:
+              splunk_target_hosts: "{{ splunk_forwarder_targets }}"
+              splunk_receiver_host: "{{ splunk_receiver_host }}"
+              splunk_receiver_port: "{{ splunk_receiver_port | int }}"
+              splunk_demo_index: "{{ splunk_demo_index }}"
+  always:
+    - name: Revoke the temporary AAP gateway token
+      ansible.builtin.uri:
+        url: "{{ aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/tokens/{{ _splunk_aap_token.json.id }}/"
+        method: DELETE
+        headers:
+          Authorization: "Bearer {{ _splunk_aap_token.json.token }}"
+        validate_certs: "{{ splunk_aap_validate_certs }}"
+        status_code: [204, 404]
+      no_log: true
