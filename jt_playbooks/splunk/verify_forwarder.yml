@@ -1,0 +1,80 @@
+---
+- name: Validate the Splunk API and APD inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    splunk_target_hosts: "aws-rhel9:aws-rhel10"
+  tasks:
+    - name: Require targets, API settings, and a safe index name
+      ansible.builtin.assert:
+        that:
+          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | length > 0
+          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | difference(splunk_target_hosts.split(':')) | length == 0
+          - lookup('env', 'SPLUNK_API_URL') is match('^https?://[^/]+')
+          - lookup('env', 'SPLUNK_USERNAME') | length > 0
+          - lookup('env', 'SPLUNK_PASSWORD') | length > 0
+          - splunk_demo_index | default('main') is match('^[A-Za-z0-9_-]+$')
+        fail_msg: Check the APD inventory, Splunk Server credential, and demo index.
+      no_log: true
+
+    - name: Check Splunk management API authentication
+      ansible.builtin.uri:
+        url: "{{ lookup('env', 'SPLUNK_API_URL') | regex_replace('/$', '') }}/services/server/info?output_mode=json"
+        url_username: "{{ lookup('env', 'SPLUNK_USERNAME') }}"
+        url_password: "{{ lookup('env', 'SPLUNK_PASSWORD') }}"
+        force_basic_auth: true
+        validate_certs: "{{ lookup('env', 'SPLUNK_API_VALIDATE_CERTS') | default('true', true) | bool }}"
+        status_code: 200
+      no_log: true
+
+- name: Send and verify a unique forwarder event for each APD RHEL VM
+  hosts: "{{ splunk_target_hosts | default('aws-rhel9:aws-rhel10') }}"
+  become: true
+  gather_facts: true
+  serial: 1
+  vars:
+    splunk_demo_index: main
+    splunk_demo_log: /var/log/aap-splunk-demo.log
+    _splunk_marker: "AAP_SPLUNK_DEMO_{{ ansible_date_time.epoch }}_{{ inventory_hostname | hash('sha1') | truncate(8, true, '') }}_{{ lookup('env', 'JOB_ID') | default('manual', true) }}"
+  tasks:
+    - name: Append a uniquely identifiable demo event
+      ansible.builtin.lineinfile:
+        path: "{{ splunk_demo_log }}"
+        line: "{{ _splunk_marker }}"
+        create: false
+
+    - name: Search Splunk for the new event
+      block:
+        - name: Wait until the unique event has been indexed
+          ansible.builtin.uri:
+            url: "{{ lookup('env', 'SPLUNK_API_URL') | regex_replace('/$', '') }}/services/search/jobs/oneshot?output_mode=json"
+            method: POST
+            url_username: "{{ lookup('env', 'SPLUNK_USERNAME') }}"
+            url_password: "{{ lookup('env', 'SPLUNK_PASSWORD') }}"
+            force_basic_auth: true
+            validate_certs: "{{ lookup('env', 'SPLUNK_API_VALIDATE_CERTS') | default('true', true) | bool }}"
+            body_format: form-urlencoded
+            body:
+              search: 'search index="{{ splunk_demo_index }}" "{{ _splunk_marker }}" | head 1'
+              earliest_time: '-10m'
+              latest_time: now
+            return_content: true
+            status_code: 200
+          register: _splunk_search
+          until: _splunk_search.json.results | default([]) | length > 0
+          retries: 24
+          delay: 5
+          delegate_to: localhost
+          become: false
+          no_log: true
+      rescue:
+        - name: Report that the forwarder event was not found
+          ansible.builtin.fail:
+            msg: >-
+              Splunk did not return the test event. Check the API account's search
+              permissions, the receiver, forwarder logs, and configured index.
+
+    - name: Report the verified event
+      ansible.builtin.debug:
+        msg: "Splunk indexed {{ _splunk_marker }} from {{ inventory_hostname }}."
