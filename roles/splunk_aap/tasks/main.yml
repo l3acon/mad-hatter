@@ -61,11 +61,11 @@
               required: [url, api_url, username, password]
             injectors:
               env:
-                SPLUNK_URL: "{% raw %}{{ url }}{% endraw %}"
-                SPLUNK_API_URL: "{% raw %}{{ api_url }}{% endraw %}"
-                SPLUNK_API_VALIDATE_CERTS: "{% raw %}{{ validate_certs }}{% endraw %}"
-                SPLUNK_USERNAME: "{% raw %}{{ username }}{% endraw %}"
-                SPLUNK_PASSWORD: "{% raw %}{{ password }}{% endraw %}"
+                SPLUNK_URL: !unsafe '{{ url }}'
+                SPLUNK_API_URL: !unsafe '{{ api_url }}'
+                SPLUNK_API_VALIDATE_CERTS: !unsafe '{{ validate_certs }}'
+                SPLUNK_USERNAME: !unsafe '{{ username }}'
+                SPLUNK_PASSWORD: !unsafe '{{ password }}'
           - name: Splunk Forwarder
             description: Local administrator credentials for Splunk Universal Forwarder
             kind: cloud
@@ -76,8 +76,8 @@
               required: [username, password]
             injectors:
               env:
-                SPLUNK_FORWARDER_USERNAME: "{% raw %}{{ username }}{% endraw %}"
-                SPLUNK_FORWARDER_PASSWORD: "{% raw %}{{ password }}{% endraw %}"
+                SPLUNK_FORWARDER_USERNAME: !unsafe '{{ username }}'
+                SPLUNK_FORWARDER_PASSWORD: !unsafe '{{ password }}'
 
         controller_credentials:
           - name: Splunk Server
