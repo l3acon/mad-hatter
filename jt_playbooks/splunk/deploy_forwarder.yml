@@ -103,19 +103,24 @@
         mode: '0644'
         force: false
 
+    - name: Read the forwarder installation ownership
+      ansible.builtin.stat:
+        path: /opt/splunkforwarder
+      register: _splunk_home_stat
+
     - name: Create the demo input directory
       ansible.builtin.file:
         path: "{{ splunk_demo_app }}"
         state: directory
-        owner: root
-        group: root
+        owner: "{{ _splunk_home_stat.stat.uid }}"
+        group: "{{ _splunk_home_stat.stat.gid }}"
         mode: '0755'
 
     - name: Configure the demo log input
       ansible.builtin.copy:
         dest: "{{ splunk_demo_app }}/inputs.conf"
-        owner: root
-        group: root
+        owner: "{{ _splunk_home_stat.stat.uid }}"
+        group: "{{ _splunk_home_stat.stat.gid }}"
         mode: '0644'
         content: |
           [monitor://{{ splunk_demo_log }}]
