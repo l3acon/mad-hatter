@@ -9,6 +9,7 @@
 # Tags:
 #   snow — ServiceNow integration CasC (roles: snow)
 #   apd  — OpenShift Virtualization product demos CasC (role: openshift_virtualization_aap)
+#   splunk — Splunk forwarder demo for APD cloud VMs
 #   clab — ContainerLab network CasC (roles: mvnw + credential dispatch)
 - name: Apply Configuration as Code
   hosts: localhost
@@ -125,6 +126,14 @@
         apd_aws_secret_key: "{{ aws_secret_key | default(lookup('env', 'AWS_SECRET_ACCESS_KEY')) }}"
         apd_machine_credential_ssh_key: "{{ aap_machine_cred_priv_key | default(lookup('file', '/root/keys/my_priv_key', errors='ignore') | default('')) }}"
         apd_machine_credential_password: "{{ aap_machine_cred_password | default(lookup('env', 'AAP_MACHINE_CRED_PASSWORD')) }}"
+
+    # ── splunk: forwarder demo on APD cloud RHEL hosts ──────────────────────
+    - name: Splunk forwarder configuration as code
+      tags: [splunk]
+      ansible.builtin.include_role:
+        name: splunk_aap
+        apply:
+          tags: [splunk]
 
     # ── clab: ContainerLab network CasC ───────────────────────────────────
     - name: Run multi-vendor network workshop config as code

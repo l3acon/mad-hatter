@@ -1,0 +1,147 @@
+---
+- name: Validate the APD target inventory and Splunk configuration
+  hosts: localhost
+  tags: [splunk_preflight]
+  connection: local
+  gather_facts: false
+  vars:
+    splunk_target_hosts: "aws_rhel8:aws_rhel9"
+  tasks:
+    - name: Require RHEL targets and forwarder configuration
+      ansible.builtin.assert:
+        that:
+          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | length > 0
+          - splunk_receiver_host | default('', true) | length > 0
+          - splunk_receiver_port | default('') | string is match('^[0-9]+$')
+          - splunk_receiver_port | int > 0
+          - splunk_receiver_port | int < 65536
+          - splunk_forwarder_version | default('', true) | length > 0
+          - splunk_forwarder_release_id | default('', true) | length > 0
+          - lookup('env', 'SPLUNK_FORWARDER_USERNAME') | length > 0
+          - lookup('env', 'SPLUNK_FORWARDER_PASSWORD') | length > 0
+          - splunk_demo_index | default('main') is match('^[A-Za-z0-9_-]+$')
+        fail_msg: >-
+          Check the APD cloud inventory, Splunk receiver, forwarder version,
+          and Splunk Forwarder credential before running this job.
+      no_log: true
+
+- name: Install Splunk Universal Forwarder on APD RHEL VMs
+  hosts: "{{ splunk_target_hosts | default('aws_rhel8:aws_rhel9') }}"
+  become: true
+  gather_facts: false
+  serial: 1
+  vars:
+    splunk_demo_index: main
+    splunk_demo_log: /var/log/aap-splunk-demo.log
+    splunk_demo_app: /opt/splunkforwarder/etc/apps/aap_splunk_demo/local
+    splunk_forwarder_user: "{{ lookup('env', 'SPLUNK_FORWARDER_USERNAME') }}"
+    splunk_forwarder_secret: "{{ lookup('env', 'SPLUNK_FORWARDER_PASSWORD') }}"
+    splunk_receiver: "{{ splunk_receiver_host }}:{{ splunk_receiver_port }}"
+  tasks:
+    - name: Gather target facts
+      ansible.builtin.setup:
+
+    - name: Require a supported RHEL system and CPU architecture
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'RedHat'
+          - ansible_distribution_major_version in ['8', '9', '10']
+          - ansible_architecture in ['x86_64', 'aarch64']
+        fail_msg: The Splunk Linux module requires RHEL 8, 9, or 10 on x86_64 or aarch64.
+
+    - name: Check that the Splunk receiver is reachable from this host
+      ansible.builtin.wait_for:
+        host: "{{ splunk_receiver_host }}"
+        port: "{{ splunk_receiver_port | int }}"
+        timeout: 15
+
+    - name: Check for an existing forwarder package
+      ansible.builtin.command: rpm -q splunkforwarder
+      register: _splunk_existing_package
+      changed_when: false
+      failed_when: _splunk_existing_package.rc not in [0, 1]
+      check_mode: false
+
+    - name: Inspect existing forwarder configuration
+      when: _splunk_existing_package.rc == 0
+      splunk.enterprise.splunk_universal_forwarder_linux_info:
+        username: "{{ splunk_forwarder_user }}"
+        password: "{{ splunk_forwarder_secret }}"
+      register: _splunk_existing_info
+      no_log: true
+
+    - name: Protect existing receivers from replacement
+      when: _splunk_existing_package.rc == 0
+      ansible.builtin.assert:
+        that:
+          - >-
+            (splunk_allow_receiver_replacement | default(false) | bool) or
+            (_splunk_existing_info.forward_servers | default([]) | difference([splunk_receiver]) | length == 0)
+        fail_msg: >-
+          This forwarder has other receivers. Review its configuration and set
+          splunk_allow_receiver_replacement=true only if replacing them is intended.
+
+    - name: Install and configure the forwarder
+      splunk.enterprise.splunk_universal_forwarder_linux:
+        state: present
+        version: "{{ splunk_forwarder_version }}"
+        release_id: "{{ splunk_forwarder_release_id }}"
+        cpu: "{{ 'ARM' if ansible_architecture == 'aarch64' else '64-bit' }}"
+        username: "{{ splunk_forwarder_user }}"
+        password: "{{ splunk_forwarder_secret }}"
+        forward_servers:
+          - "{{ splunk_receiver }}"
+      no_log: true
+
+    - name: Create a dedicated demo log if it does not already exist
+      ansible.builtin.copy:
+        dest: "{{ splunk_demo_log }}"
+        content: "AAP Splunk forwarder demonstration is ready.\n"
+        owner: root
+        group: root
+        mode: '0644'
+        force: false
+
+    - name: Create the demo input directory
+      ansible.builtin.file:
+        path: "{{ splunk_demo_app }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure the demo log input
+      ansible.builtin.copy:
+        dest: "{{ splunk_demo_app }}/inputs.conf"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [monitor://{{ splunk_demo_log }}]
+          disabled = false
+          index = {{ splunk_demo_index }}
+          sourcetype = aap_splunk_demo
+      notify: Restart Splunk Forwarder
+
+    - name: Apply input configuration before checking the forwarder
+      ansible.builtin.meta: flush_handlers
+
+    - name: Inspect the installed forwarder
+      splunk.enterprise.splunk_universal_forwarder_linux_info:
+        username: "{{ splunk_forwarder_user }}"
+        password: "{{ splunk_forwarder_secret }}"
+      register: _splunk_forwarder_info
+      no_log: true
+
+    - name: Verify the forwarder and receiver configuration
+      ansible.builtin.assert:
+        that:
+          - _splunk_forwarder_info.state == 'present'
+          - splunk_receiver in _splunk_forwarder_info.forward_servers
+        fail_msg: Splunk Forwarder is not installed or the expected receiver is not configured.
+
+  handlers:
+    - name: Restart Splunk Forwarder
+      ansible.builtin.service:
+        name: SplunkForwarder
+        state: restarted

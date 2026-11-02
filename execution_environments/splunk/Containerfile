@@ -1,0 +1,10 @@
+FROM quay.io/matferna/mh-rosa:latest
+
+USER root
+RUN /usr/bin/python3.12 -m pip install --no-cache-dir --ignore-installed 'ansible-core==2.18.8'
+COPY ansible.cfg /tmp/splunk-ansible.cfg
+COPY requirements.yml /tmp/splunk-requirements.yml
+RUN ANSIBLE_CONFIG=/tmp/splunk-ansible.cfg ansible-galaxy collection install \
+      -r /tmp/splunk-requirements.yml -p /usr/share/ansible/collections --no-deps \
+    && rm -f /tmp/splunk-ansible.cfg /tmp/splunk-requirements.yml
+USER 1000
