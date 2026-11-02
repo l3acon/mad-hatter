@@ -5,12 +5,13 @@
   connection: local
   gather_facts: false
   vars:
-    splunk_target_hosts: "aws-rhel*:aws_rhel*"
+    splunk_target_hosts: "aws-rhel9:aws-rhel10"
   tasks:
     - name: Require RHEL targets and forwarder configuration
       ansible.builtin.assert:
         that:
           - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | length > 0
+          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | difference(splunk_target_hosts.split(':')) | length == 0
           - splunk_receiver_host | default('', true) | length > 0
           - splunk_receiver_port | default('') | string is match('^[0-9]+$')
           - splunk_receiver_port | int > 0
@@ -21,12 +22,12 @@
           - lookup('env', 'SPLUNK_FORWARDER_PASSWORD') | length > 0
           - splunk_demo_index | default('main') is match('^[A-Za-z0-9_-]+$')
         fail_msg: >-
-          Check the APD cloud inventory, Splunk receiver, forwarder version,
-          and Splunk Forwarder credential before running this job.
+          Supply explicit APD host names separated by colons, and check the
+          receiver, forwarder version, and Splunk Forwarder credential.
       no_log: true
 
 - name: Install Splunk Universal Forwarder on APD RHEL VMs
-  hosts: "{{ splunk_target_hosts | default('aws-rhel*:aws_rhel*') }}"
+  hosts: "{{ splunk_target_hosts | default('aws-rhel9:aws-rhel10') }}"
   become: true
   gather_facts: false
   serial: 1

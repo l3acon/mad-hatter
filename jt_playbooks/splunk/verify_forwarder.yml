@@ -4,12 +4,13 @@
   connection: local
   gather_facts: false
   vars:
-    splunk_target_hosts: "aws-rhel*:aws_rhel*"
+    splunk_target_hosts: "aws-rhel9:aws-rhel10"
   tasks:
     - name: Require targets, API settings, and a safe index name
       ansible.builtin.assert:
         that:
           - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | length > 0
+          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | difference(splunk_target_hosts.split(':')) | length == 0
           - lookup('env', 'SPLUNK_API_URL') is match('^https?://[^/]+')
           - lookup('env', 'SPLUNK_USERNAME') | length > 0
           - lookup('env', 'SPLUNK_PASSWORD') | length > 0
@@ -28,7 +29,7 @@
       no_log: true
 
 - name: Send and verify a unique forwarder event for each APD RHEL VM
-  hosts: "{{ splunk_target_hosts | default('aws-rhel*:aws_rhel*') }}"
+  hosts: "{{ splunk_target_hosts | default('aws-rhel9:aws-rhel10') }}"
   become: true
   gather_facts: true
   serial: 1

@@ -8,8 +8,10 @@ credentials, and execution environment.
 ## Prerequisites
 
 - Run APD cloud setup, deploy the cloud stack, and sync its AWS inventory. The
-  default target pattern is `aws-rhel*:aws_rhel*`; override
-  `splunk_forwarder_targets` if the deployed inventory uses different names.
+  default target list is `aws-rhel9:aws-rhel10`; override
+  `splunk_forwarder_targets` with explicit host names separated by colons if
+  the deployed inventory uses different names. Groups and wildcard expansion
+  are rejected to avoid selecting other APD machines.
 - The VMs must be reachable by AAP, have privilege escalation and outbound
   access to `download.splunk.com`, and reach the Splunk receiver.
 - Supply `SPLUNK_URL`, `SPLUNK_API_URL`, `SPLUNK_USERNAME`, `SPLUNK_PASSWORD`,

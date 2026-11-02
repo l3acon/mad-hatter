@@ -52,6 +52,12 @@ class SplunkForwarderPreflightTests(unittest.TestCase):
         code, output = self.run_preflight(["aws-rhel9"], splunk_receiver_port=65536)
         self.assertNotEqual(code, 0, output)
 
+    def test_group_expansion_cannot_include_the_report_server(self):
+        code, output = self.run_preflight(
+            ["[aws_rhel]", "aws-rhel9", "reports"], splunk_target_hosts="aws_rhel"
+        )
+        self.assertNotEqual(code, 0, output)
+
 
 if __name__ == "__main__":
     unittest.main()
