@@ -5,13 +5,37 @@
   connection: local
   gather_facts: false
   vars:
-    splunk_target_hosts: "aws-rhel9:aws-rhel10"
+    splunk_target_hosts: "{{ _hosts | default('aws-rhel*', true) }}"
   tasks:
+    - name: Validate the requested host patterns
+      ansible.builtin.assert:
+        that:
+          - splunk_target_hosts is string
+          - splunk_target_hosts is match('^[A-Za-z0-9_.?*-]+(:[A-Za-z0-9_.?*-]+)*$')
+        fail_msg: >-
+          Enter host names or wildcard patterns separated by colons, with no spaces.
+
+    - name: Resolve requested patterns against inventory host names
+      ansible.builtin.set_fact:
+        _splunk_named_targets: >-
+          {{ (_splunk_named_targets | default([])) +
+             (groups['all'] | select('match', '^' ~ (item | replace('*', '@')
+               | replace('?', '%') | regex_escape | replace('@', '.*')
+               | replace('%', '.')) ~ '$') | list) }}
+      loop: "{{ splunk_target_hosts.split(':') }}"
+
+    - name: Require matches without unintended inventory group expansion
+      ansible.builtin.assert:
+        that:
+          - _splunk_named_targets | default([]) | length > 0
+          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | difference(_splunk_named_targets) | length == 0
+        fail_msg: >-
+          The requested patterns must match inventory host names without selecting
+          extra hosts through inventory groups. Use explicit host names if needed.
+
     - name: Require RHEL targets and forwarder configuration
       ansible.builtin.assert:
         that:
-          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | length > 0
-          - query('ansible.builtin.inventory_hostnames', splunk_target_hosts) | difference(splunk_target_hosts.split(':')) | length == 0
           - splunk_receiver_host | default('', true) | length > 0
           - splunk_receiver_port | default('') | string is match('^[0-9]+$')
           - splunk_receiver_port | int > 0
@@ -22,12 +46,11 @@
           - lookup('env', 'SPLUNK_FORWARDER_PASSWORD') | length > 0
           - splunk_demo_index | default('main') is match('^[A-Za-z0-9_-]+$')
         fail_msg: >-
-          Supply explicit APD host names separated by colons, and check the
-          receiver, forwarder version, and Splunk Forwarder credential.
+          Check the receiver, forwarder version, and Splunk Forwarder credential.
       no_log: true
 
 - name: Install Splunk Universal Forwarder on APD RHEL VMs
-  hosts: "{{ splunk_target_hosts | default('aws-rhel9:aws-rhel10') }}"
+  hosts: "{{ _hosts | default('aws-rhel*', true) }}"
   become: true
   gather_facts: false
   serial: 1

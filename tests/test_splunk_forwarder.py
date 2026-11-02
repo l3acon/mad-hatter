@@ -54,9 +54,34 @@ class SplunkForwarderPreflightTests(unittest.TestCase):
 
     def test_group_expansion_cannot_include_the_report_server(self):
         code, output = self.run_preflight(
-            ["[aws_rhel]", "aws-rhel9", "reports"], splunk_target_hosts="aws_rhel"
+            ["[aws_rhel]", "aws-rhel9", "reports"], _hosts="aws_rhel*"
         )
         self.assertNotEqual(code, 0, output)
+
+    def test_wildcard_selects_hosts_without_matching_unrelated_group(self):
+        code, output = self.run_preflight(["[aws_rhel]", "aws-rhel9", "aws-rhel10", "reports"])
+        self.assertEqual(code, 0, output)
+
+    def test_wildcard_rejects_matching_group_with_extra_hosts(self):
+        code, output = self.run_preflight(
+            ["[aws-rhel9]", "reports", "[targets]", "aws-rhel9", "aws-rhel10"]
+        )
+        self.assertNotEqual(code, 0, output)
+
+    def test_explicit_survey_target_is_used_by_deployment_play(self):
+        with tempfile.TemporaryDirectory(prefix="splunk-targets-") as tmp:
+            inventory = Path(tmp) / "inventory.ini"
+            inventory.write_text("aws-rhel9\naws-rhel10\nreports\n")
+            result = subprocess.run(
+                ["ansible-playbook", "-i", str(inventory), str(PLAYBOOK),
+                 "--list-hosts", "-e", "_hosts=aws-rhel9"],
+                cwd=ROOT, env=dict(os.environ, ANSIBLE_NOCOLOR="1"),
+                capture_output=True, text=True, timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("aws-rhel9", result.stdout)
+            self.assertNotIn("aws-rhel10", result.stdout)
+            self.assertNotIn("reports", result.stdout)
 
 
 if __name__ == "__main__":

@@ -8,10 +8,10 @@ credentials, and execution environment.
 ## Prerequisites
 
 - Run APD cloud setup, deploy the cloud stack, and sync its AWS inventory. The
-  default target list is `aws-rhel9:aws-rhel10`; override
-  `splunk_forwarder_targets` with explicit host names separated by colons if
-  the deployed inventory uses different names. Groups and wildcard expansion
-  are rejected to avoid selecting other APD machines.
+  deployment survey defaults to `aws-rhel*`; you can enter a specific host or
+  colon-separated host names or patterns. The preflight rejects patterns that
+  select extra hosts through inventory groups. The separate verification job
+  uses `splunk_forwarder_targets`, which defaults to `aws-rhel9:aws-rhel10`.
 - The VMs must be reachable by AAP, have privilege escalation and outbound
   access to `download.splunk.com`, and reach the Splunk receiver.
 - Supply `SPLUNK_URL`, `SPLUNK_API_URL`, `SPLUNK_USERNAME`, `SPLUNK_PASSWORD`,
@@ -59,8 +59,8 @@ and `CONTROLLER_PASSWORD` in the same way as the other CasC roles.
 CasC creates **Splunk Server** and **Splunk Forwarder** credential types and
 credentials, a dedicated execution environment, a project, and two templates:
 
-1. **Splunk | Deploy Universal Forwarder** checks the selected hosts, installs
-   the forwarder, and configures a dedicated demo log input in index `main`.
+1. **Splunk | Deploy Universal Forwarder** prompts for target hosts, checks
+   the selection, installs the forwarder, and configures a dedicated demo log input in index `main`.
    It fails before replacing any different existing forwarder receivers unless
    `splunk_allow_receiver_replacement=true` is deliberately supplied.
 2. **Splunk | Verify Forwarder Events** writes a unique marker to that log on
