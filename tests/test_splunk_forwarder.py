@@ -45,11 +45,11 @@ class SplunkForwarderPreflightTests(unittest.TestCase):
         self.assertIn("failed=1", output)
 
     def test_cloud_rhel_target_and_valid_receiver_pass(self):
-        code, output = self.run_preflight(["aws_rhel9"])
+        code, output = self.run_preflight(["aws-rhel9", "aws-rhel10"])
         self.assertEqual(code, 0, output)
 
     def test_invalid_receiver_port_fails(self):
-        code, output = self.run_preflight(["aws_rhel9"], splunk_receiver_port=65536)
+        code, output = self.run_preflight(["aws-rhel9"], splunk_receiver_port=65536)
         self.assertNotEqual(code, 0, output)
 
 

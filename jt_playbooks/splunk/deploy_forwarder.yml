@@ -5,7 +5,7 @@
   connection: local
   gather_facts: false
   vars:
-    splunk_target_hosts: "aws_rhel8:aws_rhel9"
+    splunk_target_hosts: "aws-rhel*:aws_rhel*"
   tasks:
     - name: Require RHEL targets and forwarder configuration
       ansible.builtin.assert:
@@ -26,7 +26,7 @@
       no_log: true
 
 - name: Install Splunk Universal Forwarder on APD RHEL VMs
-  hosts: "{{ splunk_target_hosts | default('aws_rhel8:aws_rhel9') }}"
+  hosts: "{{ splunk_target_hosts | default('aws-rhel*:aws_rhel*') }}"
   become: true
   gather_facts: false
   serial: 1

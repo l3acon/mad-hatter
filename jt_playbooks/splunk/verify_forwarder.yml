@@ -4,7 +4,7 @@
   connection: local
   gather_facts: false
   vars:
-    splunk_target_hosts: "aws_rhel8:aws_rhel9"
+    splunk_target_hosts: "aws-rhel*:aws_rhel*"
   tasks:
     - name: Require targets, API settings, and a safe index name
       ansible.builtin.assert:
@@ -28,7 +28,7 @@
       no_log: true
 
 - name: Send and verify a unique forwarder event for each APD RHEL VM
-  hosts: "{{ splunk_target_hosts | default('aws_rhel8:aws_rhel9') }}"
+  hosts: "{{ splunk_target_hosts | default('aws-rhel*:aws_rhel*') }}"
   become: true
   gather_facts: true
   serial: 1

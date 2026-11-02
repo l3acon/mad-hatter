@@ -20,5 +20,5 @@ splunk_forwarder_username: "{{ lookup('env', 'SPLUNK_FORWARDER_USERNAME') | defa
 splunk_forwarder_password: "{{ lookup('env', 'SPLUNK_FORWARDER_PASSWORD') }}"
 splunk_forwarder_version: "9.4.7"
 splunk_forwarder_release_id: "2a9293b80994"
-splunk_forwarder_targets: "aws_rhel8:aws_rhel9"
+splunk_forwarder_targets: "aws-rhel*:aws_rhel*"
 splunk_demo_index: "main"
