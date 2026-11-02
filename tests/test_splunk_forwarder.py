@@ -68,6 +68,12 @@ class SplunkForwarderPreflightTests(unittest.TestCase):
         )
         self.assertNotEqual(code, 0, output)
 
+    def test_legacy_extra_variable_cannot_bypass_survey_validation(self):
+        code, output = self.run_preflight(
+            ["aws-rhel9", "reports"], _hosts="reports", splunk_target_hosts="aws-rhel9"
+        )
+        self.assertNotEqual(code, 0, output)
+
     def test_explicit_survey_target_is_used_by_deployment_play(self):
         with tempfile.TemporaryDirectory(prefix="splunk-targets-") as tmp:
             inventory = Path(tmp) / "inventory.ini"

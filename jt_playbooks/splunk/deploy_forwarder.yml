@@ -11,9 +11,11 @@
       ansible.builtin.assert:
         that:
           - splunk_target_hosts is string
+          - splunk_target_hosts == (_hosts | default('aws-rhel*', true))
           - splunk_target_hosts is match('^[A-Za-z0-9_.?*-]+(:[A-Za-z0-9_.?*-]+)*$')
         fail_msg: >-
           Enter host names or wildcard patterns separated by colons, with no spaces.
+          Remove any conflicting legacy splunk_target_hosts extra variable.
 
     - name: Resolve requested patterns against inventory host names
       ansible.builtin.set_fact:
