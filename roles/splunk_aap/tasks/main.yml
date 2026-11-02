@@ -125,8 +125,20 @@
               - "{{ splunk_aap_machine_credential }}"
               - Splunk Server
               - Splunk Forwarder
+            survey_enabled: true
+            survey_spec:
+              name: Forwarder target hosts
+              description: Select the inventory hosts for forwarder deployment.
+              spec:
+                - question_name: Target hosts
+                  question_description: Host names or wildcard patterns separated by colons, such as aws-rhel9:aws-rhel10.
+                  variable: _hosts
+                  type: text
+                  required: true
+                  default: "aws-rhel*"
+                  min: 1
+                  max: 1024
             extra_vars:
-              splunk_target_hosts: "{{ splunk_forwarder_targets }}"
               splunk_receiver_host: "{{ splunk_receiver_host }}"
               splunk_receiver_port: "{{ splunk_receiver_port | int }}"
               splunk_forwarder_version: "{{ splunk_forwarder_version }}"
