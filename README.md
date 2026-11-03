@@ -19,6 +19,7 @@ into modular playbooks that follow the `*-deploy.yml` naming convention.
 | `workshop-deploy.yml` | Deploy OCP-V CasC to pre-provisioned workshop clusters |
 | `windows-golden-deploy.yml` | Build Windows Server golden image from ISO |
 | `portal-deploy.yml` | Self-Service Portal (RHAAP Developer Hub via Helm) |
+| `compliance-casc.yml` | AAP resources for the private compliance dashboard evaluation ([setup](docs/compliance-portal.md)) |
 | `snow-deploy.yml` | Deploy SNOW catalog items |
 | `server-build-deploy.yml` | Deploy approval-driven RHEL/Windows server builds ([setup](docs/server-build.md)) |
 | `ao-deploy.yml` | Automation Orchestrator operator |
@@ -115,6 +116,7 @@ ansible-playbook workshop-deploy.yml \
 |---|---|
 | `--tags snow` | ServiceNow integration (CMDB, ITSM, self-service, compliance) |
 | `--tags apd` | OpenShift Virtualization product demos |
+| `--tags apd_patch_reboot` | Optional RHEL reboot for the APD cloud patch workflow ([setup](docs/cloud-patch-reboot.md)) |
 | `--tags splunk` | Splunk Universal Forwarder demo for APD cloud RHEL VMs ([setup](docs/splunk-forwarder.md)) |
 | `--tags clab` | ContainerLab multi-vendor network workshop |
 
@@ -162,6 +164,9 @@ ansible-playbook portal-deploy.yml \
   -e controller_username=admin \
   -e controller_password='YourPassword'
 ```
+
+For the optional pre-release compliance dashboard, see the
+[private plugin, execution environment, and AAP setup](docs/compliance-portal.md).
 
 ### `aap-deploy.yml` — AAP Operator (standalone)
 

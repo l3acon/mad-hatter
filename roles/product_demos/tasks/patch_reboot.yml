@@ -1,0 +1,140 @@
+---
+- name: Obtain an AAP gateway token for cloud patching configuration
+  ansible.builtin.uri:
+    url: "{{ aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/tokens/"
+    method: POST
+    url_username: "{{ aap_username }}"
+    url_password: "{{ aap_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ apd_aap_validate_certs }}"
+    body_format: json
+    body:
+      description: APD cloud patch reboot configuration
+      scope: write
+      application: null
+    status_code: [200, 201]
+    return_content: true
+  register: _apd_patch_token
+  no_log: true
+
+- name: Configure the optional cloud patch reboot
+  block:
+    - name: Ensure the dedicated cloud patch project exists
+      ansible.controller.project:
+        name: "{{ apd_patch_reboot_project_name }}"
+        description: APD RHEL patch playbook with an optional reboot
+        organization: "{{ apd_organization }}"
+        scm_type: git
+        scm_url: "{{ apd_patch_reboot_project_scm_url }}"
+        scm_branch: "{{ apd_patch_reboot_project_scm_branch }}"
+        scm_update_on_launch: true
+        default_environment: "{{ apd_ee_name }}"
+        controller_host: "{{ aap_hostname }}"
+        aap_token: "{{ _apd_patch_token.json.token }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        wait: true
+        state: present
+      register: _apd_patch_project
+
+    - name: Find the cloud patch workflow and RHEL job template
+      ansible.builtin.uri:
+        url: >-
+          {{ aap_hostname | regex_replace('/$', '') }}/api/controller/v2/{{ item.endpoint }}/?name={{ item.name | urlencode }}&organization__name={{ apd_organization | urlencode }}
+        headers:
+          Authorization: "Bearer {{ _apd_patch_token.json.token }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        return_content: true
+      loop:
+        - endpoint: workflow_job_templates
+          name: "{{ apd_patch_reboot_workflow_name }}"
+        - endpoint: job_templates
+          name: "{{ apd_patch_reboot_template_name }}"
+      register: _apd_patch_resources
+      no_log: true
+
+    - name: Require exactly one matching workflow and job template
+      ansible.builtin.assert:
+        that:
+          - _apd_patch_resources.results[0].json.count == 1
+          - _apd_patch_resources.results[1].json.count == 1
+        fail_msg: >-
+          The APD cloud patch workflow and RHEL patch template must exist in the
+          APD organization. Run APD cloud setup before applying this extension.
+
+    - name: Set the target workflow and template facts
+      ansible.builtin.set_fact:
+        _apd_patch_workflow: "{{ _apd_patch_resources.results[0].json.results[0] }}"
+        _apd_patch_template: "{{ _apd_patch_resources.results[1].json.results[0] }}"
+
+    - name: Point the RHEL patch template at the dedicated project
+      when: _apd_patch_template.project | int != _apd_patch_project.id | int
+      ansible.builtin.uri:
+        url: "{{ aap_hostname | regex_replace('/$', '') }}/api/controller/v2/job_templates/{{ _apd_patch_template.id }}/"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ _apd_patch_token.json.token }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        body_format: json
+        body:
+          project: "{{ _apd_patch_project.id }}"
+        status_code: 200
+      changed_when: true
+      no_log: true
+
+    - name: Read the current workflow survey
+      ansible.builtin.uri:
+        url: "{{ aap_hostname | regex_replace('/$', '') }}/api/controller/v2/workflow_job_templates/{{ _apd_patch_workflow.id }}/survey_spec/"
+        headers:
+          Authorization: "Bearer {{ _apd_patch_token.json.token }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        return_content: true
+      register: _apd_patch_survey
+      no_log: true
+
+    - name: Find the existing reboot survey question
+      ansible.builtin.set_fact:
+        _apd_patch_existing_questions: >-
+          {{ _apd_patch_survey.json.spec | selectattr('variable', 'defined')
+             | selectattr('variable', 'equalto', 'reboot') | list }}
+
+    - name: Add or update the reboot survey question
+      when: _apd_patch_existing_questions != [apd_patch_reboot_question]
+      ansible.builtin.uri:
+        url: "{{ aap_hostname | regex_replace('/$', '') }}/api/controller/v2/workflow_job_templates/{{ _apd_patch_workflow.id }}/survey_spec/"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ _apd_patch_token.json.token }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        body_format: json
+        body: >-
+          {{ _apd_patch_survey.json | combine({'spec':
+             (_apd_patch_survey.json.spec | rejectattr('variable', 'equalto', 'reboot') | list)
+             + [apd_patch_reboot_question]}) }}
+        status_code: 200
+      changed_when: true
+      no_log: true
+
+    - name: Enable the workflow survey when needed
+      when: not _apd_patch_workflow.survey_enabled | bool
+      ansible.builtin.uri:
+        url: "{{ aap_hostname | regex_replace('/$', '') }}/api/controller/v2/workflow_job_templates/{{ _apd_patch_workflow.id }}/"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ _apd_patch_token.json.token }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        body_format: json
+        body:
+          survey_enabled: true
+        status_code: 200
+      changed_when: true
+      no_log: true
+  always:
+    - name: Revoke the cloud patch configuration token
+      ansible.builtin.uri:
+        url: "{{ aap_hostname | regex_replace('/$', '') }}/api/gateway/v1/tokens/{{ _apd_patch_token.json.id }}/"
+        method: DELETE
+        headers:
+          Authorization: "Bearer {{ _apd_patch_token.json.token }}"
+        validate_certs: "{{ apd_aap_validate_certs }}"
+        status_code: [204, 404]
+      no_log: true

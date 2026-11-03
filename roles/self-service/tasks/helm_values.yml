@@ -25,6 +25,61 @@
     name: "{{ helm_repo_name }}"
     repo_url: "{{ helm_repo_url }}"
 
+- name: Validate compliance plugin image references
+  ansible.builtin.assert:
+    that:
+      - ssp_plugin_mode == 'oci'
+      - ssp_compliance_frontend_image is match('^oci://.+!.+')
+      - ssp_compliance_backend_image is match('^oci://.+!.+')
+    fail_msg: Set the two OCI plugin references, including their !package names.
+  when: ssp_compliance_enabled | bool
+
+- name: Create temporary values file for the compliance plugins
+  ansible.builtin.tempfile:
+    state: file
+    suffix: -portal-values.yml
+  register: _compliance_values_file
+  when: ssp_compliance_enabled | bool
+
+- name: Copy standard Portal values
+  ansible.builtin.copy:
+    src: "{{ helm_values }}"
+    dest: "{{ _compliance_values_file.path }}"
+    mode: '0600'
+  when: ssp_compliance_enabled | bool
+
+- name: Append compliance plugins to the standard Portal plugins
+  ansible.builtin.blockinfile:
+    path: "{{ _compliance_values_file.path }}"
+    insertbefore: '^    imageTagInfo:'
+    marker: '        # {mark} COMPLIANCE PLUGINS'
+    block: |2
+              - disabled: false
+                package: {{ ssp_compliance_frontend_image | to_json }}
+                pluginConfig:
+                  dynamicPlugins:
+                    frontend:
+                      aap-compliance.plugin-compliance:
+                        dynamicRoutes:
+                          - importName: CompliancePage
+                            path: /compliance/*
+                            menuItem:
+                              icon: security
+                              text: Compliance
+              - disabled: false
+                package: {{ ssp_compliance_backend_image | to_json }}
+                pluginConfig:
+                  dynamicPlugins:
+                    backend:
+                      aap-compliance.plugin-compliance-backend: {}
+                  ansible:
+                    compliance:
+                      enabled: true
+                      dataSource: live
+                      authMode: production
+                      retentionDays: 90
+  when: ssp_compliance_enabled | bool
+
 - name: Install RHAAP chart from openshift repo
   kubernetes.core.helm:
     name: "{{ helm_release_name }}"
@@ -32,7 +87,7 @@
     chart_ref: "{{ helm_repo_name }}/{{ helm_chart_name }}"
     chart_version: "{{ helm_chart_version }}"
     release_namespace: "{{ openshift_namespace }}"
-    values_files: "{{ helm_values }}"
+    values_files: "{{ _compliance_values_file.path if ssp_compliance_enabled | bool else helm_values }}"
     release_state: present
     set_values:
       - value: redhat-developer-hub.global.clusterRouterBase={{ openshift_base_domain }}
@@ -44,3 +99,9 @@
       - value: redhat-developer-hub.upstream.backstage.appConfig.ansible.rhaap.checkSSL={{ aap_ssl_verify }}
         value_type: string
   tags: helm
+
+- name: Remove temporary compliance values
+  ansible.builtin.file:
+    path: "{{ _compliance_values_file.path }}"
+    state: absent
+  when: ssp_compliance_enabled | bool

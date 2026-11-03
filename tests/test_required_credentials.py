@@ -8,6 +8,15 @@ import unittest
 
 import yaml
 
+
+class AnsibleSafeLoader(yaml.SafeLoader):
+    """Recognize Ansible's unsafe string tag while retaining safe YAML loading."""
+
+
+AnsibleSafeLoader.add_constructor(
+    "!unsafe", lambda loader, node: loader.construct_scalar(node)
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 # These values are local test fixtures, never deployment defaults.
 PASSWORD = "FixtureOnly_836!"
@@ -165,7 +174,10 @@ class CredentialPreflightTests(unittest.TestCase):
                     self.assertNotIn("{{", text)
                     self.assertEqual(config.stat().st_mode & 0o777, 0o600)
                     if config.parent.name in ["rtr2", "rtr3", "rtr4"]:
-                        hashes = re.findall(r"\$6\$[./A-Za-z0-9$]+", text)
+                        hashes = re.findall(
+                            r"\$6\$(?:rounds=\d+\$)?[./A-Za-z0-9]+\$[./A-Za-z0-9]+",
+                            text,
+                        )
                         self.assertTrue(hashes, text)
                         # The older ROSA EE has crypt; newer Python requires passlib.
                         try:
@@ -196,7 +208,7 @@ class CredentialPreflightTests(unittest.TestCase):
         for path in paths:
             if "files/helm/templates" in str(path):
                 continue
-            inspect(yaml.safe_load(path.read_text()), path.relative_to(ROOT))
+            inspect(yaml.load(path.read_text(), Loader=AnsibleSafeLoader), path.relative_to(ROOT))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,169 @@
+---
+# Configure the pre-release compliance profile in an existing AAP instance.
+# Set CONTROLLER_HOST, CONTROLLER_USERNAME, CONTROLLER_PASSWORD and GITHUB_PAT.
+- name: Configure the compliance evaluation resources
+  hosts: localhost
+  gather_facts: false
+  vars:
+    compliance_controller_host: "{{ lookup('env', 'CONTROLLER_HOST') | regex_replace('/$', '') }}"
+    compliance_controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+    compliance_controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+    compliance_validate_certs: true
+    compliance_github_username: l3acon
+    compliance_github_token: "{{ lookup('env', 'GITHUB_PAT') }}"
+    compliance_organization: "Ansible Product Demos (APD)"
+    compliance_inventory: "Ansible Product Demos Inventory"
+    compliance_machine_credential: "APD Machine Credential"
+    compliance_scm_credential: "Compliance | Private GitHub"
+    compliance_project: "Compliance | Private Pipelines"
+    compliance_project_url: "https://github.com/l3acon/aap-compliance-pipelines.git"
+    compliance_project_branch: main
+    compliance_ee: "Compliance | RHEL 9 STIG"
+    compliance_ee_image: "quay.io/matferna/mh-compliance-private:ee-dbfbeaf"
+    compliance_registry_credential: "Compliance | Private Registry"
+    compliance_registry_host: quay.io
+    compliance_registry_username: "{{ lookup('env', 'COMPLIANCE_REGISTRY_USERNAME') }}"
+    compliance_registry_password: "{{ lookup('env', 'COMPLIANCE_REGISTRY_PASSWORD') }}"
+    compliance_scan_template: "compliance-run-oscap"
+    compliance_remediation_template: "compliance-remediate"
+    # Restrict the default scan to the RHEL 9 APD VM; do not use an Ansible
+    # limit here because the second play must also run on localhost.
+    compliance_target_hosts: aws-rhel9
+    compliance_playbook_root: profiles/rhel9-stig/ansible_collections/security/compliance_rhel9_stig/playbooks
+  tasks:
+    - name: Validate required values
+      ansible.builtin.assert:
+        that:
+          - compliance_controller_host | length > 0
+          - compliance_controller_username | length > 0
+          - compliance_controller_password | length > 0
+          - compliance_github_token | length > 0
+          - compliance_registry_username | length > 0
+          - compliance_registry_password | length > 0
+          - compliance_target_hosts | length > 0
+      no_log: true
+
+    - name: Obtain temporary AAP Gateway token
+      ansible.builtin.uri:
+        url: "{{ compliance_controller_host }}/api/gateway/v1/tokens/"
+        method: POST
+        url_username: "{{ compliance_controller_username }}"
+        url_password: "{{ compliance_controller_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ compliance_validate_certs }}"
+        body_format: json
+        body:
+          description: Compliance evaluation configuration as code
+          scope: write
+          application: null
+        status_code: [200, 201]
+      register: _compliance_token
+      no_log: true
+
+    - name: Configure compliance resources
+      module_defaults:
+        ansible.controller.credential: &controller_auth
+          controller_host: "{{ compliance_controller_host }}"
+          controller_oauthtoken: "{{ _compliance_token.json.token }}"
+          validate_certs: "{{ compliance_validate_certs }}"
+        ansible.controller.execution_environment: *controller_auth
+        ansible.controller.project: *controller_auth
+        ansible.controller.job_template: *controller_auth
+      block:
+        - name: Configure private GitHub source credential
+          ansible.controller.credential:
+            name: "{{ compliance_scm_credential }}"
+            organization: "{{ compliance_organization }}"
+            credential_type: Source Control
+            inputs:
+              username: "{{ compliance_github_username }}"
+              password: "{{ compliance_github_token }}"
+            state: present
+          no_log: true
+
+        - name: Configure private execution environment registry credential
+          ansible.controller.credential:
+            name: "{{ compliance_registry_credential }}"
+            organization: "{{ compliance_organization }}"
+            credential_type: Container Registry
+            inputs:
+              host: "{{ compliance_registry_host }}"
+              username: "{{ compliance_registry_username }}"
+              password: "{{ compliance_registry_password }}"
+            state: present
+          no_log: true
+
+        - name: Configure the RHEL 9 compliance execution environment
+          ansible.controller.execution_environment:
+            name: "{{ compliance_ee }}"
+            organization: "{{ compliance_organization }}"
+            image: "{{ compliance_ee_image }}"
+            credential: "{{ compliance_registry_credential }}"
+            pull: missing
+            state: present
+
+        - name: Sync the private compliance project
+          ansible.controller.project:
+            name: "{{ compliance_project }}"
+            organization: "{{ compliance_organization }}"
+            scm_type: git
+            scm_url: "{{ compliance_project_url }}"
+            scm_branch: "{{ compliance_project_branch }}"
+            credential: "{{ compliance_scm_credential }}"
+            scm_update_on_launch: true
+            update_project: true
+            wait: true
+            timeout: 600
+            state: present
+
+        - name: Configure assessment job template
+          ansible.controller.job_template:
+            name: "{{ compliance_scan_template }}"
+            organization: "{{ compliance_organization }}"
+            inventory: "{{ compliance_inventory }}"
+            project: "{{ compliance_project }}"
+            playbook: "{{ compliance_playbook_root }}/run_oscap.yml"
+            execution_environment: "{{ compliance_ee }}"
+            credentials: ["{{ compliance_machine_credential }}"]
+            # The target play declares become itself. Enabling it for the
+            # whole job also escalates the localhost normalization play.
+            become_enabled: false
+            ask_inventory_on_launch: true
+            ask_limit_on_launch: true
+            ask_variables_on_launch: true
+            use_fact_cache: true
+            extra_vars:
+              target_hosts: "{{ compliance_target_hosts }}"
+              oscap_xccdf_profile: xccdf_org.ssgproject.content_profile_stig
+            state: present
+
+        - name: Configure remediation job template
+          ansible.controller.job_template:
+            name: "{{ compliance_remediation_template }}"
+            organization: "{{ compliance_organization }}"
+            inventory: "{{ compliance_inventory }}"
+            project: "{{ compliance_project }}"
+            playbook: "{{ compliance_playbook_root }}/remediate.yml"
+            execution_environment: "{{ compliance_ee }}"
+            credentials: ["{{ compliance_machine_credential }}"]
+            become_enabled: true
+            # The imported remediation playbook targets all hosts and does
+            # not honor target_hosts. Limit manual launches by default.
+            limit: "{{ compliance_target_hosts }}"
+            ask_inventory_on_launch: true
+            ask_limit_on_launch: true
+            ask_tags_on_launch: true
+            ask_variables_on_launch: true
+            extra_vars:
+              target_hosts: "{{ compliance_target_hosts }}"
+            state: present
+      always:
+        - name: Revoke temporary AAP Gateway token
+          ansible.builtin.uri:
+            url: "{{ compliance_controller_host }}/api/gateway/v1/tokens/{{ _compliance_token.json.id }}/"
+            method: DELETE
+            headers:
+              Authorization: "Bearer {{ _compliance_token.json.token }}"
+            validate_certs: "{{ compliance_validate_certs }}"
+            status_code: [204, 404]
+          no_log: true

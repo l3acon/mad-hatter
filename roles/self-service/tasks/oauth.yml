@@ -1,3 +1,23 @@
+- name: Look up existing Portal OAuth application
+  ansible.builtin.uri:
+    url: "{{ controller_host | regex_replace('/$', '') }}/api/gateway/v1/applications/?name={{ aap_oauth_client_name | urlencode }}"
+    method: GET
+    url_username: "{{ controller_username }}"
+    url_password: "{{ controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ controller_verify_ssl }}"
+    return_content: true
+  register: _portal_existing_oauth
+  no_log: true
+  tags: [create_oauth]
+
+- name: Require an unambiguous Portal OAuth application
+  ansible.builtin.assert:
+    that: _portal_existing_oauth.json.results | length <= 1
+    fail_msg: The Portal OAuth application name must identify at most one application.
+  no_log: true
+  tags: [create_oauth]
+
 - name: Create OAuth2 application in AAP
   ansible.platform.application:
     name: "{{ aap_oauth_client_name}}"
@@ -6,17 +26,16 @@
     state: present
     authorization_grant_type: authorization-code
     client_type: confidential
-    redirect_uris:
-      - "{{ rhaap_redirect_url | default('https://placeholder.com') }}"
-    app_url: "{{ rhaap_app_url | default('https://placeholder.com') }}"
+    redirect_uris: >-
+      {{ [rhaap_redirect_url] if rhaap_redirect_url is defined else
+         (_existing_app.redirect_uris | default('https://placeholder.com', true)).splitlines() }}
+    app_url: "{{ rhaap_app_url | default(_existing_app.app_url | default('https://placeholder.com', true)) }}"
     aap_hostname: "{{ controller_host }}"
     aap_username: "{{ controller_username }}"
     aap_password: "{{ controller_password }}"
     aap_validate_certs: "{{ controller_verify_ssl }}"
   register: app_result
-  tags: [create_oauth]
-
-- name: Show OAuth2 application result
-  debug:
-    var: app_result
+  vars:
+    _existing_app: "{{ _portal_existing_oauth.json.results | first | default({}) }}"
+  no_log: true
   tags: [create_oauth]

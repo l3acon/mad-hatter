@@ -23,3 +23,23 @@ apd_aws_secret_key: ""
 apd_machine_credential_username: "ec2-user"
 apd_machine_credential_ssh_key: ""
 apd_machine_credential_password: ""
+
+# Optional cloud-patching extension. The separate project keeps the rest of
+# APD on its existing source while the reboot change is reviewed upstream.
+apd_patch_reboot_project_name: "APD Cloud Patch (reboot)"
+apd_patch_reboot_project_scm_url: "https://github.com/l3acon/product-demos.git"
+apd_patch_reboot_project_scm_branch: "codex/cloud-patch-reboot"
+apd_patch_reboot_workflow_name: "Patch Cloud Stack in AWS"
+apd_patch_reboot_template_name: "Cloud | AWS | Patch RHEL"
+apd_patch_reboot_question:
+  question_name: Reboot RHEL hosts if required
+  question_description: >-
+    When true, reboot registered RHEL hosts after patching if a reboot is
+    required. Windows hosts are not affected by this setting.
+  type: multiplechoice
+  variable: reboot
+  required: true
+  default: 'false'
+  choices:
+    - 'false'
+    - 'true'

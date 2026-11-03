@@ -14,6 +14,8 @@ controller_verify_ssl: True
 aap_oauth_client_name: "Self Service"
 aap_organization: "Default"
 aap_ssl_verify: true
+# Portal 2.2's RHAAP OAuth provider does not send a PKCE challenge.
+ssp_oauth_require_pkce: false
 
 # EE Builder and content catalog (AAP 2.7+)
 ssp_ee_builder_enabled: true
@@ -21,3 +23,10 @@ ssp_content_catalog_enabled: true
 
 # Plugin delivery mode: "oci" (recommended for 2.7+) or "tarball" (legacy)
 ssp_plugin_mode: "oci"
+
+# Optional pre-release compliance dashboard. Images must be reachable by the
+# cluster and remain private. Supply a containers auth.json for private pulls.
+ssp_compliance_enabled: false
+ssp_compliance_frontend_image: ""
+ssp_compliance_backend_image: ""
+ssp_plugin_registry_auth_file: ""

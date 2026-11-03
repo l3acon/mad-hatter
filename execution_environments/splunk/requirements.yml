@@ -1,0 +1,4 @@
+---
+collections:
+  - name: splunk.enterprise
+    version: "1.0.0"

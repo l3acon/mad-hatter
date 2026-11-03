@@ -26,6 +26,7 @@
     rhaap_app_url: "https://{{ rhaap_route_host }}"
 
 - name: Update OAuth2 application in AAP with RHAAP route
+  no_log: true
   ansible.platform.application:
     name: "{{ aap_oauth_client_name }}"
     description: "Self Service application"
@@ -41,3 +42,40 @@
     aap_password: "{{ controller_password }}"
     aap_validate_certs: "{{ controller_verify_ssl }}"
   tags: [update_oauth]
+
+- name: Look up the Portal OAuth application for PKCE compatibility
+  ansible.builtin.uri:
+    url: "{{ controller_host | regex_replace('/$', '') }}/api/gateway/v1/applications/?name={{ aap_oauth_client_name | urlencode }}"
+    method: GET
+    url_username: "{{ controller_username }}"
+    url_password: "{{ controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ controller_verify_ssl }}"
+    return_content: true
+  register: _portal_oauth_lookup
+  no_log: true
+
+- name: Ensure the Portal OAuth application lookup is unambiguous
+  ansible.builtin.assert:
+    that:
+      - _portal_oauth_lookup.json.results | length == 1
+    fail_msg: The Portal OAuth application name must identify exactly one application.
+  no_log: true
+
+- name: Set PKCE requirement for the Portal OAuth client
+  ansible.builtin.uri:
+    url: "{{ controller_host | regex_replace('/$', '') }}/api/gateway/v1/applications/{{ _portal_oauth_lookup.json.results[0].id }}/"
+    method: PATCH
+    url_username: "{{ controller_username }}"
+    url_password: "{{ controller_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ controller_verify_ssl }}"
+    body_format: json
+    body:
+      pkce_required: "{{ ssp_oauth_require_pkce | bool }}"
+    status_code: 200
+  changed_when: true
+  when:
+    - _portal_oauth_lookup.json.results[0].pkce_required is defined
+    - (_portal_oauth_lookup.json.results[0].pkce_required | bool) != (ssp_oauth_require_pkce | bool)
+  no_log: true
